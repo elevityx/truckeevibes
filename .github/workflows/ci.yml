@@ -57,3 +57,24 @@ jobs:
         run: npm run db:start -- -x studio,imgproxy,logflare,vector,supabase_pooler,realtime,postgres-meta,inbucket
       - run: npm run db:reset
       - run: npm run db:test
+
+  identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+      - name: Commit identity and diff hygiene
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          case "$BASE" in ''|0000000000000000000000000000000000000000) echo "no base for $EVENT"; exit 1;; esac
+          node scripts/secret-scan.mjs --no-files --range "$BASE..$HEAD_SHA"
+          git diff --check "$BASE" "$HEAD_SHA"
