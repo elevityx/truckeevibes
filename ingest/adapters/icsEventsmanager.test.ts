@@ -64,4 +64,3 @@ describe('icsEventsmanager non-place LOCATION (AC-M1-81 j)', () => {
     expect(adapter.version).toBe('ics_eventsmanager.2');
   });
 });
-
