@@ -124,3 +124,40 @@ describe('tribe: config.filter over vlt_filter.json (AC-M1-56)', () => {
     expect(new URL(net.calls[0].url).searchParams.get('end_date')).toBe('2027-02-12');
   });
 });
+
+// AC-M1-56 (A5-1 adapter part, A6-3): Visit Lake Tahoe's exclusions, any-match, trimmed and lower-cased on both sides.
+describe('tribe: category exclusion (AC-M1-56 A5-1 / A6-3)', () => {
+  const VLT = ['attractions-events', 'wellness', 'tahoe-blue-event-center'];
+  const FILTER = { windowDays: 45, towns: ['truckee'], maxDurationDays: 14, excludeCategorySlugs: VLT, maxItems: 20 };
+  const tev = (id: number, cats?: string[]) => ({
+    id, url: `https://events.example.test/event/sample-${id}/`, title: `Sample Listing ${id}`, all_day: false,
+    start_date: '2026-10-20 19:00:00', end_date: '2026-10-20 21:00:00', utc_start_date: '2026-10-20 19:00:00', utc_end_date: '2026-10-20 21:00:00',
+    cost: '', ...(cats ? { categories: cats.map((slug) => ({ slug, name: slug })) } : {}),
+    venue: { venue: `Example Venue ${id}`, address: '1 Sample Way', city: 'Truckee', geo_lat: 39.3, geo_lng: -120.1 },
+  });
+  const net = (events: unknown[]) => fakePolite(() => ({ body: JSON.stringify({ events }) }));
+  const keys = (r: { items: { externalKey: string }[] }) => r.items.map((i) => i.externalKey).sort();
+
+  it('any match drops: [music-dance-events, attractions-events], [wellness], [headliners-events, tahoe-blue-event-center]; kept: [kids-families-events, free-events] and no categories', async () => {
+    const r = await adapter.fetch(ctx(net([
+      tev(1, ['music-dance-events', 'attractions-events']), tev(2, ['wellness']), tev(3, ['headliners-events', 'tahoe-blue-event-center']),
+      tev(4, ['kids-families-events', 'free-events']), tev(5),
+    ]), cfg({ filter: FILTER })));
+    expect(r.status).toBe('ok');
+    expect(keys(r)).toEqual(['4', '5']);
+    expect(r.filtered).toBe(3);
+  });
+
+  it('an API slug " Wellness " (case/whitespace) is dropped and counted in filtered', async () => {
+    const r = await adapter.fetch(ctx(net([tev(1, [' Wellness ']), tev(2, ['free-events'])]), cfg({ filter: FILTER })));
+    expect(keys(r)).toEqual(['2']);
+    expect(r.filtered).toBe(1);
+  });
+
+  it('a config value " Wellness " drops an API "wellness"; every category drop counts in filtered', async () => {
+    const r = await adapter.fetch(ctx(net([tev(1, ['wellness']), tev(2, ['music-dance-events', 'wellness']), tev(3, ['free-events']), tev(4)]),
+      cfg({ filter: { ...FILTER, excludeCategorySlugs: [' Wellness '] } })));
+    expect(keys(r)).toEqual(['3', '4']);
+    expect(r.filtered).toBe(2);
+  });
+});
