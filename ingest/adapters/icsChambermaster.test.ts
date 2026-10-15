@@ -90,3 +90,8 @@ describe('icsChambermaster', () => {
     expect(r.items).toHaveLength(3);
   });
 });
+
+// A8-1: parser version bumped so source_event_versions shows which parser stored a row.
+describe('icsChambermaster parser version', () => {
+  it('is ics_chambermaster.2', () => { expect(adapter.version).toBe('ics_chambermaster.2'); });
+});

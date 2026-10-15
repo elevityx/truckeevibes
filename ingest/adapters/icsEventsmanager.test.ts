@@ -49,3 +49,19 @@ describe('icsEventsmanager', () => {
     expect(r.contentHash).toMatch(/^[0-9a-f]{64}$/);
   });
 });
+
+// AC-M1-81 (j): fetchIcsFeed hands the grant's allowed_hosts to the parser; the parser version is bumped.
+describe('icsEventsmanager non-place LOCATION (AC-M1-81 j)', () => {
+  it('np-1 items carry the allowed-host LOCATION as url and have no venue; version is ics_eventsmanager.2', async () => {
+    const net = fakePolite(() => ({ body: fixture('ics/location_nonplace.ics') }));
+    const r = await adapter.fetch({ ...ctx(net), now: new Date('2026-11-01T12:00:00Z') } as never);
+    const np1 = r.items.filter((i) => i.externalKey.startsWith('np-1@example.test#'));
+    expect(np1).toHaveLength(3);
+    for (const i of np1) {
+      expect(i.url).toBe('https://venue-one.example.test/events/');
+      expect(i.venueName).toBeUndefined();
+    }
+    expect(adapter.version).toBe('ics_eventsmanager.2');
+  });
+});
+

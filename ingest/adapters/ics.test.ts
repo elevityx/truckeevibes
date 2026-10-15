@@ -1,7 +1,7 @@
 // AC-M1-12: the 13 required ICS fixtures (+ A2 eventsmanager shape tested in icsEventsmanager.test.ts).
 // Contract assumed: parseIcs(text, { now: Date, tz?: string, eventUrl?: string }) -> { items, dropped: Record<reason, n>, truncated: number }.
 import { describe, expect, it } from 'vitest';
-import { parseIcs } from './ics';
+import { isNonPlaceLocation, locationLink, parseIcs } from './ics';
 import { DESC_SENTINEL, fixture, SOURCE_EVENT_KEYS } from '../testing/fakes';
 
 const NOW = new Date('2026-10-15T12:00:00Z');
@@ -121,5 +121,80 @@ describe('url and privacy', () => {
   });
   it('an empty calendar parses to no items and no drops', () => {
     expect(parseIcs(fixture('ics/empty.ics'), { now: NOW })).toMatchObject({ items: [], dropped: {} });
+  });
+});
+
+// AC-M1-81 (A8-1): a LOCATION that is a URL or has no letter is not a venue; an allowed-host https LOCATION is a last-resort link.
+describe('AC-M1-81 non-place LOCATION', () => {
+  const HOSTS = ['venue-one.example.test', 'www.venue-one.example.test'];
+  const NP_NOW = new Date('2026-11-01T12:00:00Z');
+  const np = (extra: Record<string, unknown> = {}) => parseIcs(fixture('ics/location_nonplace.ics'), { now: NP_NOW, ...extra });
+  const byUid = (items: ReturnType<typeof np>['items'], n: number) => items.filter((i) => i.externalKey.startsWith(`np-${n}@example.test#`));
+  const hasNo = (i: object, ...keys: string[]) => keys.every((k) => (i as Record<string, unknown>)[k] === undefined);
+
+  it('(a) np-1: three weekly all-day items, no venue or address, url from the allowed-host LOCATION', () => {
+    const items = byUid(np({ allowedHosts: HOSTS }).items, 1);
+    expect(items).toHaveLength(3);
+    for (const i of items) {
+      expect(hasNo(i, 'venueName', 'address')).toBe(true);
+      expect(i.url).toBe('https://venue-one.example.test/events/');
+      expect(i.allDay).toBe(true);
+      expect(i.seriesUid).toBe('np-1@example.test');
+      const d = (Date.parse(`${i.endDate}T00:00:00Z`) - Date.parse(`${i.startDate}T00:00:00Z`)) / 86_400_000;
+      expect(d).toBe(1);
+    }
+  });
+  it('(b) np-2: the VEVENT URL wins over the location link', () => {
+    const [i] = byUid(np({ allowedHosts: HOSTS }).items, 2);
+    expect(hasNo(i, 'venueName', 'address')).toBe(true);
+    expect(i.url).toBe('https://venue-one.example.test/e/2');
+  });
+  it('(c) np-3 foreign host, np-4 http, np-5 userinfo: no venue and no url', () => {
+    for (const n of [3, 4, 5]) {
+      const [i] = byUid(np({ allowedHosts: HOSTS }).items, n);
+      expect(i, `np-${n}`).toBeTruthy();
+      expect(hasNo(i, 'venueName', 'address', 'url'), `np-${n}`).toBe(true);
+    }
+  });
+  it('(d) np-6 digits only, np-7 dash only: no venue, address or url', () => {
+    for (const n of [6, 7]) {
+      const [i] = byUid(np({ allowedHosts: HOSTS }).items, n);
+      expect(i, `np-${n}`).toBeTruthy();
+      expect(hasNo(i, 'venueName', 'address', 'url'), `np-${n}`).toBe(true);
+    }
+  });
+  it('(e) np-8: scheme and host matched case-insensitively', () => {
+    const [i] = byUid(np({ allowedHosts: HOSTS }).items, 8);
+    expect(hasNo(i, 'venueName', 'address')).toBe(true);
+    expect(i.url).toBe('https://venue-one.example.test/up');
+  });
+  it('(f) np-9 control: the comma split is unchanged', () => {
+    const [i] = byUid(np({ allowedHosts: HOSTS }).items, 9);
+    expect(i.venueName).toBe('Example Hall');
+    expect(i.address).toBe('1 Sample St, Truckee, CA 96161');
+  });
+  it('(g) without allowedHosts no url is filled; eventUrl fills only when the VEVENT has no URL', () => {
+    const none = np().items;
+    expect(byUid(none, 1).every((i) => i.url === undefined)).toBe(true);
+    expect(byUid(none, 8)[0].url).toBeUndefined();
+    const withEvent = np({ eventUrl: 'https://venue-one.example.test/details/9', allowedHosts: HOSTS }).items;
+    for (const i of withEvent) {
+      const expected = i.externalKey.startsWith('np-2@') ? 'https://venue-one.example.test/e/2' : 'https://venue-one.example.test/details/9';
+      expect(i.url, i.externalKey).toBe(expected);
+    }
+  });
+  it('(h) a non-place location is not a dropped reason', () => {
+    const r = np({ allowedHosts: HOSTS });
+    expect(r.dropped).toEqual({});
+    expect(r.items.length).toBe(11);
+  });
+  it('(i) isNonPlaceLocation and locationLink', () => {
+    for (const t of ['https://a.example.test', ' HTTP://x ', '123', ' — ', '']) expect(isNonPlaceLocation(t), JSON.stringify(t)).toBe(true);
+    for (const t of ['Alibi Ale Works - Truckee Public House', 'Café 1']) expect(isNonPlaceLocation(t), t).toBe(false);
+    expect(locationLink('https://venue-one.example.test:8443/', HOSTS)).toBeUndefined();
+    expect(locationLink('https://venue-one.example.test/a', HOSTS)).toBe('https://venue-one.example.test/a');
+    expect(locationLink('https://venue-one.example.test/a', undefined)).toBeUndefined();
+    expect(locationLink('https://venue-one.example.test/a', [])).toBeUndefined();
+    expect(locationLink('not a url', HOSTS)).toBeUndefined();
   });
 });
