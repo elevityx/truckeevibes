@@ -1,6 +1,6 @@
 // Test helpers shared by the scripts/*.test.mjs files. Not a test file itself.
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -31,3 +31,48 @@ export function runScript(script, cwd, args = []) {
 }
 
 export const REPO_ROOT = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
+
+/** No-reply identity assembled from fragments (the scanner scans this file too). */
+export const NOREPLY = ['123+someone', '@users.noreply', '.github.com'].join('');
+export const WEB_FLOW = ['noreply', '@github', '.com'].join('');
+
+export function git(dir, args, env = {}) {
+  return execFileSync('git', args, { cwd: dir, encoding: 'utf8', env: { ...process.env, ...env } }).trim();
+}
+
+/** Empty temp repo with a no-reply identity configured. */
+export function initRepo() {
+  const dir = mkdtempSync(join(tmpdir(), 'tv-hist-'));
+  execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: dir });
+  git(dir, ['config', 'user.email', NOREPLY]);
+  git(dir, ['config', 'user.name', 'someone']);
+  git(dir, ['config', 'commit.gpgsign', 'false']);
+  return dir;
+}
+
+/**
+ * Apply a step to a repo and commit it. files: { path: string | null } (null deletes);
+ * links: { path: targetText }; renames: [[from, to]]. Returns the commit sha.
+ */
+export function commitStep(dir, { files = {}, links = {}, renames = [], message = 'step', authorEmail = NOREPLY, committerEmail = NOREPLY } = {}) {
+  for (const [from, to] of renames) {
+    mkdirSync(dirname(join(dir, to)), { recursive: true });
+    git(dir, ['mv', from, to]);
+  }
+  for (const [rel, content] of Object.entries(files)) {
+    const full = join(dir, rel);
+    if (content === null) { rmSync(full, { force: true }); continue; }
+    mkdirSync(dirname(full), { recursive: true });
+    writeFileSync(full, content);
+  }
+  for (const [rel, target] of Object.entries(links)) {
+    const full = join(dir, rel);
+    mkdirSync(dirname(full), { recursive: true });
+    symlinkSync(target, full);
+  }
+  git(dir, ['add', '-A', '-f']);
+  git(dir, ['commit', '-q', '--allow-empty', '--no-verify', '-m', message], {
+    GIT_AUTHOR_EMAIL: authorEmail, GIT_COMMITTER_EMAIL: committerEmail,
+  });
+  return git(dir, ['rev-parse', 'HEAD']);
+}

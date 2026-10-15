@@ -27,7 +27,8 @@
     "tailwindcss": "4.3.3",
     "tsx": "4.21.0",
     "typescript": "6.0.3",
-    "vitest": "5.0.4"
+    "vitest": "5.0.4",
+    "yaml": "2.9.1"
   },
   "dependencies": {
     "@marsidev/react-turnstile": "1.6.1",
