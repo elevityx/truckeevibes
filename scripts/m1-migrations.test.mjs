@@ -280,3 +280,12 @@ describe('concurrency harness targets the configured DB port', () => {
     expect(pkg.devDependencies.pg).toMatch(/^\d+\.\d+\.\d+$/);
   });
 });
+
+describe('rollout migrations keep the canonical block and the unchanged allowlist', () => {
+  it('enable_alibi ends with the canonical block and grants exactly the sources_terms_a2 set', () => {
+    expect(fileFor('enable_alibi'), 'no migration named *_enable_alibi.sql').toBeTruthy();
+    const cur = canonicalGrants(read('enable_alibi'));
+    expect([...cur].sort()).toEqual([...canonicalGrants(read('sources_terms_a2'))].sort());
+    expect(fileFor('enable_alibi').slice(0, 14) > fileFor('sources_terms_a2').slice(0, 14)).toBe(true);
+  });
+});
