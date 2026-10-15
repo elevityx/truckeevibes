@@ -29,6 +29,7 @@ export default function BotPage() {
       <ul>
         <li>At most 4 times a day per source.</li>
         <li>At most 1 request per second per host.</li>
+        <li>We honor Crawl-delay and never fetch faster than one request per second per host.</li>
         <li>Conditional requests avoid downloading an unchanged page again.</li>
       </ul>
 
