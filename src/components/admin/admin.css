@@ -76,3 +76,29 @@
 
 .src-name{font-weight:700}
 .src-meta{color:var(--muted); font-size:13.5px}
+
+/* Review queue and source health board */
+.qtop{display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px}
+.qtop h3{display:flex; align-items:center; gap:10px}
+.qtop .sp{flex:1}
+.qlist,.hlist{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px}
+.qcard,.hrow{border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); overflow:hidden}
+.qhead{width:100%; display:flex; gap:12px; align-items:flex-start; text-align:left; padding:12px 14px; min-height:56px; border:0; background:none; color:var(--text); font:inherit; cursor:pointer}
+.qhead .qt{display:flex; flex-direction:column; min-width:0; overflow-wrap:anywhere}
+.qbody{display:flex; flex-direction:column; gap:14px; padding:4px 14px 16px; border-top:1px solid var(--line)}
+.qbody h4{margin:10px 0 4px; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted)}
+.qbody p{margin:0}
+.qline{font-weight:700}
+.plain{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px}
+.held .sample{margin:8px 0 0; padding-left:20px}
+.hrow{display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; padding:12px 14px}
+.hrow.off{opacity:.75}
+.hmain{display:flex; gap:12px; align-items:flex-start; min-width:0; flex:1 1 320px}
+.hmain p{margin:2px 0 0}
+.hdot{flex:none; width:14px; height:14px; border-radius:50%; margin-top:5px; background:var(--muted)}
+.hdot.green{background:var(--ok)}
+.hdot.amber{background:var(--accent)}
+.hdot.red{background:var(--danger)}
+.hctl{display:flex; flex-wrap:wrap; gap:8px; align-items:center}
+.hctl .field{width:auto; min-height:40px; padding:6px 10px}
+.hctl .btn{min-height:40px; padding:0 14px; font-size:14px}

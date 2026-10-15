@@ -5,5 +5,6 @@ import nextTs from 'eslint-config-next/typescript';
 export default defineConfig([
   ...nextVitals,
   ...nextTs,
+  { rules: { 'react/no-danger': 'error' } },
   globalIgnores(['out/**', '.next/**', 'supabase/**', 'next-env.d.ts']),
 ]);
