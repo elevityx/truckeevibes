@@ -1,4 +1,5 @@
 import { getSupabase } from '@/lib/supabase/client';
+import { publicEnv } from '@/config/public-env';
 import { toDataError } from './errors';
 
 // Every function wraps its errors with toDataError. The database enforces non-anonymous + aal2 +
@@ -96,6 +97,37 @@ export async function adminWhoami(): Promise<boolean> {
     const { data, error } = await getSupabase().rpc('admin_whoami');
     if (error) throw error;
     return data === true;
+  } catch (e) {
+    throw toDataError(e);
+  }
+}
+
+/**
+ * Create a powerless auth user (Turnstile + Supabase rate limits). Authorization stays in the database:
+ * the account does nothing until public.admins has its row. An already-registered email returns the same
+ * result (obfuscated user, no session), so the UI never reveals whether an address exists.
+ */
+export async function adminSignUp(email: string, password: string, captchaToken: string): Promise<{ needsConfirmation: boolean }> {
+  try {
+    const { data, error } = await getSupabase().auth.signUp({
+      email,
+      password,
+      options: { captchaToken, emailRedirectTo: `${publicEnv.siteUrl}/admin/?confirmed=1` },
+    });
+    if (error) throw error;
+    return { needsConfirmation: data.session === null };
+  } catch (e) {
+    throw toDataError(e);
+  }
+}
+
+/** The id of the signed-in non-anonymous user, else null. Shown so the operator can add the admins row. */
+export async function adminUserId(): Promise<string | null> {
+  try {
+    const { data, error } = await getSupabase().auth.getUser();
+    if (error) throw error;
+    const u = data.user;
+    return u && !u.is_anonymous ? u.id : null;
   } catch (e) {
     throw toDataError(e);
   }

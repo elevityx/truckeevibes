@@ -6,6 +6,7 @@ import {
   adminChangePassword,
   adminEnrollTotp,
   adminSignIn,
+  adminSignUp,
   adminVerifyTotp,
   toDataError,
   userMessage,
@@ -24,7 +25,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
-export function LoginScreen({ onDone, notice }: { onDone(): void; notice?: string }) {
+export function LoginScreen({ onDone, notice, onSignUp }: { onDone(): void; notice?: string; onSignUp(): void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [token, setToken] = useState('');
@@ -67,7 +68,72 @@ export function LoginScreen({ onDone, notice }: { onDone(): void; notice?: strin
         <button className="btn primary" type="submit" disabled={busy || !token || !email || !password}>
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
-        <p className="fine">There&apos;s no public sign-up.</p>
+        <button className="btn ghost" type="button" onClick={onSignUp}>Create an account</button>
+      </form>
+    </Card>
+  );
+}
+
+export function SignUpScreen({ onBack }: { onBack(): void }) {
+  const [email, setEmail] = useState('');
+  const [pw, setPw] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [token, setToken] = useState('');
+  const [reset, setReset] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [done, setDone] = useState(false);
+
+  const valid = email.trim() !== '' && pw.length >= 12 && pw === pw2 && token !== '';
+
+  async function submit(ev: React.FormEvent) {
+    ev.preventDefault();
+    if (busy || !valid) return;
+    setBusy(true);
+    setErr('');
+    try {
+      await adminSignUp(email.trim(), pw, token);
+      setDone(true);
+    } catch (e) {
+      setErr(errText(e));
+      setToken('');
+      setReset((n) => n + 1);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (done) {
+    return (
+      <Card title="Create an account">
+        <p className="ok" role="status">Check your email and open the confirmation link. Then sign in here with your password.</p>
+        <button className="btn ghost" type="button" onClick={onBack}>Back to sign in</button>
+      </Card>
+    );
+  }
+
+  return (
+    <Card title="Create an account">
+      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <label className="lbl">
+          Email
+          <input className="field" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} />
+        </label>
+        <label className="lbl">
+          Password (12+ characters)
+          <input className="field" type="password" autoComplete="new-password" minLength={12} required value={pw} onChange={(e) => setPw(e.target.value)} />
+        </label>
+        <label className="lbl">
+          Repeat it
+          <input className="field" type="password" autoComplete="new-password" minLength={12} required value={pw2} onChange={(e) => setPw2(e.target.value)} />
+        </label>
+        <Turnstile onToken={setToken} onExpire={() => setToken('')} resetKey={reset} />
+        {err && <p className="err" role="alert">{err}</p>}
+        <button className="btn primary" type="submit" disabled={busy || !valid}>
+          {busy ? 'Creating…' : 'Create account'}
+        </button>
+        <button className="btn ghost" type="button" onClick={onBack}>Back to sign in</button>
+        <p className="fine">An account can&apos;t open the back office until an admin approves it.</p>
       </form>
     </Card>
   );
@@ -251,10 +317,25 @@ export function RecoveryScreen({ onDone, onSignOut }: { onDone(): void; onSignOu
   );
 }
 
-export function NotAdminScreen({ onSignOut }: { onSignOut(): void }) {
+export function NotAdminScreen({ userId, onSignOut }: { userId: string | null; onSignOut(): void }) {
+  const copy = () => {
+    if (!userId) return;
+    try {
+      void navigator.clipboard.writeText(userId).catch(() => {});
+    } catch {
+      /* ignore */
+    }
+  };
   return (
     <Card title="Back office">
       <p>Your account isn&apos;t an admin yet.</p>
+      {userId && (
+        <>
+          <p className="fine">Send this account id to the site operator:</p>
+          <p><code>{userId}</code></p>
+          <button className="btn ghost" type="button" onClick={copy}>Copy</button>
+        </>
+      )}
       <PasswordForm />
       <button className="btn ghost" type="button" onClick={onSignOut}>Sign out</button>
     </Card>

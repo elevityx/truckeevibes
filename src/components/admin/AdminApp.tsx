@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   adminAal,
   adminHasUserSession,
+  adminUserId,
   adminSignOut,
   adminVerifiedTotp,
   adminWhoami,
@@ -11,8 +12,8 @@ import {
   userMessage,
 } from '@/lib/data';
 import { supabaseConfigured } from '@/config/public-env';
-import { decideScreen, type AdminScreen } from './gate';
-import { LoginScreen, MfaScreen, NotAdminScreen, RecoveryScreen, SetupScreen } from './AuthScreens';
+import { resolveScreen, type AdminScreen } from './gate';
+import { LoginScreen, MfaScreen, NotAdminScreen, RecoveryScreen, SetupScreen, SignUpScreen } from './AuthScreens';
 import Console from './Console';
 import './admin.css';
 
@@ -23,6 +24,7 @@ export default function AdminApp() {
   const [error, setError] = useState('');
   /** Notice on the login screen (after a password reset). */
   const [notice, setNotice] = useState('');
+  const [userId, setUserId] = useState<string | null>(null);
 
   const decide = useCallback(async () => {
     if (!supabaseConfigured()) {
@@ -30,20 +32,22 @@ export default function AdminApp() {
       return setScreen('error');
     }
     try {
-      const hasUser = await adminHasUserSession();
-      if (!hasUser) return setScreen('login');
-      const recovery = new URLSearchParams(window.location.search).get('recovery') === '1';
-      const { current, next } = await adminAal();
-      let isAdmin: boolean | null = null;
-      if (current === 'aal2') {
-        isAdmin = await adminWhoami().catch(() => false);
-      } else if (current === 'aal1') {
-        const f = await adminVerifiedTotp();
-        setFactorId(f?.id ?? '');
-        // A verified factor means a challenge is needed even if `next` was not reported.
-        if (f) return setScreen('mfa');
-      }
-      setScreen(decideScreen({ hasUser, current, next, isAdmin, recovery }));
+      const r = await resolveScreen(
+        {
+          hasUserSession: adminHasUserSession,
+          aal: adminAal,
+          verifiedTotp: adminVerifiedTotp,
+          whoami: adminWhoami,
+          userId: adminUserId,
+          signOut: adminSignOut,
+        },
+        window.location.search,
+      );
+      setFactorId(r.factorId);
+      setUserId(r.userId);
+      if (r.notice) setNotice(r.notice);
+      if (new URLSearchParams(window.location.search).get('confirmed') === '1') window.history.replaceState(null, '', '/admin/');
+      setScreen(r.screen);
     } catch (e) {
       setError(userMessage(toDataError(e)));
       setScreen('error');
@@ -91,7 +95,9 @@ export default function AdminApp() {
         </div>
       );
     case 'login':
-      return <div className="adm"><LoginScreen onDone={decide} notice={notice} /></div>;
+      return <div className="adm"><LoginScreen onDone={decide} notice={notice} onSignUp={() => setScreen('signup')} /></div>;
+    case 'signup':
+      return <div className="adm"><SignUpScreen onBack={() => setScreen('login')} /></div>;
     case 'mfa':
       return <div className="adm"><MfaScreen factorId={factorId} onDone={decide} onSignOut={signOut} /></div>;
     case 'setup':
@@ -99,7 +105,7 @@ export default function AdminApp() {
     case 'recovery':
       return <div className="adm"><RecoveryScreen onDone={() => void recovered()} onSignOut={signOut} /></div>;
     case 'not_admin':
-      return <div className="adm"><NotAdminScreen onSignOut={signOut} /></div>;
+      return <div className="adm"><NotAdminScreen userId={userId} onSignOut={signOut} /></div>;
     case 'console':
       return <Console onForbidden={decide} onSignOut={signOut} />;
   }
