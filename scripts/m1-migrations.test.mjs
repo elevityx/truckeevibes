@@ -310,6 +310,29 @@ describe('alibi_auto keeps the canonical block and the unchanged allowlist', () 
   });
 });
 
+// S1.13 step 3: enable_chamber enables Truckee Chamber only (trust stays review) and adds no grant.
+describe('enable_chamber keeps the canonical block and the unchanged allowlist', () => {
+  const G = (n) => canonicalGrants(read(n));
+  it('exists, sorts last, and its allowlist is the 23 of alibi_auto', () => {
+    const f = fileFor('enable_chamber');
+    expect(f, 'no migration named *_enable_chamber.sql').toBeTruthy();
+    expect(files.filter((x) => x.endsWith('.sql')).pop()).toBe(f);
+    expect(f.slice(0, 14) > fileFor('alibi_auto').slice(0, 14)).toBe(true);
+    const cur = G('enable_chamber');
+    expect(cur.size).toBe(23);
+    expect([...cur].sort()).toEqual([...G('alibi_auto')].sort());
+    expect(createdFns(read('enable_chamber')).size).toBe(0);
+  });
+  it('enables truckee-chamber only, with no trust or strict_auto change', () => {
+    const sql = read('enable_chamber');
+    expect(sql).toMatch(/set\s+enabled\s*=\s*true[^;]*truckee-chamber/i);
+    expect([...sql.matchAll(/update\s+public\.sources/gi)].length).toBe(1);
+    expect(sql).not.toMatch(/\bstrict_auto\s*=\s*true\b/i);
+    expect(sql).not.toMatch(/\btrust\s*=/i);
+    expect(sql).not.toMatch(/(?:visit-lake-tahoe|tdrpd|tahoe-donner|arts-for-the-schools|diamond-peak|ivgid|truckee-roundhouse)/);
+  });
+});
+
 // A7-2 / AC-M1-76 (e): owner_minutes adds exactly admin_owner_minutes_7d to the cumulative allowlist.
 describe('owner_minutes adds exactly admin_owner_minutes_7d', () => {
   const G = (n) => canonicalGrants(read(n));
