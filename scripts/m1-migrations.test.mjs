@@ -290,6 +290,26 @@ describe('rollout migrations keep the canonical block and the unchanged allowlis
   });
 });
 
+// S1.13 step 3: alibi_auto promotes Alibi to trust auto and adds no grant.
+describe('alibi_auto keeps the canonical block and the unchanged allowlist', () => {
+  const G = (n) => canonicalGrants(read(n));
+  it('exists, sorts after alibi_venue_fixup, and its allowlist is the 23 of alibi_venue_fixup', () => {
+    const f = fileFor('alibi_auto');
+    expect(f, 'no migration named *_alibi_auto.sql').toBeTruthy();
+    expect(f.slice(0, 14) > fileFor('alibi_venue_fixup').slice(0, 14)).toBe(true);
+    const cur = G('alibi_auto');
+    expect(cur.size).toBe(23);
+    expect([...cur].sort()).toEqual([...G('alibi_venue_fixup')].sort());
+    expect(createdFns(read('alibi_auto')).size).toBe(0);
+  });
+  it('sets trust to auto for alibi-truckee only, with no enabled/strict_auto change', () => {
+    const sql = read('alibi_auto');
+    expect(sql).toMatch(/set\s+trust\s*=\s*'auto'[^;]*alibi-truckee/i);
+    expect(sql).not.toMatch(/\bstrict_auto\s*=\s*true\b/i);
+    expect(sql).not.toMatch(/\benabled\s*=\s*true\b/i);
+  });
+});
+
 // A7-2 / AC-M1-76 (e): owner_minutes adds exactly admin_owner_minutes_7d to the cumulative allowlist.
 describe('owner_minutes adds exactly admin_owner_minutes_7d', () => {
   const G = (n) => canonicalGrants(read(n));
