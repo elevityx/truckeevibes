@@ -49,7 +49,7 @@ select is(pg_temp.dml($$insert into public.sources (slug, name, homepage_url, al
 
 -- the function itself
 select is(pg_temp.q($$(select prosecdef from pg_proc where oid = 'private.is_admin()'::regprocedure)$$), 'true', 'is_admin() is SECURITY DEFINER');
-select is(pg_temp.q($$(select proconfig from pg_proc where oid = 'private.is_admin()'::regprocedure)$$), '{search_path=""}', 'is_admin() pins search_path');
+select is(pg_temp.q($$(select proconfig = array['search_path=""'] from pg_proc where oid = 'private.is_admin()'::regprocedure)$$), 'true', 'is_admin() pins search_path');
 select ok(pg_temp.q($$has_function_privilege('anon', 'private.is_admin()', 'EXECUTE')$$) = 'false', 'anon cannot execute is_admin()');
 
 -- matrix
