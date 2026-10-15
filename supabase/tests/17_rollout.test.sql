@@ -1,4 +1,4 @@
--- S1.13 step 3 rollout state after all migrations: Alibi Ale Works is enabled at trust 'auto' (its first runs were reviewed); Truckee Chamber is enabled at trust 'review'.
+-- S1.13 step 3 rollout state after all migrations: Alibi Ale Works is enabled at trust 'auto' (its first runs were reviewed); Truckee Chamber and Visit Lake Tahoe are enabled at trust 'review'.
 -- The source gate is still the only way in: it keeps refusing a source whose disposition is permission_required.
 begin;
 create extension if not exists pgtap with schema extensions;
@@ -24,9 +24,15 @@ select is((select enabled from public.sources where slug = 'truckee-chamber'), t
 select is((select trust::text from public.sources where slug = 'truckee-chamber'), 'review', 'truckee-chamber trust stays review');
 select is((select strict_auto from public.sources where slug = 'truckee-chamber'), false, 'truckee-chamber has no strict auto rule');
 select is((select ingest_disposition::text from public.sources where slug = 'truckee-chamber'), 'permitted', 'truckee-chamber is permitted');
-select is((select count(*) from public.sources where enabled), 2::bigint, 'exactly two sources are enabled');
-select is((select string_agg(slug, ',' order by slug) from public.sources where enabled), 'alibi-truckee,truckee-chamber', 'the enabled sources are alibi-truckee and truckee-chamber');
-select is((select count(*) from public.sources where enabled and slug not in ('alibi-truckee','truckee-chamber')), 0::bigint, 'every other source is still disabled');
+select is((select enabled from public.sources where slug = 'visit-lake-tahoe'), true, 'visit-lake-tahoe is enabled');
+select is((select trust::text from public.sources where slug = 'visit-lake-tahoe'), 'review', 'visit-lake-tahoe trust stays review');
+select is((select strict_auto from public.sources where slug = 'visit-lake-tahoe'), false, 'visit-lake-tahoe has no strict auto rule yet');
+select is((select ingest_disposition::text from public.sources where slug = 'visit-lake-tahoe'), 'permitted', 'visit-lake-tahoe is permitted');
+select is((select class::text from public.sources where slug = 'visit-lake-tahoe'), 'aggregator', 'visit-lake-tahoe is an aggregator');
+select is((select config #>> '{filter,excludeCategorySlugs}' from public.sources where slug = 'visit-lake-tahoe'), '["attractions-events", "wellness", "tahoe-blue-event-center"]', 'visit-lake-tahoe excludeCategorySlugs are still the exact three');
+select is((select count(*) from public.sources where enabled), 3::bigint, 'exactly three sources are enabled');
+select is((select string_agg(slug, ',' order by slug) from public.sources where enabled), 'alibi-truckee,truckee-chamber,visit-lake-tahoe', 'the enabled sources are alibi-truckee, truckee-chamber and visit-lake-tahoe');
+select is((select count(*) from public.sources where enabled and slug not in ('alibi-truckee','truckee-chamber','visit-lake-tahoe')), 0::bigint, 'every other source is still disabled');
 select is((select string_agg(slug, ',' order by slug) from public.sources where trust::text = 'auto'), 'alibi-truckee', 'alibi-truckee is the only source at trust auto');
 select is((select count(*) from public.sources where trust::text = 'auto' and class = 'aggregator'), 0::bigint, 'no aggregator is at trust auto');
 
@@ -36,7 +42,7 @@ select is(
   pg_temp.x($q$update public.sources set enabled = true where slug = (select slug from public.sources where ingest_disposition = 'permission_required' order by slug limit 1)$q$),
   'ERR:23514|source_not_permitted',
   'the source gate refuses enabling a permission_required source');
-select is((select count(*) from public.sources where enabled), 2::bigint, 'still exactly two sources enabled after the refused attempt');
+select is((select count(*) from public.sources where enabled), 3::bigint, 'still exactly three sources enabled after the refused attempt');
 
 -- Fixture: a pending Alibi event with an open card is published, and the card closes auto_published, after a trust change + drain.
 create function pg_temp.ts(p_days int, p_hh int, p_plus int default 0) returns text language sql as $$
