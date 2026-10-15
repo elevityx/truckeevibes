@@ -1,0 +1,22 @@
+name: Ingest
+on:
+  schedule: [{ cron: '10 4,13,18,23 * * *' }]   # 06:10/11:10/16:10/21:10 PDT (an hour earlier in PST)
+  workflow_dispatch: {}
+permissions: { contents: read }
+concurrency: { group: ingest, cancel-in-progress: false }
+jobs:
+  ingest:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version-file: .nvmrc, cache: npm }
+      - run: npm ci
+      - run: npm run ingest
+        env:
+          INGEST_URL: ${{ vars.INGEST_URL }}
+          INGEST_HMAC_KEY: ${{ secrets.INGEST_HMAC_KEY }}
+          PAGES_DEPLOY_HOOK_URL: ${{ secrets.PAGES_DEPLOY_HOOK_URL }}
