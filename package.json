@@ -35,8 +35,11 @@
   "dependencies": {
     "@marsidev/react-turnstile": "1.6.1",
     "@supabase/supabase-js": "2.117.3",
+    "cheerio": "1.2.0",
+    "ical.js": "2.2.1",
     "next": "16.4.0",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "robots-parser": "3.0.1"
   }
 }
