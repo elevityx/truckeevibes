@@ -5,7 +5,7 @@ import { fetchIcsFeed } from './feeds';
 
 export const adapter: Adapter = {
   family: 'ics_civicplus',
-  version: 'ics_civicplus.1',
+  version: 'ics_civicplus.2',
   async fetch(ctx: AdapterCtx): Promise<AdapterResult> {
     const { base, catIds } = ctx.source.config as { base?: unknown; catIds?: unknown };
     if (typeof base !== 'string' || !base) throw new Error('config_base_required');

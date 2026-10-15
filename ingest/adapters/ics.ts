@@ -4,7 +4,7 @@ import { isoZ, isValidZone, toUtcFromLocal } from '../core/normalize';
 import type { SourceEvent } from '../types';
 import { addDays, DEFAULT_TZ, makeEvent } from './common';
 
-export interface IcsOptions { now: Date; tz?: string; eventUrl?: string }
+export interface IcsOptions { now: Date; tz?: string; eventUrl?: string; allowedHosts?: string[] }
 export interface IcsResult { items: SourceEvent[]; dropped: Record<string, number>; truncated: number }
 
 const DAY = 86_400_000;
@@ -27,6 +27,25 @@ function instantOf(t: ICAL.Time, tzidParam: string | undefined, defaultTz: strin
   const out = toUtcFromLocal(ymd(t), hms(t), name);
   if (out === 'dst_gap') return { drop: 'dst_gap' };
   return { ms: Date.parse(out), tz: name };
+}
+
+/** True when the trimmed LOCATION is not a place: an http(s) URL (case-insensitive scheme) or text with no letter. */
+export function isNonPlaceLocation(loc: string): boolean {
+  const t = loc.trim();
+  return /^https?:\/\//i.test(t) || !/\p{L}/u.test(t);
+}
+
+/** The LOCATION as a link back, or undefined: https only, no userinfo, no port, host (lower-case) in allowedHosts (lower-cased, exact match). */
+export function locationLink(loc: string, allowedHosts: readonly string[] | undefined): string | undefined {
+  if (!allowedHosts || allowedHosts.length === 0) return undefined;
+  try {
+    const u = new URL(loc.trim());
+    const hosts = new Set(allowedHosts.map((h) => h.toLowerCase()));
+    if (u.protocol !== 'https:' || u.username !== '' || u.password !== '' || u.port !== '' || !hosts.has(u.hostname.toLowerCase())) return undefined;
+    return u.href;
+  } catch {
+    return undefined;
+  }
 }
 
 const stamp = (ms: number) => isoZ(ms).replace(/[-:]/g, '');
@@ -61,7 +80,10 @@ export function parseIcs(text: string, opts: IcsOptions): IcsResult {
     const loc = txt(v.getFirstPropertyValue('location'));
     let venueName: string | undefined;
     let address: string | undefined;
-    if (loc) {
+    let locLink: string | undefined;
+    if (loc && isNonPlaceLocation(loc)) {
+      locLink = locationLink(loc, opts.allowedHosts);   // A8-1: a URL or letterless LOCATION is not a venue
+    } else if (loc) {
       const i = loc.indexOf(',');
       venueName = (i < 0 ? loc : loc.slice(0, i)).trim();
       address = i < 0 ? undefined : loc.slice(i + 1).trim();
@@ -74,7 +96,7 @@ export function parseIcs(text: string, opts: IcsOptions): IcsResult {
     return {
       title: txt(v.getFirstPropertyValue('summary')) ?? '',
       venueName, address, lat, lng, hints,
-      url: txt(v.getFirstPropertyValue('url')) ?? opts.eventUrl,
+      url: txt(v.getFirstPropertyValue('url')) ?? opts.eventUrl ?? locLink,
       description: txt(v.getFirstPropertyValue('description')),
       cancelled: String(v.getFirstPropertyValue('status') ?? '').toUpperCase() === 'CANCELLED',
       uid,

@@ -8,7 +8,7 @@ const DETAIL = /^\/events\/details\/([A-Za-z0-9][A-Za-z0-9-]*-\d+)\/?$/;
 
 export const adapter: Adapter = {
   family: 'ics_chambermaster',
-  version: 'ics_chambermaster.1',
+  version: 'ics_chambermaster.2',
   async fetch(ctx: AdapterCtx): Promise<AdapterResult> {
     const listUrl = ctx.source.config.listUrl;
     if (typeof listUrl !== 'string' || !listUrl) throw new Error('config_listUrl_required');
@@ -35,7 +35,7 @@ export const adapter: Adapter = {
       const res = await ctx.fetch(`${origin}/events/addtocalendar/${id}?format=ICal`, { kind: 'feed' });
       if (res.status !== 200) return { items: [], status: 'http_error', httpStatus: res.status, errorCode: 'detail_http' };
       hashes.push(sha256Hex(res.body));
-      const parsed = parseIcs(decodeUtf8(res.body), { now: ctx.now, tz: tzOf(ctx.source.config), eventUrl: details });
+      const parsed = parseIcs(decodeUtf8(res.body), { now: ctx.now, tz: tzOf(ctx.source.config), eventUrl: details, allowedHosts: ctx.source.allowed_hosts });
       for (const i of parsed.items) items.push({ ...i, url: details });
     }
     return { items: dedupe(items), status: 'ok', httpStatus: 200, contentHash: sha256Hex(hashes.join('\n')) };
