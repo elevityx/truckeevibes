@@ -1,0 +1,5 @@
+# synthetic: delay line before any User-agent line
+Crawl-delay: 10
+
+User-agent: *
+Disallow: /admin

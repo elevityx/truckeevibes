@@ -1,0 +1,21 @@
+{
+  "events": [
+    {
+      "id": 201,
+      "url": "https://events.example.test/event/sample-market-day/",
+      "title": "Sample Market Day",
+      "description": "<p>SYNTHETIC-DESCRIPTION-SENTINEL</p>",
+      "all_day": false,
+      "start_date": "2026-11-07 10:00:00",
+      "end_date": "2026-11-07 15:00:00",
+      "utc_start_date": "2026-11-07 18:00:00",
+      "utc_end_date": "2026-11-07 23:00:00",
+      "cost": "By donation",
+      "categories": [{ "slug": "community", "name": "Sample Community" }],
+      "venue": { "venue": "Example Lodge", "address": "9 Sample Court", "city": "Incline Village", "geo_lat": 39.25, "geo_lng": -119.95 }
+    }
+  ],
+  "rest_url": "https://events.example.test/wp-json/tribe/events/v1/events?start_date=2026-10-15&end_date=2027-02-12&per_page=50&page=2",
+  "total": 4,
+  "total_pages": 2
+}

@@ -1,0 +1,150 @@
+{
+  "events": [
+    {
+      "id": 301,
+      "url": "https://events.example.test/event/sample-301/",
+      "title": "Sample Listing 301",
+      "description": "<p>SYNTHETIC-DESCRIPTION-SENTINEL</p>",
+      "all_day": false,
+      "start_date": "2026-10-20 19:00:00",
+      "end_date": "2026-10-20 21:00:00",
+      "utc_start_date": "2026-10-20 19:00:00",
+      "utc_end_date": "2026-10-20 21:00:00",
+      "cost": "",
+      "categories": [],
+      "venue": {
+        "venue": "Example Venue 301",
+        "address": "1 Sample Way",
+        "city": "Truckee",
+        "geo_lat": 39.3,
+        "geo_lng": -120.1
+      }
+    },
+    {
+      "id": 302,
+      "url": "https://events.example.test/event/sample-302/",
+      "title": "Sample Listing 302",
+      "description": "<p>SYNTHETIC-DESCRIPTION-SENTINEL</p>",
+      "all_day": false,
+      "start_date": "2026-10-21 19:00:00",
+      "end_date": "2026-10-21 21:00:00",
+      "utc_start_date": "2026-10-21 19:00:00",
+      "utc_end_date": "2026-10-21 21:00:00",
+      "cost": "",
+      "categories": [],
+      "venue": {
+        "venue": "Example Venue 302",
+        "address": "1 Sample Way",
+        "city": "  Tahoe City ",
+        "geo_lat": 39.3,
+        "geo_lng": -120.1
+      }
+    },
+    {
+      "id": 303,
+      "url": "https://events.example.test/event/sample-303/",
+      "title": "Sample Listing 303",
+      "description": "<p>SYNTHETIC-DESCRIPTION-SENTINEL</p>",
+      "all_day": false,
+      "start_date": "2026-10-22 19:00:00",
+      "end_date": "2026-10-22 21:00:00",
+      "utc_start_date": "2026-10-22 19:00:00",
+      "utc_end_date": "2026-10-22 21:00:00",
+      "cost": "",
+      "categories": [],
+      "venue": {
+        "venue": "Example Venue 303",
+        "address": "1 Sample Way",
+        "city": "South Lake Tahoe",
+        "geo_lat": 39.3,
+        "geo_lng": -120.1
+      }
+    },
+    {
+      "id": 304,
+      "url": "https://events.example.test/event/sample-304/",
+      "title": "Sample Listing 304",
+      "description": "<p>SYNTHETIC-DESCRIPTION-SENTINEL</p>",
+      "all_day": false,
+      "start_date": "2026-10-23 19:00:00",
+      "end_date": "2026-10-23 21:00:00",
+      "utc_start_date": "2026-10-23 19:00:00",
+      "utc_end_date": "2026-10-23 21:00:00",
+      "cost": "",
+      "categories": [],
+      "venue": []
+    },
+    {
+      "id": 305,
+      "url": "https://events.example.test/event/sample-305/",
+      "title": "Sample Listing 305",
+      "description": "<p>SYNTHETIC-DESCRIPTION-SENTINEL</p>",
+      "all_day": false,
+      "start_date": "2026-10-20 19:00:00",
+      "end_date": "2026-12-19 21:00:00",
+      "utc_start_date": "2026-10-20 19:00:00",
+      "utc_end_date": "2026-12-19 21:00:00",
+      "cost": "",
+      "categories": [],
+      "venue": {
+        "venue": "Example Venue 305",
+        "address": "1 Sample Way",
+        "city": "Truckee",
+        "geo_lat": 39.3,
+        "geo_lng": -120.1
+      }
+    },
+    {
+      "id": 306,
+      "url": "https://events.example.test/event/sample-306/",
+      "title": "Sample Listing 306",
+      "description": "<p>SYNTHETIC-DESCRIPTION-SENTINEL</p>",
+      "all_day": false,
+      "start_date": "2026-10-24 19:00:00",
+      "end_date": "2026-10-24 21:00:00",
+      "utc_start_date": "2026-10-24 19:00:00",
+      "utc_end_date": "2026-10-24 21:00:00",
+      "cost": "",
+      "categories": [
+        {
+          "slug": "tours",
+          "name": "Sample tours"
+        },
+        {
+          "slug": "music",
+          "name": "Sample music"
+        }
+      ],
+      "venue": {
+        "venue": "Example Venue 306",
+        "address": "1 Sample Way",
+        "city": "Truckee",
+        "geo_lat": 39.3,
+        "geo_lng": -120.1
+      }
+    },
+    {
+      "id": 307,
+      "url": "https://events.example.test/event/sample-307/",
+      "title": "Sample Listing 307",
+      "description": "<p>SYNTHETIC-DESCRIPTION-SENTINEL</p>",
+      "all_day": false,
+      "start_date": "2026-10-20 19:00:00",
+      "end_date": "2026-11-03 19:00:00",
+      "utc_start_date": "2026-10-20 19:00:00",
+      "utc_end_date": "2026-11-03 19:00:00",
+      "cost": "",
+      "categories": [],
+      "venue": {
+        "venue": "Example Venue 307",
+        "address": "1 Sample Way",
+        "city": "INCLINE VILLAGE",
+        "geo_lat": 39.3,
+        "geo_lng": -120.1
+      }
+    }
+  ],
+  "rest_url": "https://events.example.test/wp-json/tribe/events/v1/events?page=1",
+  "total": 7,
+  "total_pages": 1
+}

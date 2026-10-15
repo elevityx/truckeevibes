@@ -1,0 +1,52 @@
+{
+  "events": [
+    {
+      "id": 101,
+      "url": "https://events.example.test/event/sample-concert-night/",
+      "title": "Sample Concert Night &#8211; Main Stage",
+      "description": "<p>SYNTHETIC-DESCRIPTION-SENTINEL live music and a band</p>",
+      "all_day": false,
+      "start_date": "2026-10-17 19:00:00",
+      "end_date": "2026-10-17 21:00:00",
+      "utc_start_date": "2026-10-18 02:00:00",
+      "utc_end_date": "2026-10-18 04:00:00",
+      "timezone": "America/Los_Angeles",
+      "cost": "$15",
+      "categories": [{ "slug": "music", "name": "Sample Music" }],
+      "venue": { "venue": "Example Hall", "address": "100 Sample Way", "city": "Truckee", "state": "CA", "geo_lat": 39.33, "geo_lng": -120.18 }
+    },
+    {
+      "id": 102,
+      "url": "https://events.example.test/event/sample-all-day-festival/",
+      "title": "Sample All Day Festival",
+      "description": "<p>SYNTHETIC-DESCRIPTION-SENTINEL</p>",
+      "all_day": true,
+      "start_date": "2026-10-31 00:00:00",
+      "end_date": "2026-10-31 23:59:59",
+      "utc_start_date": "2026-10-31 07:00:00",
+      "utc_end_date": "2026-11-01 06:59:59",
+      "timezone": "America/Los_Angeles",
+      "cost": "",
+      "categories": [],
+      "venue": { "venue": "Example Park", "address": "5 Sample Loop", "city": "Tahoe City", "geo_lat": 39.17, "geo_lng": -120.14 }
+    },
+    {
+      "id": 103,
+      "url": "https://events.example.test/event/sample-free-talk/",
+      "title": "Sample Free Talk",
+      "description": "<p>SYNTHETIC-DESCRIPTION-SENTINEL</p>",
+      "all_day": false,
+      "start_date": "2026-10-22 18:00:00",
+      "end_date": "2026-10-22 19:00:00",
+      "utc_start_date": "2026-10-23 01:00:00",
+      "utc_end_date": "2026-10-23 02:00:00",
+      "cost": "Free",
+      "categories": [{ "slug": "learning", "name": "Sample Learning" }],
+      "venue": []
+    }
+  ],
+  "rest_url": "https://events.example.test/wp-json/tribe/events/v1/events?start_date=2026-10-15&end_date=2027-02-12&per_page=50&page=1",
+  "next_rest_url": "https://events.example.test/wp-json/tribe/events/v1/events?start_date=2026-10-15&end_date=2027-02-12&per_page=50&page=2",
+  "total": 4,
+  "total_pages": 2
+}
