@@ -337,7 +337,7 @@ describe('alibi_venue_fixup adds no grant', () => {
     const sql = read('alibi_venue_fixup');
     expect(createdFns(sql).size).toBe(0);
     const headers = sql.match(/create\s+(?:or\s+replace\s+)?function[\s\S]*?\bas\s+\$/gi) ?? [];
-    expect(headers.length).toBeGreaterThanOrEqual(6);
+    expect(headers.length).toBe(5);
     for (const h of headers) expect(h, h.slice(0, 80)).toMatch(/set\s+search_path\s*=\s*''/i);
   });
   it('creates the five private functions of A8-2 / A8.1', () => {

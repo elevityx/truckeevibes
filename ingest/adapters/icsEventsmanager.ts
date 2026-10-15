@@ -4,7 +4,7 @@ import { fetchIcsFeed } from './feeds';
 
 export const adapter: Adapter = {
   family: 'ics_eventsmanager',
-  version: 'ics_eventsmanager.1',
+  version: 'ics_eventsmanager.2',
   async fetch(ctx: AdapterCtx): Promise<AdapterResult> {
     const icsUrl = ctx.source.config.icsUrl;
     if (typeof icsUrl !== 'string' || !icsUrl) throw new Error('config_icsUrl_required');
