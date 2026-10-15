@@ -4,17 +4,36 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "next dev",
+    "build": "node --run snapshot && next build",
+    "snapshot": "tsx scripts/build-snapshot.ts",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:functions": "deno test --config supabase/functions/deno.json supabase/functions",
     "db:start": "sh supabase/start-local.sh",
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
+    "ingest": "tsx ingest/run.ts",
     "check:repo": "node scripts/secret-scan.mjs && node scripts/check-workflows.mjs && node scripts/check-fixtures.mjs && node scripts/check-no-html.mjs"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "4.3.3",
     "@types/node": "26.6.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.4.0",
+    "tailwindcss": "4.3.3",
     "tsx": "4.21.0",
     "typescript": "6.0.3",
     "vitest": "5.0.4"
+  },
+  "dependencies": {
+    "@marsidev/react-turnstile": "1.6.1",
+    "@supabase/supabase-js": "2.117.3",
+    "next": "16.4.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   }
 }
