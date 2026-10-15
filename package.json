@@ -15,7 +15,7 @@
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
     "ingest": "tsx ingest/run.ts",
-    "check:repo": "node scripts/secret-scan.mjs && node scripts/check-workflows.mjs && node scripts/check-fixtures.mjs && node scripts/check-no-html.mjs"
+    "check:repo": "node scripts/secret-scan.mjs && node scripts/check-workflows.mjs && node scripts/check-fixtures.mjs && node scripts/check-no-html.mjs && node scripts/check-public-copy.mjs"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",

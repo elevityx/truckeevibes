@@ -29,7 +29,7 @@ export default function BotPage() {
       <ul>
         <li>At most 4 times a day per source.</li>
         <li>At most 1 request per second per host.</li>
-        <li>We send conditional requests, so an unchanged page costs almost nothing.</li>
+        <li>Conditional requests avoid downloading an unchanged page again.</li>
       </ul>
 
       <h2 className="disp">Rules we follow</h2>
