@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+/* One theme. Tokens follow the sister project's palette; no seasonal theming. */
+:root{
+  --body: var(--font-atkinson), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-fraunces), serif;
+  --bg:#0B1626; --surface:#13233A; --surface-2:#1B2F4B; --line:#2c4466; --text:#F7F5EF; --muted:#AFC0D6;
+  --accent:#F2C14E; --on-accent:#0B1626; --accent-2:#C62828; --on-accent-2:#FFFFFF; --focus:#F2C14E;
+  --danger:#FF8A80; --ok:#7FD6A0; --radius:16px;
+  color-scheme: dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0}
+[hidden]{display:none!important}
+body{background:var(--bg); color:var(--text); font-family:var(--body); font-size:16px; line-height:1.5; min-height:100dvh}
+a{color:var(--accent)}
+:focus-visible{outline:3px solid var(--focus); outline-offset:2px}
+.disp{font-family:var(--font-display); font-weight:600; letter-spacing:.01em}
+.sr-only{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
+
+.btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:44px; padding:0 18px; border-radius:999px; border:2px solid transparent;
+  font-weight:700; font-size:15px; cursor:pointer; text-decoration:none; white-space:nowrap}
+.btn.primary{background:var(--accent); color:var(--on-accent)}
+.btn.alt{background:var(--accent-2); color:var(--on-accent-2)}
+.btn.ghost{background:transparent; color:var(--text); border-color:var(--line)}
+.btn:disabled{opacity:.5; cursor:not-allowed}
+
+.page{max-width:720px; margin:0 auto; padding:24px 16px 48px; display:flex; flex-direction:column; gap:16px}
+.page h1{margin:0; font-size:32px; line-height:1.2}
+.page h2{margin:16px 0 0; font-size:21px}
+.page p,.page ul{margin:0}
+.page ul{padding-left:20px; display:flex; flex-direction:column; gap:6px}
+.site-nav{display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center}
+.site-nav a{color:var(--muted)}
+.card{padding:16px; border-radius:var(--radius); background:var(--surface); border:1px solid var(--line)}
+.src-list{list-style:none; padding:0!important; display:flex; flex-direction:column; gap:8px}
+.src-list li{display:flex; flex-wrap:wrap; gap:6px 12px; align-items:center; justify-content:space-between; padding:12px 14px; border-radius:12px; background:var(--surface); border:1px solid var(--line)}
