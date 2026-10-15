@@ -328,7 +328,9 @@ describe('enable_chamber keeps the canonical block and the unchanged allowlist',
     expect(sql).toMatch(/set\s+enabled\s*=\s*true[^;]*truckee-chamber/i);
     expect([...sql.matchAll(/update\s+public\.sources/gi)].length).toBe(1);
     expect(sql).not.toMatch(/\bstrict_auto\s*=\s*true\b/i);
-    expect(sql).not.toMatch(/\btrust\s*=/i);
+    const upd = sql.match(/update\s+public\.sources[^;]*;/i)[0];
+    expect(upd).not.toMatch(/\btrust\b/i);
+    expect(upd).not.toMatch(/\bstrict_auto\b/i);
     expect(sql).not.toMatch(/(?:visit-lake-tahoe|tdrpd|tahoe-donner|arts-for-the-schools|diamond-peak|ivgid|truckee-roundhouse)/);
   });
 });
