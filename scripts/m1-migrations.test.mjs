@@ -337,10 +337,9 @@ describe('enable_chamber keeps the canonical block and the unchanged allowlist',
 // S1.13 step 3: enable_vlt enables Visit Lake Tahoe only (trust stays review, strict_auto stays false) and adds no grant.
 describe('enable_vlt keeps the canonical block and the unchanged allowlist', () => {
   const G = (n) => canonicalGrants(read(n));
-  it('exists, sorts last, and its allowlist is the 23 of enable_chamber', () => {
+  it('exists, sorts after enable_chamber, and its allowlist is the 23 of enable_chamber', () => {
     const f = fileFor('enable_vlt');
     expect(f, 'no migration named *_enable_vlt.sql').toBeTruthy();
-    expect(files.filter((x) => x.endsWith('.sql')).pop()).toBe(f);
     expect(f.slice(0, 14) > fileFor('enable_chamber').slice(0, 14)).toBe(true);
     const cur = G('enable_vlt');
     expect(cur.size).toBe(23);
@@ -356,6 +355,31 @@ describe('enable_vlt keeps the canonical block and the unchanged allowlist', () 
     expect(upd).not.toMatch(/\btrust\b/i);
     expect(upd).not.toMatch(/\bstrict_auto\b/i);
     expect(sql).not.toMatch(/(?:tdrpd|tahoe-donner|arts-for-the-schools|diamond-peak|ivgid|truckee-roundhouse)/);
+  });
+});
+
+// S1.13 step 3: enable_tdrpd enables TDRPD only (trust stays review) and adds no grant.
+describe('enable_tdrpd keeps the canonical block and the unchanged allowlist', () => {
+  const G = (n) => canonicalGrants(read(n));
+  it('exists, sorts last, and its allowlist is the 23 of enable_vlt', () => {
+    const f = fileFor('enable_tdrpd');
+    expect(f, 'no migration named *_enable_tdrpd.sql').toBeTruthy();
+    expect(files.filter((x) => x.endsWith('.sql')).pop()).toBe(f);
+    expect(f.slice(0, 14) > fileFor('enable_vlt').slice(0, 14)).toBe(true);
+    const cur = G('enable_tdrpd');
+    expect(cur.size).toBe(23);
+    expect([...cur].sort()).toEqual([...G('enable_vlt')].sort());
+    expect(createdFns(read('enable_tdrpd')).size).toBe(0);
+  });
+  it('enables tdrpd only, with no trust or strict_auto change', () => {
+    const sql = read('enable_tdrpd');
+    expect(sql).toMatch(/set\s+enabled\s*=\s*true[^;]*tdrpd/i);
+    expect([...sql.matchAll(/update\s+public\.sources/gi)].length).toBe(1);
+    expect(sql).not.toMatch(/\bstrict_auto\s*=\s*true\b/i);
+    const upd = sql.match(/update\s+public\.sources[^;]*;/i)[0];
+    expect(upd).not.toMatch(/\btrust\b/i);
+    expect(upd).not.toMatch(/\bstrict_auto\b/i);
+    expect(upd).not.toMatch(/(?:tahoe-donner|arts-for-the-schools|diamond-peak|ivgid|truckee-roundhouse|visit-lake-tahoe)/);
   });
 });
 
