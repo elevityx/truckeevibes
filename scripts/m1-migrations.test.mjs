@@ -361,10 +361,9 @@ describe('enable_vlt keeps the canonical block and the unchanged allowlist', () 
 // S1.13 step 3: enable_tdrpd enables TDRPD only (trust stays review) and adds no grant.
 describe('enable_tdrpd keeps the canonical block and the unchanged allowlist', () => {
   const G = (n) => canonicalGrants(read(n));
-  it('exists, sorts last, and its allowlist is the 23 of enable_vlt', () => {
+  it('exists, sorts after enable_vlt, and its allowlist is the 23 of enable_vlt', () => {
     const f = fileFor('enable_tdrpd');
     expect(f, 'no migration named *_enable_tdrpd.sql').toBeTruthy();
-    expect(files.filter((x) => x.endsWith('.sql')).pop()).toBe(f);
     expect(f.slice(0, 14) > fileFor('enable_vlt').slice(0, 14)).toBe(true);
     const cur = G('enable_tdrpd');
     expect(cur.size).toBe(23);
@@ -534,5 +533,50 @@ describe('chamber_fixes adds no grant', () => {
   it('is the last migration but enable_vlt (which sorts after it)', () => {
     const sqls = files.filter((x) => x.endsWith('.sql'));
     expect(sqls.indexOf(fileFor('chamber_fixes'))).toBe(sqls.indexOf(fileFor('enable_chamber')) + 1);
+  });
+});
+
+// S1.13 step 3 / Amendment 2 D13: tdrpd_auto promotes TDRPD to trust auto; vlt_strict_auto gives Visit Lake Tahoe the strict rule. Neither adds a grant.
+describe('tdrpd_auto keeps the canonical block and the unchanged allowlist', () => {
+  const G = (n) => canonicalGrants(read(n));
+  it('exists, sorts after enable_tdrpd, and its allowlist is the 23 of enable_tdrpd', () => {
+    const f = fileFor('tdrpd_auto');
+    expect(f, 'no migration named *_tdrpd_auto.sql').toBeTruthy();
+    expect(f.slice(0, 14) > fileFor('enable_tdrpd').slice(0, 14)).toBe(true);
+    const cur = G('tdrpd_auto');
+    expect(cur.size).toBe(23);
+    expect([...cur].sort()).toEqual([...G('enable_tdrpd')].sort());
+    expect(createdFns(read('tdrpd_auto')).size).toBe(0);
+  });
+  it('is one update that sets trust to auto for tdrpd only', () => {
+    const sql = read('tdrpd_auto');
+    expect([...sql.matchAll(/update\s+public\.sources/gi)].length).toBe(1);
+    const upd = sql.match(/update\s+public\.sources[^;]*;/i)[0];
+    expect(upd).toMatch(/set\s+trust\s*=\s*'auto'\s+where\s+slug\s*=\s*'tdrpd'/i);
+    expect(upd).not.toMatch(/\bstrict_auto\b|\benabled\b/i);
+    expect(sql).not.toMatch(/\bstrict_auto\s*=\s*true\b/i);
+  });
+});
+
+describe('vlt_strict_auto keeps the canonical block and the unchanged allowlist', () => {
+  const G = (n) => canonicalGrants(read(n));
+  it('exists, sorts last, and its allowlist is the 23 of tdrpd_auto', () => {
+    const f = fileFor('vlt_strict_auto');
+    expect(f, 'no migration named *_vlt_strict_auto.sql').toBeTruthy();
+    expect(files.filter((x) => x.endsWith('.sql')).pop()).toBe(f);
+    expect(f.slice(0, 14) > fileFor('tdrpd_auto').slice(0, 14)).toBe(true);
+    const cur = G('vlt_strict_auto');
+    expect(cur.size).toBe(23);
+    expect([...cur].sort()).toEqual([...G('tdrpd_auto')].sort());
+    expect(createdFns(read('vlt_strict_auto')).size).toBe(0);
+  });
+  it('is one update that touches only strict_auto, for visit-lake-tahoe, citing Amendment 2 D13', () => {
+    const sql = read('vlt_strict_auto');
+    expect([...sql.matchAll(/update\s+public\.sources/gi)].length).toBe(1);
+    const upd = sql.match(/update\s+public\.sources[^;]*;/i)[0];
+    expect(upd).toMatch(/set\s+strict_auto\s*=\s*true\s+where\s+slug\s*=\s*'visit-lake-tahoe'/i);
+    expect(upd).not.toMatch(/\btrust\b|\benabled\b/i);
+    expect(sql).toMatch(/Amendment 2/);
+    expect(sql).toMatch(/D13/);
   });
 });
