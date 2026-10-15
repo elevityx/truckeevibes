@@ -1,0 +1,20 @@
+{
+  "name": "truckeevibes",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:start": "sh supabase/start-local.sh",
+    "db:reset": "supabase db reset",
+    "db:test": "supabase test db",
+    "check:repo": "node scripts/secret-scan.mjs && node scripts/check-workflows.mjs && node scripts/check-fixtures.mjs && node scripts/check-no-html.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "tsx": "4.21.0",
+    "typescript": "6.0.3",
+    "vitest": "5.0.4"
+  }
+}
