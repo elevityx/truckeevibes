@@ -8,3 +8,7 @@ out/
 supabase/.temp/
 supabase/.branches/
 ingest/.cache/
+next-env.d.ts
+.DS_Store
+.vercel
+src/data/snapshot.json
