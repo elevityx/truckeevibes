@@ -3,8 +3,11 @@
 // (grants, HMAC signing, nonce, batch caps, non-ok -> items: [], concurrency 3 across hosts, logs).
 // Contract assumed: `main(deps): Promise<number>` (the exit code), deps = { env, fetch, adapters?, now?, sleep?, log? }.
 import { createHash, createHmac } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { main } from './run';
+import { adapter as chamberAdapter } from './adapters/icsChambermaster';
 import { FetchError } from './core/politeFetch';
 import type { AdapterResult, GrantOut } from './types';
 import { fakeNet, fixture, makeClock, source, text, T0 } from './testing/fakes';
@@ -311,5 +314,52 @@ describe('logs (AC-M1-46)', () => {
     expect(all).not.toContain('tok-boom');
     // and the happy source really did carry the sentinel title to the ingest endpoint, just not to the logs
     expect(h.submits().find((s) => s.body.grant === 'tok-em')!.raw).toContain(TITLE_SENTINEL);
+  });
+});
+
+describe('one shared spacer per run (AC-M1-73 e, A6-2)', () => {
+  it('run.ts builds one spacer with createSpacer( and passes it to createPoliteFetch; no per-run starts Map', () => {
+    const src = readFileSync(fileURLToPath(new URL('./run.ts', import.meta.url)), 'utf8');
+    expect(src.match(/createSpacer\(/g) ?? []).toHaveLength(1);
+    expect(src).not.toMatch(/new Map<string, number>\(\)/);
+    expect(src).toMatch(/createPoliteFetch\([^)]*\bspacer\b/);
+  });
+});
+
+describe('ChamberMaster partial fetch is never submitted as ok (AC-M1-74 e, A6-4)', () => {
+  const CHAMBER = 'https://chamber.example.test';
+  const chamberGrant = () => ({
+    grant: 'grant-chamber', run_id: 'run-chamber',
+    source: source({ slug: 'chamber', family: 'ics_chambermaster', config: { listUrl: `${CHAMBER}/events` }, allowed_hosts: ['chamber.example.test'], page_cap: 10 }),
+  }) as GrantOut;
+  const other = (u: URL) => {
+    if (u.pathname === '/robots.txt') return text('nf', 404);
+    if (u.pathname === '/events') return text(fixture('chambermaster/events_list.html'));
+    const m = /\/events\/addtocalendar\/(.*-(\d+))$/.exec(u.pathname);
+    if (m && m[1] === 'sample-art-walk-2002') return text('busy', 503);
+    if (m) return text(fixture('chambermaster/event_template.ics').replaceAll('{{ID}}', m[2]));
+    return text('', 404);
+  };
+
+  it('detail 2 returns 503, run 3 times -> 3 submit_batch with http_error/detail_http and items: [], never an ok', async () => {
+    const h = harness({ grants: [chamberGrant()], adapters: { ics_chambermaster: chamberAdapter as never }, other });
+    for (let i = 0; i < 3; i++) expect(await h.run()).toBe(0);
+    const subs = h.submits();
+    expect(subs).toHaveLength(3);
+    for (const s of subs) {
+      expect(s.body.run).toMatchObject({ status: 'http_error', error_code: 'detail_http', http_status: 503 });
+      expect(s.body.items).toEqual([]);
+    }
+    expect(subs.some((s) => s.body.run.status === 'ok')).toBe(false);
+  });
+
+  it('detail 3 times out through the runner -> http_error/timeout with items: []', async () => {
+    const h = harness({
+      grants: [chamberGrant()], adapters: { ics_chambermaster: chamberAdapter as never },
+      other: (u) => { if (u.pathname.endsWith('-2003') && u.pathname.includes('addtocalendar')) throw Object.assign(new Error('t'), { name: 'TimeoutError' }); return other(u); },
+    });
+    expect(await h.run()).toBe(0);
+    expect(h.submits()[0].body.run).toMatchObject({ status: 'http_error', error_code: 'timeout' });
+    expect(h.submits()[0].body.items).toEqual([]);
   });
 });

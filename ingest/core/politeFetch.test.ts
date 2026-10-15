@@ -3,7 +3,8 @@
 // FetchError has `.code`, and the returned function also exposes `.robotsInfo(host)` and `.fetchRobots(host)`.
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { computeAiBotsBlocked, createPoliteFetch, FetchError } from './politeFetch';
+import { computeAiBotsBlocked, createPoliteFetch, FetchError, type PoliteDeps } from './politeFetch';
+import { createSpacer } from './rateLimit';
 import { fakeNet, fixture, makeClock, redirect, source, text, T0, UA } from '../testing/fakes';
 
 const ROBOTS_URL = 'https://a.test/robots.txt';
@@ -320,10 +321,9 @@ describe('crawl-delay (AC-M1-55, A2/A3)', () => {
     const at = await twoContent(fixture('robots/crawl_delay_pregroup.txt'));
     expect(at[1] - at[0]).toBeGreaterThanOrEqual(10_000);
   });
-  it('a group value overrides the pre-group line', async () => {
+  it('the largest of the pre-group line and a group value wins (A6-1, replaces "group overrides pre-group")', async () => {
     const at = await twoContent('Crawl-delay: 10\nUser-agent: *\nCrawl-delay: 2\n');
-    expect(at[1] - at[0]).toBeGreaterThanOrEqual(2000);
-    expect(at[1] - at[0]).toBeLessThan(10_000);
+    expect(at[1] - at[0]).toBeGreaterThanOrEqual(10_000);
   });
   it('Crawl-delay 60 -> crawl_delay, only /robots.txt fetched', async () => {
     const s = setup({ robots: fixture('robots/crawl_delay_long.txt') });
@@ -364,4 +364,90 @@ describe('crawl-delay (AC-M1-55, A2/A3)', () => {
 
 describe('sanity', () => {
   it('fake clock starts at the shared T0', () => { expect(makeClock().now()).toBe(T0); });
+});
+
+// AC-M1-72 (A6-1): effective delay = max(1 s, our group, `*` group, pre-group line); > 30 s -> crawl_delay.
+describe('conservative crawl-delay (AC-M1-72, A6-1)', () => {
+  const OWN = 'User-agent: TruckeeVibesBot\n';
+  const gap = async (robots: string) => {
+    const s = setup({ robots });
+    await s.pf('https://a.test/1', { kind: 'feed' });
+    await s.pf('https://a.test/2', { kind: 'feed' });
+    const at = s.net.calls.filter((c) => !c.url.endsWith('/robots.txt')).map((c) => c.at);
+    return at[1] - at[0];
+  };
+  const skipped = async (robots: string) => {
+    const s = setup({ robots });
+    const c = await code(s.pf('https://a.test/1', { kind: 'feed' }));
+    return { c, urls: s.net.urls() };
+  };
+
+  it.each([
+    ['(1) our group without a delay + * 2', `${OWN}Disallow:\n\nUser-agent: *\nCrawl-delay: 2\n`, 2000, undefined],
+    ['(2) our group 5 + * 2', `${OWN}Crawl-delay: 5\n\nUser-agent: *\nCrawl-delay: 2\n`, 5000, undefined],
+    ['(3) our group 2 + * 5', `${OWN}Crawl-delay: 2\n\nUser-agent: *\nCrawl-delay: 5\n`, 5000, undefined],
+    ['(4) only * 3', 'User-agent: *\nCrawl-delay: 3\n', 3000, 4000],
+    ['(5) pre-group 10 + * 2', 'Crawl-delay: 10\nUser-agent: *\nCrawl-delay: 2\n', 10_000, undefined],
+    ['(6) pre-group 2 + our group (no delay) + * 4', `Crawl-delay: 2\n${OWN}Disallow:\n\nUser-agent: *\nCrawl-delay: 4\n`, 4000, undefined],
+    ['(7) pre-group 3 + our group (no delay), no *', `Crawl-delay: 3\n${OWN}Disallow:\n`, 3000, undefined],
+    ['(8) our group 0.5, no *', `${OWN}Crawl-delay: 0.5\n`, 1000, 2000],
+    ['(12) our group (no delay) + * 30', `${OWN}Disallow:\n\nUser-agent: *\nCrawl-delay: 30\n`, 30_000, undefined],
+    ['(13) * "abc" + our group 2', `${OWN}Crawl-delay: 2\n\nUser-agent: *\nCrawl-delay: abc\n`, 2000, 3000],
+    ['(14) * -5, nothing else', 'User-agent: *\nCrawl-delay: -5\n', 1000, 2000],
+  ])('%s', async (_n, robots, min, max) => {
+    const d = await gap(robots);
+    expect(d).toBeGreaterThanOrEqual(min);
+    if (max !== undefined) expect(d).toBeLessThan(max);
+  });
+
+  it.each([
+    ['(9) our group 10 + * 60', `${OWN}Crawl-delay: 10\n\nUser-agent: *\nCrawl-delay: 60\n`],
+    ['(10) our group 60 + * 1', `${OWN}Crawl-delay: 60\n\nUser-agent: *\nCrawl-delay: 1\n`],
+    ['(11) pre-group 45 + our group 5', `Crawl-delay: 45\n${OWN}Crawl-delay: 5\n`],
+    ['(15) our group Crawl-delay: Infinity', `${OWN}Crawl-delay: Infinity\n`],
+  ])('%s -> crawl_delay, only /robots.txt fetched', async (_n, robots) => {
+    const r = await skipped(robots);
+    expect(r.c).toBe('crawl_delay');
+    expect(r.urls).toEqual([ROBOTS_URL]);
+  });
+
+  it('redirect: www.a.test (our group, no delay) 301 -> a.test (our group no delay + * 2) -> the hop starts >= 2,000 ms after a.test robots', async () => {
+    const clock = makeClock();
+    const net = fakeNet((u) => {
+      if (u.href === 'https://www.a.test/robots.txt') return text(`${OWN}Disallow:\n`);
+      if (u.href === 'https://a.test/robots.txt') return text(`${OWN}Disallow:\n\nUser-agent: *\nCrawl-delay: 2\n`);
+      if (u.href === 'https://www.a.test/feed') return redirect('https://a.test/feed');
+      return text('x');
+    }, clock.now);
+    const pf = createPoliteFetch(source(), { fetch: net.fetch, now: clock.now, sleep: clock.sleep });
+    await pf('https://www.a.test/feed', { kind: 'feed' });
+    const robots = net.calls.find((c) => c.url === 'https://a.test/robots.txt')!;
+    const hop = net.calls.find((c) => c.url === 'https://a.test/feed')!;
+    expect(hop.at - robots.at).toBeGreaterThanOrEqual(2000);
+  });
+});
+
+// AC-M1-73 (d) (A6-2): two sources sharing one spacer, both redirecting to the same host.
+describe('shared spacer across sources (AC-M1-73 d, A6-2)', () => {
+  it('every c.test request is >= 1,000 ms after the previous one; each c.test content request >= 5,000 ms after the previous c.test request', async () => {
+    const clock = makeClock();
+    const net = fakeNet((u) => {
+      if (u.href === 'https://c.test/robots.txt') return text('User-agent: *\nCrawl-delay: 5\n');
+      if (u.pathname === '/robots.txt') return text('User-agent: *\nDisallow:\n');
+      if (u.href === 'https://x.test/feed' || u.href === 'https://y.test/feed') return redirect('https://c.test/feed');
+      return text('x');
+    }, clock.now);
+    const spacer = createSpacer({ now: clock.now, sleep: clock.sleep });
+    // `spacer` is the new PoliteDeps field (A6-2); typed loosely here so the test compiles before the field exists.
+    const deps = { fetch: net.fetch, now: clock.now, sleep: clock.sleep, spacer } as PoliteDeps;
+    const pfX = createPoliteFetch(source({ slug: 'x', allowed_hosts: ['x.test', 'c.test'] }), deps);
+    const pfY = createPoliteFetch(source({ slug: 'y', allowed_hosts: ['y.test', 'c.test'] }), deps);
+    await Promise.all([pfX('https://x.test/feed', { kind: 'feed' }), pfY('https://y.test/feed', { kind: 'feed' })]);
+    const c = net.calls.filter((k) => new URL(k.url).hostname === 'c.test').sort((a, b) => a.at - b.at);
+    expect(c).toHaveLength(4); // two robots fetches + two content requests
+    for (let i = 1; i < c.length; i++) {
+      expect(c[i].at - c[i - 1].at).toBeGreaterThanOrEqual(1000);
+      if (!c[i].url.endsWith('/robots.txt')) expect(c[i].at - c[i - 1].at).toBeGreaterThanOrEqual(5000);
+    }
+  });
 });

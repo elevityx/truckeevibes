@@ -1,6 +1,7 @@
 // AC-M1-14: ChamberMaster HTML discovery + per-event ICS.
 import { describe, expect, it } from 'vitest';
 import { adapter } from './icsChambermaster';
+import { FetchError } from '../core/politeFetch';
 import { DESC_SENTINEL, fakePolite, fixture, source } from '../testing/fakes';
 
 const NOW = new Date('2026-10-15T12:00:00Z');
@@ -52,5 +53,40 @@ describe('icsChambermaster', () => {
     const r = await adapter.fetch(ctx(net));
     expect(r.status).toBe('http_error');
     expect(net.calls).toHaveLength(1);
+  });
+
+  // AC-M1-74 (A6-4): all-or-nothing detail fetches.
+  const failing = (failId: string, mk: () => { status?: number; body?: string }) => fakePolite((u) => {
+    if (u.pathname === '/events') return { body: fixture('chambermaster/events_list.html') };
+    const m = /\/events\/addtocalendar\/(.*-(\d+))$/.exec(u.pathname);
+    if (m && m[1] === failId) return mk();
+    if (m) return { body: fixture('chambermaster/event_template.ics').replaceAll('{{ID}}', m[2]) };
+    return { status: 404, body: 'nope' };
+  });
+  it('(a) detail 2 of 3 returns 503 -> http_error/503/detail_http, items [], detail 3 never requested', async () => {
+    const net = failing('sample-art-walk-2002', () => ({ status: 503, body: 'busy' }));
+    const r = await adapter.fetch(ctx(net));
+    expect(r).toMatchObject({ status: 'http_error', httpStatus: 503, errorCode: 'detail_http', items: [] });
+    expect(net.calls).toHaveLength(3);
+    expect(net.urls().some((u) => u.includes('sample-trail-day-2003'))).toBe(false);
+  });
+  it('(b) detail 1 returns 404 -> http_error/404, 2 requests', async () => {
+    const net = failing('sample-block-party-2001', () => ({ status: 404, body: 'gone' }));
+    const r = await adapter.fetch(ctx(net));
+    expect(r).toMatchObject({ status: 'http_error', httpStatus: 404, errorCode: 'detail_http', items: [] });
+    expect(net.calls).toHaveLength(2);
+  });
+  it('(c) detail 3 throws FetchError(timeout) -> the adapter rejects with that error', async () => {
+    const net = fakePolite((u) => {
+      if (u.pathname === '/events') return { body: fixture('chambermaster/events_list.html') };
+      if (u.pathname.endsWith('-2003')) throw new FetchError('timeout');
+      return { body: fixture('chambermaster/event_template.ics').replaceAll('{{ID}}', /-(\d+)$/.exec(u.pathname)![1]) };
+    });
+    await expect(adapter.fetch(ctx(net))).rejects.toMatchObject({ code: 'timeout' });
+  });
+  it('(d) all 3 details succeed -> ok with 3 items', async () => {
+    const r = await adapter.fetch(ctx(chamberNet()));
+    expect(r.status).toBe('ok');
+    expect(r.items).toHaveLength(3);
   });
 });
