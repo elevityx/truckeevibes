@@ -38,6 +38,7 @@ jobs:
       - run: npm run test:functions
       - run: npm audit --omit=dev --audit-level=high
       - run: npm run check:repo
+      - run: npm run test:static
 
   db:
     runs-on: ubuntu-latest

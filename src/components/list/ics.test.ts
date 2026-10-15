@@ -47,3 +47,19 @@ describe('helpers', () => {
     expect(icsFileName({ slug: '' })).toBe('event.ics');
   });
 });
+
+describe('buildIcs uses only the safeWebsite result (AC-M1-77)', () => {
+  const BAD = ['javascript:alert(1)', 'data:text/html,x', 'http://example.org/x', 'https://user:pw@example.org/x', 'ftp://example.org/x'];
+  for (const url of BAD) {
+    it(`no URL line and no URL in DESCRIPTION for ${url}`, () => {
+      const out = buildIcs({ ...e, url }, NOW);
+      expect(out).not.toMatch(/^URL:/m);
+      expect(out.replace(/\r\n /g, '')).not.toContain(url);
+    });
+  }
+  it('an https url is carried in both', () => {
+    const out = buildIcs(e, NOW);
+    expect(out).toContain('URL:https://example.org/park');
+    expect(out).toContain('https://example.org/park');
+  });
+});

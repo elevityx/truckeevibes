@@ -3,7 +3,7 @@
 // normalized https URL or null; townOf(address) is copied unchanged. Not covered here: the .ics builder (no export is named in the spec).
 import { describe, expect, it } from 'vitest';
 import type { VibeEvent } from '@/lib/data/types';
-import { directionsUrl, googleCalendarUrl, placeLine, safeWebsite, townOf } from './links';
+import { allDaySpan, directionsUrl, googleCalendarUrl, placeLine, safeWebsite, townOf } from './links';
 
 const e = {
   id: '11111111-2222-4333-8444-555555555555', slug: 'park', title: 'Music in the Park & more',
@@ -75,5 +75,41 @@ describe('townOf', () => {
     expect(townOf('Heritage Plaza, Tahoe City, CA')).toBe('Tahoe City');
     expect(townOf('2005 NV-28, Incline Village, NV 89451')).toBe('Incline Village');
     expect(townOf('Truckee')).toBe('Truckee');
+  });
+});
+
+// AC-M1-77 / AC-M1-78 (Amendment 7)
+describe('googleCalendarUrl uses only the safeWebsite result (AC-M1-77)', () => {
+  const BAD = ['javascript:alert(1)', 'data:text/html,x', 'http://example.org/x', 'https://user:pw@example.org/x', 'ftp://example.org/x'];
+  for (const url of BAD) {
+    it(`details are the summary only for ${url}`, () => {
+      const u = new URL(googleCalendarUrl({ ...e, url }, 'America/Los_Angeles'));
+      expect(u.searchParams.get('details')).toBe('Live music downtown.');
+    });
+  }
+  it('an https url is carried', () => {
+    const u = new URL(googleCalendarUrl({ ...e, url: 'https://example.org/x' }, 'America/Los_Angeles'));
+    expect(u.searchParams.get('details')).toContain('https://example.org/x');
+  });
+});
+
+describe('googleCalendarUrl all-day (AC-M1-78)', () => {
+  const dates = (o: Partial<VibeEvent>) => new URL(googleCalendarUrl({ ...e, allDay: true, ...o }, 'America/Los_Angeles')).searchParams.get('dates');
+  it('single day', () => expect(dates({ startDate: '2026-11-07', endDate: '2026-11-08' })).toBe('20261107/20261108'));
+  it('multi day, exclusive end', () => expect(dates({ startDate: '2026-11-07', endDate: '2026-11-10' })).toBe('20261107/20261110'));
+  it('null end is one day', () => expect(dates({ startDate: '2026-11-07', endDate: null })).toBe('20261107/20261108'));
+  it('end equal to start is one day', () => expect(dates({ startDate: '2026-11-07', endDate: '2026-11-07' })).toBe('20261107/20261108'));
+  it('never contains T or Z', () => expect(dates({ startDate: '2026-11-07', endDate: '2026-11-08' })).not.toMatch(/[TZ]/));
+  it('allDay with no startDate keeps the timed form', () => expect(dates({ startDate: null, endDate: null })).toBe('20261030T230000Z/20261031T010000Z'));
+});
+
+describe('allDaySpan (AC-M1-78)', () => {
+  it('is null unless allDay with a startDate', () => {
+    expect(allDaySpan({ allDay: false, startDate: '2026-11-07', endDate: null })).toBeNull();
+    expect(allDaySpan({ allDay: true, startDate: null, endDate: null })).toBeNull();
+  });
+  it('returns YYYYMMDD with an exclusive end', () => {
+    expect(allDaySpan({ allDay: true, startDate: '2026-11-07', endDate: '2026-11-10' })).toEqual({ start: '20261107', end: '20261110' });
+    expect(allDaySpan({ allDay: true, startDate: '2026-11-07', endDate: null })).toEqual({ start: '20261107', end: '20261108' });
   });
 });

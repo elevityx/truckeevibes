@@ -120,7 +120,7 @@ select is(pg_temp.fn_list('anon', 'public'), array['list_events(integer)', 'list
 select is(pg_temp.fn_list('authenticated', 'public'),
   (select array_agg(x order by x) from unnest(array[
      'admin_add_suppression(text, text, text)', 'admin_card_open(uuid)', 'admin_decide_card(uuid, text, text, integer)', 'admin_list_sources()',
-     'admin_log_activity(text, integer)', 'admin_merge_events(uuid, uuid)', 'admin_queue(text, integer)', 'admin_set_event_status(uuid, text, text)',
+     'admin_log_activity(text, integer)', 'admin_merge_events(uuid, uuid)', 'admin_owner_minutes_7d()', 'admin_queue(text, integer)', 'admin_set_event_status(uuid, text, text)',
      'admin_set_source_enabled(text, boolean)', 'admin_set_source_trust(text, text)', 'admin_source_health()', 'admin_unlock_field(uuid, text)',
      'admin_update_event(uuid, jsonb)', 'admin_whoami()', 'list_events(integer)', 'list_sources_public()']) x),
   'authenticated EXECUTE is the two public reads + the M0 and M1 admin RPCs (exact)');

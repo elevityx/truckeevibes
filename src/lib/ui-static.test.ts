@@ -49,3 +49,39 @@ describe('public pages render source data as text', () => {
     expect(text).toContain('safeWebsite');
   });
 });
+
+// Amendment 7 static halves
+const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
+describe('AC-M1-75 (d) snapshot is read at build, not fetched', () => {
+  it('no file containing use client imports snapshotFile', () => {
+    const hits = [...src('src')].filter((f) => /['"]use client['"]/.test(readFileSync(f, 'utf8')) && /snapshotFile/.test(readFileSync(f, 'utf8')));
+    expect(hits.map((f) => f.slice(ROOT.length + 1))).toEqual([]);
+  });
+  it('ListApp has no fetch( and no /data/events.json; page.tsx reads the build snapshot', () => {
+    const app = read('src/components/list/ListApp.tsx');
+    expect(app).not.toContain('fetch(');
+    expect(app).not.toContain('/data/events.json');
+    expect(read('src/app/page.tsx')).toContain('readBuildSnapshot');
+  });
+});
+describe('AC-M1-77 one URL policy', () => {
+  it('ics.ts mentions e.url only inside safeWebsite(', () => {
+    const ics = read('src/components/list/ics.ts');
+    const uses = [...ics.matchAll(/e\.url/g)];
+    for (const m of uses) expect(ics.slice(Math.max(0, m.index! - 12), m.index! + 5), 'e.url outside safeWebsite').toContain('safeWebsite(e.url');
+    expect(ics).toContain('safeWebsite(');
+  });
+  it('SourcesList.tsx uses safeWebsite(', () => {
+    expect(read('src/components/SourcesList.tsx')).toContain('safeWebsite(');
+  });
+});
+describe('AC-M1-79 (d) request gates', () => {
+  it('QueueTab and SourcesTab import createRequestGate; Refresh is disabled while decisions are busy', () => {
+    const q = read('src/components/admin/QueueTab.tsx');
+    expect(q).toContain('createRequestGate');
+    expect(read('src/components/admin/SourcesTab.tsx')).toContain('createRequestGate');
+    const refresh = /disabled=\{([^}]*)\}[^>]*>\s*Refresh/.exec(q);
+    expect(refresh, 'Refresh button not found').toBeTruthy();
+    expect(refresh![1]).toContain('busy');
+  });
+});
