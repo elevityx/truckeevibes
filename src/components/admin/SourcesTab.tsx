@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   adminSetSourceEnabled,
   adminSetSourceTrust,
@@ -12,6 +12,7 @@ import {
 } from '@/lib/data';
 import { formatDay } from '@/lib/time/pacific';
 import { ago } from './format';
+import { createRequestGate, gated } from './requestGate';
 import { amberReason, redReason, sourceHealth, type Health } from './sourceHealth';
 
 const TRUSTS: SourceTrust[] = ['auto', 'review', 'link_only'];
@@ -21,14 +22,16 @@ const LABEL: Record<Health, string> = { red: 'Needs attention', amber: 'Check so
 export default function SourcesTab({ onForbidden }: { onForbidden(): void }) {
   const [rows, setRows] = useState<SourceHealthRow[] | null>(null);
   const [err, setErr] = useState('');
-  const [busy, setBusy] = useState('');
+  const [busy, setBusy] = useState<Record<string, true>>({});
+  const gate = useRef(createRequestGate());
   const [now, setNow] = useState(() => Date.now());
 
   const load = useCallback(async () => {
     try {
-      setRows(await adminSourceHealth());
-      setNow(Date.now());
-      setErr('');
+      await gated(gate.current, () => adminSourceHealth(), (r) => {
+        setRows(r);
+        setNow(Date.now());
+      });
     } catch (e) {
       const d = toDataError(e);
       if (d.code === 'forbidden') return onForbidden();
@@ -41,18 +44,22 @@ export default function SourcesTab({ onForbidden }: { onForbidden(): void }) {
     return () => clearTimeout(t);
   }, [load]);
 
+  // Only the load begun after the last mutation paints: invalidate before the change, reload after it settles (either way).
   async function act(slug: string, fn: () => Promise<void>) {
-    setBusy(slug);
+    setBusy((b) => ({ ...b, [slug]: true }));
     setErr('');
+    gate.current.invalidate();
     try {
-      await fn();
+      try {
+        await fn();
+      } catch (e) {
+        const d = toDataError(e);
+        if (d.code === 'forbidden') return onForbidden();
+        setErr(userMessage(d));
+      }
       await load();
-    } catch (e) {
-      const d = toDataError(e);
-      if (d.code === 'forbidden') return onForbidden();
-      setErr(userMessage(d));
     } finally {
-      setBusy('');
+      setBusy(({ [slug]: _drop, ...rest }) => rest); // eslint-disable-line @typescript-eslint/no-unused-vars
     }
   }
 
@@ -95,7 +102,7 @@ export default function SourcesTab({ onForbidden }: { onForbidden(): void }) {
                     className="field"
                     aria-label={`Trust for ${r.name}`}
                     value={r.trust}
-                    disabled={busy === r.slug}
+                    disabled={!!busy[r.slug]}
                     onChange={(ev) => void act(r.slug, () => adminSetSourceTrust(r.slug, ev.target.value as SourceTrust))}
                   >
                     {TRUSTS.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -103,7 +110,7 @@ export default function SourcesTab({ onForbidden }: { onForbidden(): void }) {
                   <button
                     type="button"
                     className="btn ghost"
-                    disabled={busy === r.slug}
+                    disabled={!!busy[r.slug]}
                     onClick={() => void act(r.slug, () => adminSetSourceEnabled(r.slug, !r.enabled))}
                   >
                     {r.enabled ? 'Disable' : 'Enable'}

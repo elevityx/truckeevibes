@@ -17,14 +17,3 @@ export function parseSnapshot(raw: unknown): Snapshot {
   const builtAt = str(o.builtAt) && !Number.isNaN(Date.parse(o.builtAt as string)) ? (o.builtAt as string) : null;
   return { builtAt, events };
 }
-
-/** The build-time snapshot, or null when it is missing or unreadable (dev, first deploy). */
-export async function fetchSnapshot(signal?: AbortSignal): Promise<Snapshot | null> {
-  try {
-    const res = await fetch('/data/events.json', { signal, cache: 'no-cache' });
-    if (!res.ok) return null;
-    return parseSnapshot(await res.json());
-  } catch {
-    return null;
-  }
-}

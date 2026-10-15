@@ -1,5 +1,5 @@
 import type { VibeEvent } from '@/lib/data/types';
-import { DEFAULT_LENGTH_MS } from '@/lib/time/pacific';
+import { DEFAULT_LENGTH_MS, addDays } from '@/lib/time/pacific';
 
 // Adapted from truckeelights src/components/events/links.ts. Every URL is built with URL/URLSearchParams,
 // never by concatenating data into a string.
@@ -18,15 +18,24 @@ export function calendarSpan(e: Pick<VibeEvent, 'startsAt' | 'endsAt'>): { start
   return { start: e.startsAt, end: e.endsAt ?? new Date(Date.parse(e.startsAt) + DEFAULT_LENGTH_MS).toISOString() };
 }
 
+/** All-day events: first day and the day after the last (exclusive) as YYYYMMDD; null for anything else. Shared by Google and .ics. */
+export function allDaySpan(e: Pick<VibeEvent, 'allDay' | 'startDate' | 'endDate'>): { start: string; end: string } | null {
+  if (!e.allDay || !e.startDate) return null;
+  const end = e.endDate && e.endDate > e.startDate ? e.endDate : addDays(e.startDate, 1);
+  return { start: e.startDate.replace(/-/g, ''), end: end.replace(/-/g, '') };
+}
+
 /** Google Calendar "add event" link. Times are UTC (Z); ctz only sets the zone Google shows. */
 export function googleCalendarUrl(e: VibeEvent, tz: string): string {
   const { start, end } = calendarSpan(e);
+  const d = allDaySpan(e);
+  const site = safeWebsite(e.url);
   const u = new URL('https://calendar.google.com/calendar/render');
   u.searchParams.set('action', 'TEMPLATE');
   u.searchParams.set('text', e.title);
-  u.searchParams.set('dates', `${gcalStamp(start)}/${gcalStamp(end)}`);
+  u.searchParams.set('dates', d ? `${d.start}/${d.end}` : `${gcalStamp(start)}/${gcalStamp(end)}`);
   u.searchParams.set('ctz', tz);
-  u.searchParams.set('details', e.url ? `${e.summary}\n\n${e.url}` : e.summary);
+  u.searchParams.set('details', site ? `${e.summary}\n\n${site}` : e.summary);
   u.searchParams.set('location', placeLine(e));
   return u.toString();
 }

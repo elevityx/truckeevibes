@@ -1,6 +1,6 @@
 import { getSupabase } from '@/lib/supabase/client';
 import { toDataError } from './errors';
-import type { SourceClass, SourceTrust } from './types';
+import { DataError, type SourceClass, type SourceTrust } from './types';
 
 // Every function wraps its errors with toDataError. The database enforces the admin gate on every RPC;
 // nothing here is a security boundary.
@@ -75,6 +75,14 @@ async function call(fn: string, args?: Record<string, unknown>): Promise<unknown
 export async function adminQueue(kind: CardKind | null = null, limit = 50): Promise<QueueCard[]> {
   const p_limit = Math.min(100, Math.max(1, Math.trunc(limit)));
   return arr<Raw>(await call('admin_queue', { p_kind: kind, p_limit })).map(mapCard);
+}
+
+/** Owner minutes over the rolling last 7 days (the weekly report's figure). A non-numeric reply throws; it never shows a fake 0. */
+export async function adminOwnerMinutes7d(): Promise<number> {
+  const data = await call('admin_owner_minutes_7d');
+  const n = data === null || data === undefined || data === '' ? NaN : Number(data);
+  if (!Number.isFinite(n)) throw new DataError('unknown');
+  return n;
 }
 
 export async function adminCardOpen(card: string): Promise<void> {

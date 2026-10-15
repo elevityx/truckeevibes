@@ -1,6 +1,5 @@
 import type { VibeEvent } from '@/lib/data/types';
-import { addDays } from '@/lib/time/pacific';
-import { calendarSpan, placeLine } from './links';
+import { allDaySpan, calendarSpan, placeLine, safeWebsite } from './links';
 
 // A small, pure .ics builder for "Add to calendar". Text values are escaped per RFC 5545 and lines are folded at 75 octets.
 
@@ -35,25 +34,24 @@ export function foldLine(line: string): string {
   return out.join('\r\n ');
 }
 
-const ymd = (d: string) => d.replace(/-/g, '');
-
 /** `nowIso` is the DTSTAMP (injected so the output is deterministic in tests). */
 export function buildIcs(e: VibeEvent, nowIso: string = new Date().toISOString()): string {
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//TruckeeVibes//Events//EN', 'CALSCALE:GREGORIAN', 'BEGIN:VEVENT'];
   lines.push(`UID:${e.id}@truckeevibes.com`, `DTSTAMP:${stamp(nowIso)}`);
-  if (e.allDay && e.startDate) {
-    const end = e.endDate && e.endDate > e.startDate ? e.endDate : addDays(e.startDate, 1);
-    lines.push(`DTSTART;VALUE=DATE:${ymd(e.startDate)}`, `DTEND;VALUE=DATE:${ymd(end)}`);
+  const day = allDaySpan(e);
+  if (day) {
+    lines.push(`DTSTART;VALUE=DATE:${day.start}`, `DTEND;VALUE=DATE:${day.end}`);
   } else {
     const { start, end } = calendarSpan(e);
     lines.push(`DTSTART:${stamp(start)}`, `DTEND:${stamp(end)}`);
   }
   lines.push(`SUMMARY:${icsEscape(e.title)}`);
-  const desc = e.url ? `${e.summary}\n\n${e.url}` : e.summary;
+  const site = safeWebsite(e.url);
+  const desc = site ? `${e.summary}\n\n${site}` : e.summary;
   if (desc) lines.push(`DESCRIPTION:${icsEscape(desc)}`);
   const place = placeLine(e);
   if (place) lines.push(`LOCATION:${icsEscape(place)}`);
-  if (e.url) lines.push(`URL:${e.url.replace(/[\r\n]/g, '')}`);
+  if (site) lines.push(`URL:${site}`);
   lines.push('END:VEVENT', 'END:VCALENDAR');
   return lines.map(foldLine).join('\r\n') + '\r\n';
 }
