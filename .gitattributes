@@ -1,2 +1,4 @@
 # iCalendar fixtures keep CRLF line endings (RFC 5545); diff hygiene accepts them.
 ingest/fixtures/**/*.ics -text whitespace=cr-at-eol
+# np-2 and np-7 carry leading/trailing spaces in LOCATION on purpose (AC-M1-81)
+ingest/fixtures/ics/location_nonplace.ics whitespace=cr-at-eol,-trailing-space
