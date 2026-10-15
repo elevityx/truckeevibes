@@ -12,7 +12,10 @@ import { DataError } from './types';
 const CARD = '00000000-0000-4000-8000-0000000000c1';
 const EV = '00000000-0000-4000-8000-0000000000e1';
 
-beforeEach(() => rpc.mockReset());
+beforeEach(() => {
+  // braces: returning the mock makes vitest call it as a teardown, which re-runs the rejecting implementation unhandled
+  rpc.mockReset();
+});
 
 describe('adminQueue', () => {
   it('defaults to all kinds, 50 cards', async () => {

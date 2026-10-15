@@ -11,4 +11,4 @@ ingest/.cache/
 next-env.d.ts
 .DS_Store
 .vercel
-src/data/snapshot.json
+public/data/events.json

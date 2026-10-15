@@ -2,26 +2,32 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-  adminListSources,
   adminSetSourceEnabled,
   adminSetSourceTrust,
+  adminSourceHealth,
   toDataError,
   userMessage,
-  type AdminSource,
+  type SourceHealthRow,
   type SourceTrust,
 } from '@/lib/data';
+import { formatDay } from '@/lib/time/pacific';
+import { ago } from './format';
+import { amberReason, redReason, sourceHealth, type Health } from './sourceHealth';
 
 const TRUSTS: SourceTrust[] = ['auto', 'review', 'link_only'];
+const LABEL: Record<Health, string> = { red: 'Needs attention', amber: 'Check soon', green: 'Healthy', off: 'Off' };
 
-/** Read-only list of sources, with the enable toggle and the trust select. The database gate decides what is allowed. */
+/** Source health board: one row per source with its status, last runs, open cards and the enable / trust controls. */
 export default function SourcesTab({ onForbidden }: { onForbidden(): void }) {
-  const [rows, setRows] = useState<AdminSource[] | null>(null);
+  const [rows, setRows] = useState<SourceHealthRow[] | null>(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState('');
+  const [now, setNow] = useState(() => Date.now());
 
   const load = useCallback(async () => {
     try {
-      setRows(await adminListSources());
+      setRows(await adminSourceHealth());
+      setNow(Date.now());
       setErr('');
     } catch (e) {
       const d = toDataError(e);
@@ -50,6 +56,7 @@ export default function SourcesTab({ onForbidden }: { onForbidden(): void }) {
     }
   }
 
+  const when = new Date(now);
   return (
     <div className="panel">
       <h3>Sources</h3>
@@ -57,47 +64,55 @@ export default function SourcesTab({ onForbidden }: { onForbidden(): void }) {
       {rows === null ? (
         <p className="fine">Loading…</p>
       ) : (
-        <div className="tbl-wrap">
-          <table>
-            <thead>
-              <tr><th>Source</th><th>Class</th><th>Disposition</th><th>Trust</th><th>Enabled</th></tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.slug} className={r.enabled ? '' : 'dim'}>
-                  <td>
+        <ul className="hlist">
+          {rows.map((r) => {
+            const h = sourceHealth(r, when);
+            const why = h === 'red' ? redReason(r, when) : h === 'amber' ? amberReason(r, when) : null;
+            const last = r.lastRuns[0];
+            return (
+              <li key={r.slug} className={`hrow ${h}`}>
+                <div className="hmain">
+                  <span className={`hdot ${h}`} aria-hidden="true" />
+                  <div>
                     <span className="src-name">{r.name}</span>
-                    <br />
-                    <span className="src-meta">{r.slug} · {r.family}{r.optOut ? ' · opted out' : ''}</span>
-                  </td>
-                  <td>{r.class}</td>
-                  <td>{r.ingestDisposition}</td>
-                  <td>
-                    <select
-                      className="field"
-                      aria-label={`Trust for ${r.name}`}
-                      value={r.trust}
-                      disabled={busy === r.slug}
-                      onChange={(ev) => void act(r.slug, () => adminSetSourceTrust(r.slug, ev.target.value as SourceTrust))}
-                    >
-                      {TRUSTS.map((t) => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      className="btn ghost"
-                      disabled={busy === r.slug}
-                      onClick={() => void act(r.slug, () => adminSetSourceEnabled(r.slug, !r.enabled))}
-                    >
-                      {r.enabled ? 'Disable' : 'Enable'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    <span className="src-meta">
+                      {' '}
+                      {LABEL[h]}
+                      {why ? `: ${why}` : ''}
+                    </span>
+                    <p className="src-meta">
+                      {r.slug} · every {r.cadence} · {r.ingestDisposition} · last read {ago(r.lastSuccessAt, now)}
+                      {last ? ` · last run ${last.status} (${last.found} found, ${last.new} new)` : ''}
+                    </p>
+                    <p className="src-meta">
+                      {r.openCards7d} open cards this week · {r.heldRunsPending} held {r.heldRunsPending === 1 ? 'run' : 'runs'}
+                      {r.termsRecheckAt ? ` · terms re-check ${formatDay(r.termsRecheckAt, 'America/Los_Angeles')}` : ''}
+                    </p>
+                  </div>
+                </div>
+                <div className="hctl">
+                  <select
+                    className="field"
+                    aria-label={`Trust for ${r.name}`}
+                    value={r.trust}
+                    disabled={busy === r.slug}
+                    onChange={(ev) => void act(r.slug, () => adminSetSourceTrust(r.slug, ev.target.value as SourceTrust))}
+                  >
+                    {TRUSTS.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    disabled={busy === r.slug}
+                    onClick={() => void act(r.slug, () => adminSetSourceEnabled(r.slug, !r.enabled))}
+                  >
+                    {r.enabled ? 'Disable' : 'Enable'}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </div>
   );

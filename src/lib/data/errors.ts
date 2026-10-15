@@ -3,7 +3,7 @@ import { DataError, type DataErrorCode } from './types';
 // `grant_*` codes never reach the client (they belong to the ingest path).
 const CODES: readonly string[] = [
   'not_signed_in', 'forbidden', 'not_found', 'invalid_input', 'exists', 'rate_limited',
-  'source_not_permitted', 'captcha_failed', 'auth_failed', 'network', 'unknown',
+  'source_not_permitted', 'captcha_failed', 'auth_failed', 'network', 'not_pending', 'stale', 'unknown',
 ] satisfies DataErrorCode[];
 
 function isAuthError(e: object): boolean {
@@ -40,6 +40,10 @@ export function userMessage(e: DataError): string {
       return 'That needs a fresh sign-in with your authenticator code.';
     case 'source_not_permitted':
       return 'That source has no current permission record, so it cannot be turned on.';
+    case 'not_pending':
+      return 'Someone else already decided that one. It has been removed from your list.';
+    case 'stale':
+      return 'A newer run replaced this one, so it can no longer be accepted. You can discard it.';
     case 'auth_failed':
       return "Those details didn't work. Check them and try again.";
     default:
