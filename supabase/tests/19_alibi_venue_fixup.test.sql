@@ -357,7 +357,7 @@ select pg_temp.eq($$(select count(*) from public.events where id in (select id f
   'AC-M1-82e E_U, E_N and the unqueued E_G keep no venue and no area');
 select pg_temp.eq($$(select e.area from public.events e join public.source_events se on se.cluster_id = e.id where se.external_key = 'i1')$$, 'incline_crystal_bay',
   'AC-M1-82e I''s new event has area incline_crystal_bay');
-select pg_temp.eq($$(select count(*) from public.events where status <> 'pending')$$, '0', 'AC-M1-82e every event stays pending (trust review)');
+select pg_temp.eq($$(select count(*) from public.events where status not in ('pending', 'published'))$$, '0', 'AC-M1-82e no event is hidden, rejected or unlisted by the fix-up (Alibi is trust auto now, so a passing event publishes)');
 select pg_temp.eq($$(select count(*) from public.events where merged_into is not null)$$, '0', 'AC-M1-82h no event is merged');
 select pg_temp.eq($$(select count(*) from public.review_cards where kind = 'possible_duplicate')$$, '0', 'AC-M1-82h the drain opened no possible_duplicate card');
 
