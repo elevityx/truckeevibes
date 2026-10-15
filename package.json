@@ -14,6 +14,7 @@
     "db:start": "sh supabase/start-local.sh",
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
+    "db:test:concurrency": "node --test scripts/db-concurrency.dbtest.mjs",
     "ingest": "tsx ingest/run.ts",
     "check:repo": "node scripts/secret-scan.mjs && node scripts/check-workflows.mjs && node scripts/check-fixtures.mjs && node scripts/check-no-html.mjs && node scripts/check-public-copy.mjs"
   },
@@ -24,6 +25,7 @@
     "@types/react-dom": "19.3.0",
     "eslint": "9.39.5",
     "eslint-config-next": "16.4.0",
+    "pg": "8.23.1",
     "tailwindcss": "4.3.3",
     "tsx": "4.21.0",
     "typescript": "6.0.3",
