@@ -63,3 +63,10 @@ enable_confirmations = false
 [auth.mfa.totp]
 enroll_enabled = true
 verify_enabled = true
+
+# Edge Functions arrive in M1; these two are called by schedulers and carry their own HMAC / secret checks.
+[functions.ingest]
+verify_jwt = false
+
+[functions.weekly-email]
+verify_jwt = false
