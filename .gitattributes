@@ -1,0 +1,2 @@
+# iCalendar fixtures keep CRLF line endings (RFC 5545); diff hygiene accepts them.
+ingest/fixtures/**/*.ics -text whitespace=cr-at-eol
