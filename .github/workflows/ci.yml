@@ -57,6 +57,16 @@ jobs:
         run: npm run db:start -- -x studio,imgproxy,logflare,vector,supabase_pooler,realtime,postgres-meta,inbucket
       - run: npm run db:reset
       - run: npm run db:test
+      # the concurrency harness talks to the running stack: hand it the URL the CLI reports (bare, quotes stripped)
+      - name: Export the local DB URL
+        run: supabase status -o env | grep '^DB_URL=' | tr -d '"' >> "$GITHUB_ENV"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: test -n "$DB_URL"
+      - run: npm run db:test:concurrency
 
   identity:
     runs-on: ubuntu-latest

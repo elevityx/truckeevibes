@@ -1,5 +1,5 @@
--- AC-M0-09. Exact ACL posture for M0 (updated by every later milestone's migration).
--- Failing-first: nothing exists until the M0 migrations land.
+-- AC-M0-09 / AC-M1-05. Exact ACL posture, updated for M1 (spec: "updated each milestone").
+-- M1 PR 1: the table set, the anon/authenticated allowlists and the service_role svc_* list now include the ingest objects.
 begin;
 create extension if not exists pgtap with schema extensions;
 select no_plan();
@@ -38,13 +38,18 @@ exception when others then
   return v_state || '|' || coalesce(v_msg, '') || '|' || coalesce(v_detail, '');
 end $$;
 
--- (0) the M0 table set is exactly this (so the checks below are not vacuous)
+-- (0) the M0 + M1 table set is exactly this (so the checks below are not vacuous)
 select is(
   array(select format('%s.%s', n.nspname, c.relname)
      from pg_class c join pg_namespace n on n.oid = c.relnamespace
     where n.nspname in ('public', 'private') and c.relkind in ('r', 'p') order by 1),
-  array['private.blocked_terms', 'public.admins', 'public.areas', 'public.categories', 'public.regions', 'public.sources'],
-  'M0 tables in public + private are exactly the expected six');
+  (select array_agg(x order by x) from unnest(array[
+     'private.blocked_terms', 'private.ingest_grants', 'private.ingest_nonces', 'private.notify_log',
+     'public.admins', 'public.areas', 'public.categories', 'public.event_categories', 'public.event_changes', 'public.events',
+     'public.geocode_usage', 'public.held_runs', 'public.owner_activity', 'public.regions', 'public.review_cards', 'public.series',
+     'public.source_event_versions', 'public.source_events', 'public.source_runs', 'public.sources', 'public.suppressions',
+     'public.venues']) x),
+  'M0 + M1 tables in public + private are exactly the expected set (22)');
 select has_extension('pg_trgm', 'pg_trgm extension is installed');
 select has_extension('pg_cron', 'pg_cron extension is installed');
 select has_extension('pg_net', 'pg_net extension is installed');
@@ -93,6 +98,9 @@ select is(
      cross join (values ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'), ('TRUNCATE'), ('REFERENCES'), ('TRIGGER')) p(priv)
     where n.nspname in ('public', 'private') and c.relkind in ('r', 'p') and has_table_privilege('service_role', c.oid, p.priv) order by 1),
   '{}'::text[], 'service_role has no table privilege');
+select is(split_part(pg_temp.dml_as('service_role', $$insert into public.source_events (source_id, external_key, facts, content_hash, title, normalized_title, starts_at, all_day, time_known)
+  values (gen_random_uuid(), 'acl-probe', '{}', 'x', 'ACL Probe', 'acl probe', now(), false, true)$$), '|', 1),
+  '42501', 'AC-M1-05 direct insert into public.source_events as service_role -> 42501');
 select is(split_part(pg_temp.dml_as('service_role', $$insert into public.sources (slug, name, homepage_url, allowed_hosts, family, class)
   values ('acl-probe', 'ACL Probe', 'https://example.test/', array['example.test'], 'ics', 'organizer')$$), '|', 1),
   '42501', 'direct insert into public.sources as service_role -> 42501');
@@ -108,11 +116,20 @@ create function pg_temp.fn_list(p_role text, p_schema text) returns text[] langu
    where n.nspname = p_schema and has_function_privilege(p_role, p.oid, 'EXECUTE')
      and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e') order by 1)
 $$;
-select is(pg_temp.fn_list('anon', 'public'), array['list_sources_public()'], 'anon EXECUTE is exactly list_sources_public()');
+select is(pg_temp.fn_list('anon', 'public'), array['list_events(integer)', 'list_sources_public()'], 'anon EXECUTE is exactly list_events(integer) + list_sources_public()');
 select is(pg_temp.fn_list('authenticated', 'public'),
-  array['admin_list_sources()', 'admin_set_source_enabled(text, boolean)', 'admin_set_source_trust(text, text)',
-        'admin_whoami()', 'list_sources_public()'],
-  'authenticated EXECUTE is list_sources_public + the four M0 admin RPCs');
+  (select array_agg(x order by x) from unnest(array[
+     'admin_add_suppression(text, text, text)', 'admin_card_open(uuid)', 'admin_decide_card(uuid, text, text, integer)', 'admin_list_sources()',
+     'admin_log_activity(text, integer)', 'admin_merge_events(uuid, uuid)', 'admin_queue(text, integer)', 'admin_set_event_status(uuid, text, text)',
+     'admin_set_source_enabled(text, boolean)', 'admin_set_source_trust(text, text)', 'admin_source_health()', 'admin_unlock_field(uuid, text)',
+     'admin_update_event(uuid, jsonb)', 'admin_whoami()', 'list_events(integer)', 'list_sources_public()']) x),
+  'authenticated EXECUTE is the two public reads + the M0 and M1 admin RPCs (exact)');
+select is(pg_temp.fn_list('service_role', 'public'),
+  (select array_agg(x order by x) from unnest(array[
+     'svc_cluster_and_publish(integer)', 'svc_ingest_batch(text, jsonb, jsonb)', 'svc_ingest_nonce(text)', 'svc_issue_run_grants()',
+     'svc_set_venue_geocode(uuid, double precision, double precision, text)', 'svc_weekly_report()']) x),
+  'AC-M1-05 service_role EXECUTE in public is exactly the six svc_* routines');
+select is(pg_temp.fn_list('service_role', 'private'), '{}'::text[], 'service_role executes nothing in private');
 select is(pg_temp.fn_list('anon', 'private'), '{}'::text[], 'anon executes nothing in private');
 select is(pg_temp.fn_list('authenticated', 'private'), '{}'::text[], 'authenticated executes nothing in private');
 
@@ -124,8 +141,8 @@ select is(
   '{}'::text[], 'every SECURITY DEFINER function is owned by postgres');
 select ok(
   (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname in ('public', 'private') and p.prosecdef) >= 5,
-  'M0 defines its security definer functions (non-vacuous owner check)');
+    where n.nspname in ('public', 'private') and p.prosecdef) >= 20,
+  'M0 + M1 define their security definer functions (non-vacuous owner check)');
 select is(
   array(select format('%s.%s', n.nspname, p.proname)
      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
