@@ -21,9 +21,19 @@ export function startClock(
   };
 }
 
-/** A "now" that advances about every minute and when the tab returns, so Today / This week never freeze at page load. */
-export function useClock(intervalMs: number = CLOCK_TICK_MS): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => startClock(setNow, intervalMs), [intervalMs]);
+/**
+ * A "now" that advances about every minute and when the tab returns, so Today / This week never freeze at page load.
+ * With `initialNow` the first render uses it (server render and hydration agree); the real clock takes over right after mount.
+ */
+export function useClock(intervalMs: number = CLOCK_TICK_MS, initialNow?: number): number {
+  const [now, setNow] = useState(() => initialNow ?? Date.now());
+  useEffect(() => {
+    const first = initialNow !== undefined ? setTimeout(() => setNow(Date.now()), 0) : null;
+    const stop = startClock(setNow, intervalMs);
+    return () => {
+      if (first !== null) clearTimeout(first);
+      stop();
+    };
+  }, [intervalMs, initialNow]);
   return now;
 }

@@ -1,6 +1,8 @@
 import ListApp from '@/components/list/ListApp';
+import { readBuildSnapshot } from '@/lib/data/snapshotFile';
 
-// The list is a client app: first paint from the build snapshot, then the live read.
+// A server component: it runs once, at build, so the snapshot's rows are in the exported HTML (first paint).
+// ListApp then reconciles with the live read.
 export default function Home() {
-  return <ListApp />;
+  return <ListApp initialSnapshot={readBuildSnapshot()} />;
 }

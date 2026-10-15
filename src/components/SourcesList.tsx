@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { listSourcesPublic, toDataError, userMessage, type PublicSource, type PublicSourceStatus } from '@/lib/data';
+import { safeWebsite } from '@/components/list/links';
 import { supabaseConfigured } from '@/config/public-env';
 
 const LABEL: Record<PublicSourceStatus, string> = {
@@ -9,6 +10,11 @@ const LABEL: Record<PublicSourceStatus, string> = {
   link_only: 'Link only',
   paused: 'Not yet included',
 };
+
+/** The link for one source: only a plain https homepage becomes an href; otherwise the name shows unlinked. */
+export function sourceLink(s: Pick<PublicSource, 'name' | 'homepageUrl'>): { name: string; href: string | null } {
+  return { name: s.name, href: safeWebsite(s.homepageUrl) };
+}
 
 /** Text-only rendering of list_sources_public(). Loads in an effect because the build prerenders with empty env. */
 export default function SourcesList() {
@@ -33,12 +39,15 @@ export default function SourcesList() {
   if (rows === null) return <p className="fine">Loading…</p>;
   return (
     <ul className="src-list">
-      {rows.map((s) => (
-        <li key={s.homepageUrl + s.name}>
-          <a href={s.homepageUrl} rel="noopener noreferrer">{s.name}</a>
-          <span className="fine">{LABEL[s.status]}</span>
-        </li>
-      ))}
+      {rows.map((s) => {
+        const { name, href } = sourceLink(s);
+        return (
+          <li key={s.homepageUrl + s.name}>
+            {href ? <a href={href} rel="noopener noreferrer">{name}</a> : <span>{name}</span>}
+            <span className="fine">{LABEL[s.status]}</span>
+          </li>
+        );
+      })}
     </ul>
   );
 }

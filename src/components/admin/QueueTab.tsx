@@ -5,6 +5,7 @@ import { safeWebsite } from '@/components/list/links';
 import {
   adminCardOpen,
   adminDecideCard,
+  adminOwnerMinutes7d,
   adminQueue,
   toDataError,
   userMessage,
@@ -15,6 +16,7 @@ import {
 import { formatRange } from '@/lib/time/pacific';
 import { ago, minutes, nowMs } from './format';
 import HeldRunCard from './HeldRunCard';
+import { createRequestGate, gated } from './requestGate';
 import { canDecide, initialQueueState, openCount, queueReducer, reviewSeconds } from './queueState';
 
 const TZ = 'America/Los_Angeles';
@@ -149,6 +151,9 @@ export default function QueueTab({ onForbidden, onCount }: { onForbidden(): void
   const [err, setErr] = useState('');
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const [now, setNow] = useState(() => nowMs());
+  const [ownerMinutes, setOwnerMinutes] = useState<number | null>(null);
+  const queueGate = useRef(createRequestGate());
+  const minutesGate = useRef(createRequestGate());
   const stateRef = useRef(state);
   useEffect(() => {
     stateRef.current = state;
@@ -156,8 +161,8 @@ export default function QueueTab({ onForbidden, onCount }: { onForbidden(): void
 
   const load = useCallback(async () => {
     try {
-      dispatch({ type: 'loaded', cards: await adminQueue(null, 100) });
-      setErr('');
+      const r = await gated(queueGate.current, () => adminQueue(null, 100), (cards) => dispatch({ type: 'loaded', cards }));
+      if (r === 'applied') setErr('');
     } catch (e) {
       const d = toDataError(e);
       if (d.code === 'forbidden') return onForbidden();
@@ -168,10 +173,23 @@ export default function QueueTab({ onForbidden, onCount }: { onForbidden(): void
     }
   }, [onForbidden]);
 
+  // Weekly owner time from the database (the same figure as the weekly report). A failure leaves the dash and does not block the queue.
+  const loadMinutes = useCallback(async () => {
+    try {
+      await gated(minutesGate.current, () => adminOwnerMinutes7d(), (m) => setOwnerMinutes(m));
+    } catch (e) {
+      if (toDataError(e).code === 'forbidden') onForbidden();
+      else setOwnerMinutes(null);
+    }
+  }, [onForbidden]);
+
   useEffect(() => {
-    const t = setTimeout(() => void load(), 0);
+    const t = setTimeout(() => {
+      void load();
+      void loadMinutes();
+    }, 0);
     return () => clearTimeout(t);
-  }, [load]);
+  }, [load, loadMinutes]);
 
   useEffect(() => onCount(openCount(state)), [state, onCount]);
 
@@ -190,6 +208,8 @@ export default function QueueTab({ onForbidden, onCount }: { onForbidden(): void
     const s = stateRef.current;
     if (!canDecide(s, id)) return;
     const secs = reviewSeconds(s.openedAt[id], nowMs());
+    // A refresh that began before this decision must not re-add the card: the local removal is authoritative.
+    queueGate.current.invalidate();
     dispatch({ type: 'decide_start', id });
     try {
       await adminDecideCard(id, decision, reason || null, secs);
@@ -200,6 +220,8 @@ export default function QueueTab({ onForbidden, onCount }: { onForbidden(): void
       const d = toDataError(e);
       if (d.code === 'forbidden') onForbidden();
       dispatch({ type: 'decide_failed', id, code: d.code });
+    } finally {
+      void loadMinutes();
     }
   };
 
@@ -210,9 +232,19 @@ export default function QueueTab({ onForbidden, onCount }: { onForbidden(): void
         <h3>
           Review queue <span className="pill">{n} open</span>
         </h3>
-        <span className="src-meta">Reviewed this session: {minutes(sessionSeconds)} min</span>
+        <span>Owner time, last 7 days: {ownerMinutes === null ? '—' : `${minutes(ownerMinutes * 60)} min`}</span>
+        <span className="src-meta">This session: {minutes(sessionSeconds)} min</span>
         <span className="sp" />
-        <button type="button" className="btn ghost" disabled={loading} onClick={() => { setLoading(true); void load(); }}>
+        <button
+          type="button"
+          className="btn ghost"
+          onClick={() => {
+            setLoading(true);
+            void load();
+            void loadMinutes();
+          }}
+          disabled={loading || Object.keys(state.busy).length > 0}
+        >
           Refresh
         </button>
       </div>

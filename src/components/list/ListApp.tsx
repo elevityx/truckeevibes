@@ -8,26 +8,24 @@ import FilterSheet from '@/components/filters/FilterSheet';
 import WhenRow from '@/components/filters/WhenRow';
 import { supabaseConfigured } from '@/config/public-env';
 import { listEventsWithMeta } from '@/lib/data/public';
-import type { VibeEvent } from '@/lib/data/types';
 import { applyFilters, REGION_TZ, withSpan } from '@/lib/filters/predicates';
 import { EMPTY_FILTERS, activeFilterCount, filtersUrl, parseFilters, type FilterState } from '@/lib/filters/state';
 import { formatDay, formatTimes, localDate } from '@/lib/time/pacific';
-import { useClock } from '@/lib/time/useClock';
+import { CLOCK_TICK_MS, useClock } from '@/lib/time/useClock';
 import EventSheet from './EventSheet';
 import EventsList from './EventsList';
-import { fetchSnapshot } from './snapshot';
+import { initialLoad, liveFailedLoad, liveLoaded, showLoading } from './listLoad';
+import type { Snapshot } from './snapshot';
 import './list.css';
 
 const TZ = REGION_TZ;
 
-type Load =
-  | { phase: 'loading' }
-  | { phase: 'ready'; events: VibeEvent[]; source: 'snapshot' | 'live'; builtAt: string | null; liveFailed: boolean; truncated: boolean };
-
 /** The public list: first paint from the build snapshot, then the live read. Filters and the open event live in the URL. */
-export default function ListApp() {
-  const now = useClock();
-  const [load, setLoad] = useState<Load>({ phase: 'loading' });
+export default function ListApp({ initialSnapshot }: { initialSnapshot: Snapshot }) {
+  // The first render uses the build time as "now" so server and hydration agree; the real clock takes over right after mount.
+  const builtMs = initialSnapshot.builtAt ? Date.parse(initialSnapshot.builtAt) : 0;
+  const now = useClock(CLOCK_TICK_MS, builtMs);
+  const [load, setLoad] = useState(() => initialLoad(initialSnapshot, supabaseConfigured()));
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [eventId, setEventId] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false);
@@ -52,29 +50,15 @@ export default function ListApp() {
     };
   }, []);
 
+  // The snapshot is already state; the live read only reconciles it.
   useEffect(() => {
-    const ctl = new AbortController();
+    if (!supabaseConfigured()) return;
     let alive = true;
-    (async () => {
-      const snap = await fetchSnapshot(ctl.signal);
-      if (!alive) return;
-      const configured = supabaseConfigured();
-      setLoad({
-        phase: 'ready', events: snap?.events ?? [], source: 'snapshot', builtAt: snap?.builtAt ?? null,
-        // Without a database there is no live read to wait for; the snapshot is all there is.
-        liveFailed: false, truncated: false,
-      });
-      if (!configured) return;
-      try {
-        const r = await listEventsWithMeta();
-        if (alive) setLoad({ phase: 'ready', events: r.events, source: 'live', builtAt: snap?.builtAt ?? null, liveFailed: false, truncated: r.truncated });
-      } catch {
-        if (alive) setLoad((cur) => (cur.phase === 'ready' ? { ...cur, liveFailed: true } : cur));
-      }
-    })();
+    listEventsWithMeta()
+      .then((r) => alive && setLoad((c) => liveLoaded(c, r)))
+      .catch(() => alive && setLoad(liveFailedLoad));
     return () => {
       alive = false;
-      ctl.abort();
     };
   }, []);
 
@@ -102,7 +86,7 @@ export default function ListApp() {
     [filters, writeUrl],
   );
 
-  const events = useMemo(() => (load.phase === 'ready' ? load.events.map((e) => withSpan(e, TZ)) : []), [load]);
+  const events = useMemo(() => load.events.map((e) => withSpan(e, TZ)), [load.events]);
   const shown = useMemo(() => applyFilters(events, filters, now, TZ), [events, filters, now]);
   const selected = useMemo(() => (eventId ? events.find((e) => e.id === eventId) ?? null : null), [events, eventId]);
   const today = localDate(now, TZ);
@@ -115,7 +99,7 @@ export default function ListApp() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const asOf = load.phase === 'ready' && load.builtAt ? `${formatDay(load.builtAt, TZ)} · ${formatTimes(load.builtAt, null, TZ)}` : null;
+  const asOf = load.builtAt ? `${formatDay(load.builtAt, TZ)} · ${formatTimes(load.builtAt, null, TZ)}` : null;
 
   return (
     <div className="lp">
@@ -146,7 +130,7 @@ export default function ListApp() {
             <h1 className="disp">Events in Truckee and North Lake Tahoe</h1>
             <p>
               Pacific time
-              {load.phase === 'ready' && ` · ${shown.length} ${shown.length === 1 ? 'event' : 'events'}`}
+              {!showLoading(load) && ` · ${shown.length} ${shown.length === 1 ? 'event' : 'events'}`}
             </p>
           </div>
           <div className="lp-tools">
@@ -158,16 +142,16 @@ export default function ListApp() {
             )}
           </div>
 
-          {load.phase === 'ready' && load.liveFailed && (
+          {load.liveFailed && (
             <p className="notice" role="status">
               Showing events as of {asOf ?? 'the last update'}. We could not reach the server, so this list may be out of date.
             </p>
           )}
-          {load.phase === 'ready' && load.truncated && !load.liveFailed && (
+          {load.truncated && !load.liveFailed && (
             <p className="notice" role="status">Showing the next 60 days of events.</p>
           )}
 
-          {load.phase === 'loading' ? (
+          {showLoading(load) ? (
             <p className="fine" role="status">Loading events…</p>
           ) : (
             <EventsList events={shown} tz={TZ} now={now} filtered={filtered} onOpen={open} onClear={() => setF(EMPTY_FILTERS)} />
