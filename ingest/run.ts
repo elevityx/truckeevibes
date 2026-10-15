@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { adapters as defaultAdapters } from './adapters/index';
 import { callIngest, IngestHttpError } from './core/hmacClient';
 import { createPoliteFetch, FetchError } from './core/politeFetch';
+import { createSpacer } from './core/rateLimit';
 import { validateSourceEvent } from './core/normalize';
 import type { Adapter, AdapterResult, GrantOut, RunMeta, RunStatus, SourceEvent } from './types';
 
@@ -50,7 +51,8 @@ export async function main(deps: RunDeps): Promise<number> {
   log(`ingest: ${grants.length} source(s) due`);
 
   let fatal = false;
-  const starts = new Map<string, number>(); // shared per-host spacing across sources
+  const nowMs = () => nowDate().getTime();
+  const spacer = createSpacer({ now: nowMs, sleep }); // one per run, shared across sources
 
   async function runOne(g: GrantOut): Promise<void> {
     const slug = g.source.slug;
@@ -101,7 +103,7 @@ export async function main(deps: RunDeps): Promise<number> {
       ({ status, items: [], result, errorCode, errorDetail, invalid: 0 });
     const adapter = registry[g.source.family];
     if (!adapter) return empty('skipped', 'no_adapter');
-    const pf = createPoliteFetch(g.source, { fetch: doFetch, now: () => nowDate().getTime(), sleep, starts });
+    const pf = createPoliteFetch(g.source, { fetch: doFetch, now: nowMs, sleep, spacer });
     let result: AdapterResult;
     try {
       result = await adapter.fetch({ source: g.source, fetch: pf, now: nowDate() });

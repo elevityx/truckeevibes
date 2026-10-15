@@ -39,7 +39,7 @@ export interface PoliteDeps {
   sleep: (ms: number) => Promise<void>;
   timeoutSignal?: (ms: number) => AbortSignal;
   /** Share across sources in one run so two sources on one host still respect the spacing. */
-  starts?: Map<string, number>;
+  spacer?: Spacer;
 }
 
 export interface PoliteSource {
@@ -62,22 +62,22 @@ export function computeAiBotsBlocked(robotsText: string): boolean {
   return AI_BOTS.some((bot) => named.has(bot.toLowerCase()) && parser.isDisallowed('https://robots.invalid/', bot) === true);
 }
 
-/** Crawl-delay seconds: our group, else `*` (both via robots-parser), else a line before the first User-agent line, else 0. */
+/** Crawl-delay seconds: the LARGEST of our group, the `*` group and any line before the first User-agent line (A6-1). */
 function crawlDelayOf(text: string, parser: ReturnType<typeof robotsParser>): number {
-  const own = parser.getCrawlDelay(ROBOTS_TOKEN);
-  if (typeof own === 'number' && Number.isFinite(own) && own >= 0) return own;
+  const v = (x: unknown) => (typeof x === 'number' && !Number.isNaN(x) && x >= 0 ? x : 0);
+  let pre = 0;
   for (const line of text.split(/\r?\n/)) {
     if (/^\s*user-agent\s*:/i.test(line)) break;
     const m = /^\s*crawl-delay\s*:\s*([0-9]+(?:\.[0-9]+)?)/i.exec(line);
-    if (m) return Number(m[1]);
+    if (m) pre = Math.max(pre, Number(m[1]));
   }
-  return 0;
+  return Math.max(v(parser.getCrawlDelay(ROBOTS_TOKEN)), v(parser.getCrawlDelay('*')), pre);
 }
 
 interface RobotsEntry { blocked: boolean; parser?: ReturnType<typeof robotsParser>; delay: number; info?: RobotsInfo }
 
 export function createPoliteFetch(source: PoliteSource, deps: PoliteDeps): PoliteFetch {
-  const spacer: Spacer = createSpacer({ now: deps.now, sleep: deps.sleep, starts: deps.starts });
+  const spacer: Spacer = deps.spacer ?? createSpacer({ now: deps.now, sleep: deps.sleep });
   const robots = new Map<string, RobotsEntry>();
   let pages = 0;
 

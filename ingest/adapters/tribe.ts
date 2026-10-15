@@ -23,10 +23,11 @@ function filterOf(config: Record<string, unknown>): TribeFilter | undefined {
   return f && typeof f === 'object' && !Array.isArray(f) ? (f as TribeFilter) : undefined;
 }
 
-function toEvent(e: TribeEvent, tz: string): { item: SourceEvent; city: string; slugs: string[]; startMs: number; endMs: number } | null {
+function toEvent(e: TribeEvent, tz: string): { item: SourceEvent; city: string; slugs: string[]; cats: Set<string>; startMs: number; endMs: number } | null {
   if (e.id === undefined || e.id === null || !e.start_date) return null;
   const venue = e.venue && !Array.isArray(e.venue) && typeof e.venue === 'object' ? (e.venue as TribeVenue) : undefined;
   const slugs = (e.categories ?? []).map((c) => String(c.slug ?? '')).filter(Boolean);
+  const cats = new Set((e.categories ?? []).map((c) => String(c?.slug ?? '').trim().toLowerCase()).filter(Boolean));
   const allDay = e.all_day === true;
   const localStart = e.start_date.slice(0, 10);
   let startsAt = utcIso(e.utc_start_date);
@@ -47,7 +48,7 @@ function toEvent(e: TribeEvent, tz: string): { item: SourceEvent; city: string; 
   }, description);
   const startMs = Date.parse(startsAt);
   const endMs = endsAt ? Date.parse(endsAt) : startMs;
-  return { item, city: (venue?.city ?? '').trim().toLowerCase(), slugs, startMs, endMs };
+  return { item, city: (venue?.city ?? '').trim().toLowerCase(), slugs, cats, startMs, endMs };
 }
 
 export const adapter: Adapter = {
@@ -83,14 +84,14 @@ export const adapter: Adapter = {
     let filtered = 0;
     const kept: SourceEvent[] = [];
     const towns = filter?.towns ? new Set(filter.towns.map((t) => String(t).trim().toLowerCase())) : undefined;
-    const exclude = filter?.excludeCategorySlugs ? new Set(filter.excludeCategorySlugs) : undefined;
+    const exclude = filter?.excludeCategorySlugs ? new Set(filter.excludeCategorySlugs.map((x) => String(x).trim().toLowerCase()).filter(Boolean)) : undefined;
     for (const e of events) {
       const m = toEvent(e, tz);
       if (!m) continue;
       if (filter) {
         if (towns && (m.city === '' || !towns.has(m.city))) { filtered++; continue; }
         if (typeof filter.maxDurationDays === 'number' && m.endMs - m.startMs > filter.maxDurationDays * 86_400_000) { filtered++; continue; }
-        if (exclude && m.slugs.some((s) => exclude.has(s))) { filtered++; continue; }
+        if (exclude && exclude.size > 0 && [...m.cats].some((c) => exclude.has(c))) { filtered++; continue; }
       }
       kept.push(m.item);
     }

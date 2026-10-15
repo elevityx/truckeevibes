@@ -29,18 +29,15 @@ export const adapter: Adapter = {
 
     const items: SourceEvent[] = [];
     const hashes: string[] = [];
-    let failed = 0;
-    let lastStatus = 0;
     const chosen = ids.slice(0, Math.max(0, ctx.source.page_cap - 1));
     for (const id of chosen) {
       const details = `${origin}/events/details/${id}`;
       const res = await ctx.fetch(`${origin}/events/addtocalendar/${id}?format=ICal`, { kind: 'feed' });
-      if (res.status !== 200) { failed++; lastStatus = res.status; continue; }
+      if (res.status !== 200) return { items: [], status: 'http_error', httpStatus: res.status, errorCode: 'detail_http' };
       hashes.push(sha256Hex(res.body));
       const parsed = parseIcs(decodeUtf8(res.body), { now: ctx.now, tz: tzOf(ctx.source.config), eventUrl: details });
       for (const i of parsed.items) items.push({ ...i, url: details });
     }
-    if (chosen.length > 0 && failed === chosen.length) return { items: [], status: 'http_error', httpStatus: lastStatus };
     return { items: dedupe(items), status: 'ok', httpStatus: 200, contentHash: sha256Hex(hashes.join('\n')) };
   },
 };

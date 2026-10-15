@@ -356,7 +356,13 @@ describe('ChamberMaster partial fetch is never submitted as ok (AC-M1-74 e, A6-4
   it('detail 3 times out through the runner -> http_error/timeout with items: []', async () => {
     const h = harness({
       grants: [chamberGrant()], adapters: { ics_chambermaster: chamberAdapter as never },
-      other: (u) => { if (u.pathname.endsWith('-2003') && u.pathname.includes('addtocalendar')) throw Object.assign(new Error('t'), { name: 'TimeoutError' }); return other(u); },
+      other: (u) => {
+        const m = /\/events\/addtocalendar\/.*-(\d+)$/.exec(u.pathname);
+        if (m && m[1] === '2003') throw Object.assign(new Error('t'), { name: 'TimeoutError' });
+        // details 1 and 2 succeed (AC-M1-74 c): the shared `other` answers 503 for 2002, which would end the run first
+        if (m && m[1] === '2002') return text(fixture('chambermaster/event_template.ics').replaceAll('{{ID}}', m[1]));
+        return other(u);
+      },
     });
     expect(await h.run()).toBe(0);
     expect(h.submits()[0].body.run).toMatchObject({ status: 'http_error', error_code: 'timeout' });
