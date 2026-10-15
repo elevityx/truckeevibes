@@ -478,3 +478,61 @@ describe('AC-M1-85 (e) clean_source_item is the original plus one guard line', (
     }
   });
 });
+
+// A9-5 / A9.1-1 step 5 / AC-M1-90 (b, c): chamber_fixes adds no grant, creates exactly four private functions, and its
+// resolve_venue is the ingest_rpcs original plus one marked block.
+describe('chamber_fixes adds no grant', () => {
+  const G = (n) => canonicalGrants(read(n));
+  const ts = (x) => x.slice(0, 14);
+  it('exists, sorts after enable_chamber, and its allowlist is the 23 of enable_chamber', () => {
+    const f = fileFor('chamber_fixes');
+    expect(f, 'no migration named *_chamber_fixes.sql').toBeTruthy();
+    expect(ts(f) > ts(fileFor('enable_chamber'))).toBe(true);
+    const cur = G('chamber_fixes');
+    expect(cur.size).toBe(23);
+    expect([...cur].sort()).toEqual([...G('enable_chamber')].sort());
+  });
+  it('creates no public function; exactly 4 function headers, each pinning search_path', () => {
+    const sql = read('chamber_fixes');
+    expect(createdFns(sql).size).toBe(0);
+    const headers = sql.match(/create\s+(?:or\s+replace\s+)?function[\s\S]*?\bas\s+\$/gi) ?? [];
+    expect(headers.length).toBe(4);
+    for (const h of headers) expect(h, h.slice(0, 80)).toMatch(/set\s+search_path\s*=\s*''/i);
+    for (const f of ['is_non_place', 'resolve_venue', 'take_geocode_budget', 'scrub_held_non_place']) {
+      expect(sql, f).toMatch(new RegExp(`create\\s+(?:or\\s+replace\\s+)?function\\s+private\\.${f}\\s*\\(`, 'i'));
+    }
+  });
+  describe('(c) resolve_venue is the ingest_rpcs original plus the A9-3 block', () => {
+    const body = (sql) => {
+      const m = /create\s+(?:or\s+replace\s+)?function\s+private\.resolve_venue\b/i.exec(sql);
+      if (!m) throw new Error('no resolve_venue definition');
+      const end = sql.indexOf('end $$;', m.index);
+      if (end < 0) throw new Error('resolve_venue has no end $$;');
+      return sql.slice(m.index, end + 'end $$;'.length);
+    };
+    const lines = (t) => t.split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    const original = () => lines(body(read('ingest_rpcs')));
+    const fixed = () => lines(body(read('chamber_fixes')));
+    const norm1 = (ls) => ls.join('\n').replace(/^create (or replace )?function/i, 'create function');
+    it('with the block removed it equals the original', () => {
+      const f = fixed();
+      const b = f.findIndex((l) => /-- A9-3 begin/.test(l));
+      const e = f.findIndex((l) => /-- A9-3 end/.test(l));
+      expect(b).toBeGreaterThan(-1);
+      expect(e).toBeGreaterThan(b);
+      expect(norm1([...f.slice(0, b), ...f.slice(e + 1)])).toEqual(norm1(original()));
+    });
+    it('the block sits after the v_in_box update and directly before return v_id;', () => {
+      const f = fixed();
+      const b = f.findIndex((l) => /-- A9-3 begin/.test(l));
+      const e = f.findIndex((l) => /-- A9-3 end/.test(l));
+      expect(f[b - 1]).toBe('end if;');
+      expect(f[b - 2]).toMatch(/where id = v_id and lat is null and not outside_region;/);
+      expect(f[e + 1]).toBe('return v_id;');
+    });
+  });
+  it('is the last migration but enable_vlt (which sorts after it)', () => {
+    const sqls = files.filter((x) => x.endsWith('.sql'));
+    expect(sqls.indexOf(fileFor('chamber_fixes'))).toBe(sqls.indexOf(fileFor('enable_chamber')) + 1);
+  });
+});

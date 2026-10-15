@@ -198,3 +198,46 @@ describe('AC-M1-81 non-place LOCATION', () => {
     expect(locationLink('not a url', HOSTS)).toBeUndefined();
   });
 });
+
+// AC-M1-88 (A9-3, TS): the sentence-like non-place rule.
+export const A9_PARITY: Array<[string, boolean]> = [
+  ['Find participating spots on Visit Truckee-Tahoe Taste of Truckee.', true],
+  ['Night 1: Oct 16 at Alpenglow Sports (Tahoe City) Night 2: Oct 17 at Tahoe Mountain Sports', true],
+  ['See website for locations', true],
+  ['Join us at the Truckee Hotel', true],
+  ['Doors 7:00 pm, Example Hall', true],
+  ['Meet at the trailhead parking lot and carpool up to the lake together', true],
+  ['https://x.example.test', true],
+  ['2026', true],
+  ['Truckee Community Recreation Center', false],
+  ['Pioneer Park', false],
+  ["Gallery 5830'", false],
+  ['Cottonwood Restaurant & Bar 10142 Rue Hilltop', false],
+  ['Town Corp Yard (located next to the Humane Society)', false],
+  ['Truckee Community Recreation Center, 8924 Donner Pass Rd, Truckee, CA 96161', false],
+  ['Check Point Cafe', false],
+  ['Seeds Bakery & Cafe Downtown Truckee', false],
+  ['Alibi Ale Works - Truckee Public House', false],
+  ['Café 1', false],
+  ['Example Hall, Suite 2: Upstairs', false],
+];
+describe('AC-M1-88 sentence-like LOCATION', () => {
+  it('(a) isNonPlaceLocation matches the 19-row parity table', () => {
+    expect(A9_PARITY).toHaveLength(19);
+    for (const [t, want] of A9_PARITY) expect(isNonPlaceLocation(t), t).toBe(want);
+  });
+  it('(b) sentence LOCATIONs keep the item with no venue or address; the control is a venue', () => {
+    const eventUrl = 'https://chamber.example.test/events/details/x-1';
+    const { items, dropped } = parseIcs(fixture('ics/location_sentence.ics'), { now: NOW, eventUrl });
+    const by = (u: string) => items.find((i) => i.externalKey.startsWith(`${u}@example.test#`))!;
+    for (const u of ['s-1', 's-2']) {
+      const i = by(u);
+      expect(i, u).toBeTruthy();
+      expect(i.venueName).toBeUndefined();
+      expect(i.address).toBeUndefined();
+      expect(i.url).toBe(eventUrl);
+    }
+    expect(by('s-3').venueName).toBe('Example Community Recreation Center');
+    expect(dropped).toEqual({});
+  });
+});
