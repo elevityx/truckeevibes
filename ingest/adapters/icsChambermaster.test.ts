@@ -80,7 +80,7 @@ describe('icsChambermaster', () => {
     const net = fakePolite((u) => {
       if (u.pathname === '/events') return { body: fixture('chambermaster/events_list.html') };
       if (u.pathname.endsWith('-2003.ics')) throw new FetchError('timeout');
-      return { body: fixture('chambermaster/event_template.ics').replaceAll('{{ID}}', /-(\d+)$/.exec(u.pathname)![1]) };
+      return { body: fixture('chambermaster/event_template.ics').replaceAll('{{ID}}', /-(\d+)\.ics$/.exec(u.pathname)![1]) };
     });
     await expect(adapter.fetch(ctx(net))).rejects.toMatchObject({ code: 'timeout' });
   });

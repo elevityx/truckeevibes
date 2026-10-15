@@ -29,10 +29,17 @@ function instantOf(t: ICAL.Time, tzidParam: string | undefined, defaultTz: strin
   return { ms: Date.parse(out), tz: name };
 }
 
-/** True when the trimmed LOCATION is not a place: an http(s) URL (case-insensitive scheme) or text with no letter. */
+const ACTION = /^(find|see|check|click|register|join|rsvp|contact|call)\b/i;
+
+/** True when the trimmed LOCATION is not a place: an http(s) URL, text with no letter (A8-1), or sentence-like text (A9-3). */
 export function isNonPlaceLocation(loc: string): boolean {
   const t = loc.trim();
-  return /^https?:\/\//i.test(t) || !/\p{L}/u.test(t);
+  if (/^https?:\/\//i.test(t) || !/\p{L}/u.test(t)) return true;
+  const head = t.split(',')[0].trim();                                          // the name part, as facts() splits it
+  const words = head.replace(/\([^)]*\)/g, ' ').split(/\s+/).filter(Boolean);   // parenthetical notes don't count
+  if (ACTION.test(head) && words.length >= 4) return true;                      // an instruction: "Find participating spots on ..."
+  if (/[0-9]\s*:/.test(head)) return true;                                      // a schedule: "Night 1: Oct 16 at ...", "Doors 7:00"
+  return words.length >= 10;                                                    // a sentence, not a name
 }
 
 /** The LOCATION as a link back, or undefined: https only, no userinfo, no port, host (lower-case) in allowedHosts (lower-cased, exact match). */

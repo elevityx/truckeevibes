@@ -335,7 +335,7 @@ describe('ChamberMaster partial fetch is never submitted as ok (AC-M1-74 e, A6-4
   const other = (u: URL) => {
     if (u.pathname === '/robots.txt') return text('nf', 404);
     if (u.pathname === '/events') return text(fixture('chambermaster/events_list.html'));
-    const m = /\/events\/addtocalendar\/(.*-(\d+))$/.exec(u.pathname);
+    const m = /\/events\/ical\/(.*-(\d+))\.ics$/.exec(u.pathname);
     if (m && m[1] === 'sample-art-walk-2002') return text('busy', 503);
     if (m) return text(fixture('chambermaster/event_template.ics').replaceAll('{{ID}}', m[2]));
     return text('', 404);
@@ -357,7 +357,7 @@ describe('ChamberMaster partial fetch is never submitted as ok (AC-M1-74 e, A6-4
     const h = harness({
       grants: [chamberGrant()], adapters: { ics_chambermaster: chamberAdapter as never },
       other: (u) => {
-        const m = /\/events\/addtocalendar\/.*-(\d+)$/.exec(u.pathname);
+        const m = /\/events\/ical\/.*-(\d+)\.ics$/.exec(u.pathname);
         if (m && m[1] === '2003') throw Object.assign(new Error('t'), { name: 'TimeoutError' });
         // details 1 and 2 succeed (AC-M1-74 c): the shared `other` answers 503 for 2002, which would end the run first
         if (m && m[1] === '2002') return text(fixture('chambermaster/event_template.ics').replaceAll('{{ID}}', m[1]));
