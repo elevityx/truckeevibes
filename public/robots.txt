@@ -1,0 +1,4 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /feed/
+Sitemap: https://truckeevibes.com/sitemap.xml
