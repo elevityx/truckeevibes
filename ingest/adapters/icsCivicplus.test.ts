@@ -26,3 +26,8 @@ describe('icsCivicplus', () => {
     expect(r).toMatchObject({ status: 'ok', items: [] });
   });
 });
+
+// A8-1: parser version bumped so source_event_versions shows which parser stored a row.
+describe('icsCivicplus parser version', () => {
+  it('is ics_civicplus.2', () => { expect(adapter.version).toBe('ics_civicplus.2'); });
+});

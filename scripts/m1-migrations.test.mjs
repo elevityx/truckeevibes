@@ -315,3 +315,73 @@ describe('owner_minutes adds exactly admin_owner_minutes_7d', () => {
     expect(sql).toMatch(/set\s+search_path\s*=\s*''/i);
   });
 });
+
+// A8-2 step 6 / AC-M1-83 (e): alibi_venue_fixup adds no grant. A8.1-3 step 2 / AC-M1-85 (e): its clean_source_item is the
+// ingest_rpcs original plus exactly one guard line.
+describe('alibi_venue_fixup adds no grant', () => {
+  const G = (n) => canonicalGrants(read(n));
+  const ts = (x) => x.slice(0, 14);
+  it('exists and sorts after owner_minutes', () => {
+    const f = fileFor('alibi_venue_fixup');
+    expect(f, 'no migration named *_alibi_venue_fixup.sql').toBeTruthy();
+    expect(ts(f) > ts(fileFor('owner_minutes'))).toBe(true);
+  });
+  it('ends with the canonical block; its allowlist is owner_minutes\'s (23 grants)', () => {
+    expect(() => G('alibi_venue_fixup')).not.toThrow();
+    const cur = G('alibi_venue_fixup');
+    expect(cur.size).toBe(23);
+    expect([...cur].sort()).toEqual([...G('owner_minutes')].sort());
+    expect(cumulativeProblems(G('owner_minutes'), cur, createdFns(read('alibi_venue_fixup')))).toEqual([]);
+  });
+  it('creates no public function, and every function pins search_path', () => {
+    const sql = read('alibi_venue_fixup');
+    expect(createdFns(sql).size).toBe(0);
+    const headers = sql.match(/create\s+(?:or\s+replace\s+)?function[\s\S]*?\bas\s+\$/gi) ?? [];
+    expect(headers.length).toBeGreaterThanOrEqual(6);
+    for (const h of headers) expect(h, h.slice(0, 80)).toMatch(/set\s+search_path\s*=\s*''/i);
+  });
+  it('creates the five private functions of A8-2 / A8.1', () => {
+    const sql = read('alibi_venue_fixup');
+    for (const f of ['is_non_place', 'clean_source_item', 'venue_admin_fix', 'drop_non_place_venues', 'a8_alibi_venue_fixup']) {
+      expect(sql, f).toMatch(new RegExp(`create\\s+(?:or\\s+replace\\s+)?function\\s+private\\.${f}\\s*\\(`, 'i'));
+    }
+  });
+});
+
+describe('AC-M1-85 (e) clean_source_item is the original plus one guard line', () => {
+  const body = (sql) => {
+    const m = /create\s+(?:or\s+replace\s+)?function\s+private\.clean_source_item\b/i.exec(sql);
+    if (!m) throw new Error('no clean_source_item definition');
+    const end = sql.indexOf('end $$;', m.index);
+    if (end < 0) throw new Error('clean_source_item has no end $$;');
+    return sql.slice(m.index, end + 'end $$;'.length);
+  };
+  const lines = (t) => t.split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const original = () => body(read('ingest_rpcs'));
+  const fixed = () => body(read('alibi_venue_fixup'));
+  const GUARD = /private\.is_non_place\(v_vn\)/;
+  it('exactly one marked line', () => {
+    expect(lines(fixed()).filter((l) => GUARD.test(l))).toHaveLength(1);
+  });
+  it('with the marked line removed it equals the ingest_rpcs definition (create or replace aside)', () => {
+    const strip = (t) => lines(t).filter((l) => !GUARD.test(l)).join('\n').replace(/^create (or replace )?function/i, 'create function');
+    expect(strip(fixed())).toEqual(strip(original()));
+  });
+  it('the marked line sits after the last address reject and before the town block', () => {
+    const f = fixed();
+    const at = f.search(GUARD);
+    const lastAddr = f.lastIndexOf("jsonb_build_object('reject', 'address')");
+    const town = f.indexOf("jt(item, 'town')");
+    expect(lastAddr).toBeGreaterThan(-1);
+    expect(at).toBeGreaterThan(lastAddr);
+    expect(town).toBeGreaterThan(at);
+    expect(f).toMatch(/v_vn\s*:=\s*null\s*;\s*v_addr\s*:=\s*null/);
+  });
+  it('no migration between ingest_rpcs and alibi_venue_fixup redefines clean_source_item', () => {
+    const lo = fileFor('ingest_rpcs'); const hi = fileFor('alibi_venue_fixup');
+    for (const f of files) {
+      if (f <= lo || f >= hi) continue;
+      expect(readFileSync(join(DIR, f), 'utf8'), f).not.toMatch(/function\s+private\.clean_source_item\b/i);
+    }
+  });
+});
