@@ -73,6 +73,7 @@ export function commitStep(dir, { files = {}, links = {}, renames = [], message 
   git(dir, ['add', '-A', '-f']);
   git(dir, ['commit', '-q', '--allow-empty', '--no-verify', '-m', message], {
     GIT_AUTHOR_EMAIL: authorEmail, GIT_COMMITTER_EMAIL: committerEmail,
+    GIT_AUTHOR_NAME: 'someone', GIT_COMMITTER_NAME: 'someone', // CI runners have no global identity
   });
   return git(dir, ['rev-parse', 'HEAD']);
 }
