@@ -1,0 +1,10 @@
+node_modules/
+out/
+.next/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+supabase/.temp/
+supabase/.branches/
+ingest/.cache/
