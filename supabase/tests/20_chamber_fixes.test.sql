@@ -257,7 +257,7 @@ create function pg_temp.mk_venue(p_label text, p_name text, p_attempts int defau
 begin
   insert into public.venues (name, normalized_name, town, address, geocode_attempts, aliases, lat, lng, outside_region)
     values (p_name, private.normalize_title(p_name), p_town, p_address, p_attempts, p_aliases, p_lat, case when p_lat is null then null else -120.1 end, p_outside);
-  insert into fx select p_label, v.id from public.venues v where v.name = p_name;
+  insert into fx select p_label, v.id from public.venues v where v.name = p_name and v.town is not distinct from p_town;
 end $$;
 create function pg_temp.mk_se(p_slug text, p_key text, p_venue text, p_status text default 'live') returns void language plpgsql as $$
 begin
