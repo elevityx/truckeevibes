@@ -224,8 +224,8 @@ select pg_temp.t($$(select (select count(*) from public.venues) = f.venues and (
                            and pg_temp.snap('public.venues') = f.vsnap and pg_temp.snap('public.source_events') = f.sesnap
                            and pg_temp.snap('public.events') = f.esnap from fresh_before f)$$,
   'AC-M1-83b ... and changes no venue, source_events or events row');
-select pg_temp.t($$(select enabled and trust::text = 'review' and not strict_auto from public.sources where slug = 'alibi-truckee')$$,
-  'AC-M1-83c alibi-truckee is still enabled, trust review, no strict_auto');
+select pg_temp.t($$(select enabled and not strict_auto from public.sources where slug = 'alibi-truckee')$$,
+  'AC-M1-83c alibi-truckee is still enabled with no strict_auto (trust moves to auto in the alibi_auto step)');
 
 -- ---------------------------------------------------------------------------------------------------------------------
 -- AC-M1-85 (a, c): the guard in clean_source_item and private.is_non_place
