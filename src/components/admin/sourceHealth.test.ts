@@ -104,3 +104,24 @@ describe('green', () => {
     expect(sourceHealth(row(), NOW)).toBe('green');
   });
 });
+
+// AC-M1-80 (A7-6): locks in the accepted judgment calls.
+describe('judgment calls (AC-M1-80)', () => {
+  it('a disabled source is off whatever its runs look like', () => {
+    expect(sourceHealth(row({ enabled: false, consecutiveFailures: 5, lastSuccessAt: null }), NOW)).toBe('off');
+    expect(sourceHealth(row({ enabled: false }), NOW)).toBe('off');
+  });
+  it('an enabled source that never succeeded is red', () => {
+    expect(sourceHealth(row({ lastSuccessAt: null }), NOW)).toBe('red');
+  });
+  it('the staleness limit is strict: exactly 48 h is not red, 48 h + 1 ms is', () => {
+    expect(sourceHealth(row({ cadence: '24h', lastSuccessAt: new Date(NOW.getTime() - 48 * H).toISOString() }), NOW)).not.toBe('red');
+    expect(sourceHealth(row({ cadence: '24h', lastSuccessAt: new Date(NOW.getTime() - 48 * H - 1).toISOString() }), NOW)).toBe('red');
+  });
+  it('a terms re-check date in the past is amber', () => {
+    expect(sourceHealth(row({ termsRecheckAt: inDays(-3) }), NOW)).toBe('amber');
+  });
+  it('red wins over amber', () => {
+    expect(sourceHealth(row({ termsRecheckAt: inDays(-3), lastSuccessAt: null }), NOW)).toBe('red');
+  });
+});

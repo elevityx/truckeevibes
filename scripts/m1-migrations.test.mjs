@@ -289,3 +289,29 @@ describe('rollout migrations keep the canonical block and the unchanged allowlis
     expect(fileFor('enable_alibi').slice(0, 14) > fileFor('sources_terms_a2').slice(0, 14)).toBe(true);
   });
 });
+
+// A7-2 / AC-M1-76 (e): owner_minutes adds exactly admin_owner_minutes_7d to the cumulative allowlist.
+describe('owner_minutes adds exactly admin_owner_minutes_7d', () => {
+  const G = (n) => canonicalGrants(read(n));
+  it('exists and sorts after sources_terms_a2 and (when present) enable_alibi', () => {
+    const f = fileFor('owner_minutes');
+    expect(f, 'no migration named *_owner_minutes.sql').toBeTruthy();
+    const ts = (x) => x.slice(0, 14);
+    expect(ts(f) > ts(fileFor('sources_terms_a2'))).toBe(true);
+    if (fileFor('enable_alibi')) expect(ts(f) > ts(fileFor('enable_alibi'))).toBe(true);
+  });
+  it('ends with the canonical block and is cumulative', () => {
+    expect(() => G('owner_minutes')).not.toThrow();
+    expect(cumulativeProblems(G('sources_terms_a2'), G('owner_minutes'), createdFns(read('owner_minutes')))).toEqual([]);
+  });
+  it('the only new grant is admin_owner_minutes_7d() to authenticated', () => {
+    const prev = G('sources_terms_a2');
+    const added = [...G('owner_minutes')].filter((x) => !prev.has(x));
+    expect(added).toEqual(['public.admin_owner_minutes_7d()->authenticated']);
+  });
+  it('the function is security definer with a pinned search_path', () => {
+    const sql = read('owner_minutes');
+    expect(sql).toMatch(/security\s+definer/i);
+    expect(sql).toMatch(/set\s+search_path\s*=\s*''/i);
+  });
+});

@@ -16,6 +16,7 @@
     "db:test": "supabase test db",
     "db:test:concurrency": "node --test scripts/db-concurrency.dbtest.mjs",
     "ingest": "tsx ingest/run.ts",
+    "test:static": "cp scripts/fixtures/snapshot-static.json public/data/events.json && next build && node scripts/check-static-snapshot.mjs",
     "check:repo": "node scripts/secret-scan.mjs && node scripts/check-workflows.mjs && node scripts/check-fixtures.mjs && node scripts/check-no-html.mjs && node scripts/check-public-copy.mjs"
   },
   "devDependencies": {

@@ -194,3 +194,24 @@ describe('adminSourceHealth', () => {
     expect(r.lastRuns).toEqual([]);
   });
 });
+
+describe('adminOwnerMinutes7d (AC-M1-76 f)', () => {
+  it('calls rpc admin_owner_minutes_7d with no args and returns a number', async () => {
+    rpc.mockResolvedValue({ data: 4, error: null });
+    expect(await q.adminOwnerMinutes7d()).toBe(4);
+    expect(rpc).toHaveBeenCalledWith('admin_owner_minutes_7d');
+  });
+  it('accepts a numeric string', async () => {
+    rpc.mockResolvedValue({ data: '4.0', error: null });
+    expect(await q.adminOwnerMinutes7d()).toBe(4);
+  });
+  it('null data rejects with DataError unknown, never a fake 0', async () => {
+    rpc.mockResolvedValue({ data: null, error: null });
+    await expect(q.adminOwnerMinutes7d()).rejects.toMatchObject({ code: 'unknown' });
+    await expect(q.adminOwnerMinutes7d()).rejects.toBeInstanceOf(DataError);
+  });
+  it('a 42501 error maps to forbidden', async () => {
+    rpc.mockResolvedValue({ data: null, error: { code: '42501', message: 'forbidden' } });
+    await expect(q.adminOwnerMinutes7d()).rejects.toMatchObject({ code: 'forbidden' });
+  });
+});
