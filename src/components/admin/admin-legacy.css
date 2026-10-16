@@ -1,0 +1,28 @@
+/* The back office keeps its original look (plan section 4.9): the pre-redesign token values and base rules, scoped under .adm. */
+.adm{
+  --body: var(--font-atkinson), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-fraunces), serif;
+  --bg:#0B1626; --surface:#13233A; --surface-2:#1B2F4B; --line:#2c4466; --text:#F7F5EF; --muted:#AFC0D6;
+  --accent:#F2C14E; --on-accent:#0B1626; --accent-2:#C62828; --on-accent-2:#FFFFFF; --focus:#F2C14E;
+  --danger:#FF8A80; --ok:#7FD6A0; --radius:16px;
+  color-scheme: dark;
+  background:var(--bg); color:var(--text); font-family:var(--body); font-size:16px; line-height:1.5;
+}
+.adm a{color:var(--accent)}
+.adm :focus-visible{outline:3px solid var(--focus); outline-offset:2px}
+.adm .disp{font-family:var(--font-display); font-weight:600; letter-spacing:.01em}
+
+.adm .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:44px; padding:0 18px; border-radius:999px; border:2px solid transparent;
+  font-family:inherit; font-weight:700; font-size:15px; line-height:inherit; cursor:pointer; text-decoration:none; white-space:nowrap; background:transparent; color:inherit; transition:none}
+.adm .btn.primary{background:var(--accent); color:var(--on-accent)}
+.adm .btn.alt{background:var(--accent-2); color:var(--on-accent-2)}
+.adm .btn.ghost{background:transparent; color:var(--text); border-color:var(--line)}
+.adm .btn:disabled{opacity:.5; cursor:not-allowed}
+
+.adm .page{max-width:720px; margin:0 auto; padding:24px 16px 48px; display:flex; flex-direction:column; gap:16px}
+.adm .page h1{margin:0; font-size:32px; line-height:1.2}
+.adm .page h2{margin:16px 0 0; font-size:21px}
+.adm .page p,.adm .page ul{margin:0}
+.adm .page ul{padding-left:20px; display:flex; flex-direction:column; gap:6px}
+.adm .card{padding:16px; border-radius:var(--radius); background:var(--surface); border:1px solid var(--line)}
+.adm .fine{color:var(--muted); font-size:14px; margin:0}

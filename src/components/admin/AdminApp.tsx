@@ -15,6 +15,7 @@ import { supabaseConfigured } from '@/config/public-env';
 import { resolveScreen, type AdminScreen } from './gate';
 import { LoginScreen, MfaScreen, NotAdminScreen, RecoveryScreen, SetupScreen, SignUpScreen } from './AuthScreens';
 import Console from './Console';
+import './admin-legacy.css';
 import './admin.css';
 
 /** The screen is decided on mount and after every auth action. UI convenience only: the database enforces access. */
