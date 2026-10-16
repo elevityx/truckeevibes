@@ -26,21 +26,19 @@ export function displayUrl(url: string): string {
 }
 
 const GROUPS: { status: Status; title: string; blurb: string; label: string; tone: string }[] = [
-  { status: 'active', title: 'Calendars we read', blurb: 'We read these every morning and list what they publish, with a link back.', label: 'Read every morning', tone: 'st-pine' },
-  { status: 'paused', title: 'Not included yet', blurb: 'Public calendars we have found but do not read yet.', label: 'Not included yet', tone: 'st-glow' },
-  { status: 'link_only', title: 'Link only', blurb: 'We point to these; we do not read them. Ask us if you would like your calendar read.', label: 'Link only', tone: 'st-muted' },
+  { status: 'active', title: 'Calendars we read', blurb: 'We read these every morning and list what they publish, with a link back.', label: 'Read every morning', tone: 'active' },
+  { status: 'paused', title: 'Not included yet', blurb: 'Public calendars we have found but do not read yet.', label: 'Not included yet', tone: 'paused' },
+  { status: 'link_only', title: 'Link only', blurb: 'We point to these; we do not read them. Ask us if you would like your calendar read.', label: 'Link only', tone: 'link' },
 ];
 
-/** One status row: name (linked when safe), display URL, status label. */
+/** One status row (canvas .srcrow): name (linked when safe), status label, domain line. */
 function StatusRow({ s, label, tone }: { s: SnapshotSource; label: string; tone: string }) {
   const { name, href } = sourceLink(s);
   return (
-    <li className="srow">
-      <span className="srow-main">
-        {href ? <a href={href} rel="noopener noreferrer">{name}</a> : <span className="srow-name">{name}</span>}
-        <span className="srow-url">{displayUrl(s.homepageUrl)}</span>
-      </span>
-      <span className={`srow-status ${tone}`}>{label}</span>
+    <li className="srcrow">
+      {href ? <a href={href} rel="noopener noreferrer">{name}</a> : <span className="srow-name">{name}</span>}
+      <span className={`status ${tone}`}>{label}</span>
+      <span className="meta">{displayUrl(s.homepageUrl)}</span>
     </li>
   );
 }
@@ -72,10 +70,11 @@ export default function SourceGroups({ initial }: { initial: SnapshotSource[] })
       <p className="proof">{`${a} read daily, ${p} not yet, ${l} link only. Every event on the list came from one of the first group.`}</p>
       {GROUPS.map((g) => (
         <section key={g.status} className="sgroup" aria-labelledby={`g-${g.status}`}>
-          <h2 className="gh" id={`g-${g.status}`}>
-            {g.title} <span className="count">{by(g.status).length}</span>
-          </h2>
-          <p className="fine">{g.blurb}</p>
+          <div className="dayh">
+            <h2 className="gh" id={`g-${g.status}`}>{g.title}</h2>
+            <span className="cnt">{by(g.status).length}</span>
+          </div>
+          <p className="small">{g.blurb}</p>
           <ul className="srows">
             {by(g.status).map((s) => (
               <StatusRow key={s.homepageUrl + s.name} s={s} label={g.label} tone={g.tone} />

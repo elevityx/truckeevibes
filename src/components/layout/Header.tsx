@@ -18,17 +18,19 @@ function Links({ current }: { current?: HeaderCurrent }) {
 /** Site header, rendered by each server page (never by a client component). Below 760 px the links sit in a no-JS details menu. */
 export default function Header({ current }: { current?: HeaderCurrent }) {
   return (
-    <header className="nav wrap">
-      <Lockup />
-      <nav className="nav-links" aria-label="Site">
-        <Links current={current} />
-      </nav>
-      <details className="menu">
-        <summary aria-label="Menu">Menu</summary>
-        <nav aria-label="Site menu">
+    <div className="wrap">
+      <header className="nav">
+        <Lockup />
+        <nav className="nav-links" aria-label="Site">
           <Links current={current} />
         </nav>
-      </details>
-    </header>
+        <details className="menu">
+          <summary aria-label="Menu">Menu</summary>
+          <nav aria-label="Site menu">
+            <Links current={current} />
+          </nav>
+        </details>
+      </header>
+    </div>
   );
 }

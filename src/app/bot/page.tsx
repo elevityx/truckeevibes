@@ -13,9 +13,12 @@ export default function BotPage() {
   return (
     <>
       <Header current="bot" />
-      <main className="wrap pg">
-        <h1 className="h1">The TruckeeVibes crawler</h1>
-        <p>TruckeeVibes lists local events by reading public calendars. This page says exactly what our crawler does.</p>
+      <main className="wrap">
+        <div className="pg prose">
+          <p className="eyebrow">Our bot</p>
+          <div className="rule" />
+          <h1 className="hero">The TruckeeVibes crawler</h1>
+          <p style={{ marginTop: 16 }}>TruckeeVibes lists local events by reading public calendars. This page says exactly what our crawler does.</p>
 
         <h2 className="h2">Who we are</h2>
         <p>Our requests identify themselves with this user agent:</p>
@@ -47,6 +50,7 @@ export default function BotPage() {
           Organizers can opt out at any time by emailing <a href="mailto:takedown@truckeevibes.com">takedown@truckeevibes.com</a>.
           We remove the source and its events within 48 hours.
         </p>
+        </div>
       </main>
       <Footer />
     </>

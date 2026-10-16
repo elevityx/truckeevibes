@@ -2,9 +2,10 @@
 // With NEXT_PUBLIC_SUPABASE_URL and the publishable key set, it calls list_events with the public key (the same call a
 // visitor's browser makes), and list_sources_public for the Sources and About pages. Without env, or if a call fails, it writes
 // empty arrays so `next build` never breaks. SNAPSHOT_FIXTURE=<file> copies that file instead (visual tests, no network).
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { mapEvent, type EventRow } from '../src/lib/data/mapEvent';
+import { lastKnownSources, type SnapshotSource } from './snapshot-sources';
 
 const OUT = 'public/data/events.json';
 const CAP = 2000;
@@ -21,8 +22,6 @@ async function rows(url: string, key: string, days: number): Promise<EventRow[]>
   return Array.isArray(data) ? (data as EventRow[]) : [];
 }
 
-type SnapshotSource = { name: string; homepageUrl: string; status: string };
-
 async function sourceRows(url: string, key: string): Promise<SnapshotSource[]> {
   const res = await fetch(`${url.replace(/\/+$/, '')}/rest/v1/rpc/list_sources_public`, {
     method: 'POST',
@@ -35,7 +34,7 @@ async function sourceRows(url: string, key: string): Promise<SnapshotSource[]> {
   const list = Array.isArray(data) ? (data as Array<{ name?: unknown; homepage_url?: unknown; status?: unknown }>) : [];
   return list
     .filter((r) => typeof r.name === 'string' && typeof r.homepage_url === 'string' && ['active', 'link_only', 'paused'].includes(String(r.status)))
-    .map((r) => ({ name: r.name as string, homepageUrl: r.homepage_url as string, status: r.status as string }));
+    .map((r) => ({ name: r.name as string, homepageUrl: r.homepage_url as string, status: r.status as SnapshotSource['status'] }));
 }
 
 async function main() {
@@ -50,6 +49,8 @@ async function main() {
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? '';
   const builtAt = new Date().toISOString();
   let events: ReturnType<typeof mapEvent>[] = [];
+  // The previous snapshot (if any) supplies the last-known sources when the sources read fails.
+  const previous = existsSync(OUT) ? readFileSync(OUT, 'utf8') : null;
   let sources: SnapshotSource[] = [];
   let note = 'no env, wrote an empty snapshot';
   if (url && key) {
@@ -61,14 +62,16 @@ async function main() {
       }
       events = r.map(mapEvent);
       note = `${events.length} events`;
-      try {
-        sources = await sourceRows(url, key);
-        note += `, ${sources.length} sources`;
-      } catch (e) {
-        note += `, list_sources_public failed (${e instanceof Error ? e.message : 'error'})`;
-      }
     } catch (e) {
       note = `list_events failed (${e instanceof Error ? e.message : 'error'}), wrote an empty snapshot`;
+    }
+    // Independent of the events read: a failure here keeps the last-known sources instead of writing an empty list.
+    try {
+      sources = await sourceRows(url, key);
+      note += `, ${sources.length} sources`;
+    } catch (e) {
+      sources = lastKnownSources(previous);
+      note += `, list_sources_public failed (${e instanceof Error ? e.message : 'error'}), kept ${sources.length} last-known sources`;
     }
   }
   mkdirSync(dirname(OUT), { recursive: true });

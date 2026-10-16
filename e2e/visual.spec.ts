@@ -92,3 +92,46 @@ test.describe('AC-R1a-14 reduced motion', () => {
     expect(d).toBe('0s');
   });
 });
+
+test.describe('Amendment R1a-1 canvas alignment', () => {
+  for (const path of ['/about/', '/sources/']) {
+    test(`AC-R1a-16 ${path}: h1 left edge equals the lock-up's`, async ({ page }, info) => {
+      await page.goto(path);
+      const [lock, h1] = await Promise.all([
+        page.locator('header .lock').first().evaluate((el) => el.getBoundingClientRect().left),
+        page.locator('main h1').first().evaluate((el) => el.getBoundingClientRect().left),
+      ]);
+      expect(Math.abs(lock - h1)).toBeLessThanOrEqual(1);
+      if (info.project.name.startsWith('phone')) expect(Math.round(h1)).toBe(16);
+    });
+  }
+  test('AC-R1a-17 /sources/: flat rows, 2px ink group heads, raised current pill', async ({ page }, info) => {
+    await page.goto('/sources/');
+    if (info.project.name.startsWith('phone')) await page.locator('header summary').click(); // the links sit in the menu on phones
+    const rows = await page.locator('.srcrow').evaluateAll((els) => els.map((e) => ({ r: getComputedStyle(e).borderTopLeftRadius, bg: getComputedStyle(e).backgroundColor })));
+    expect(rows.length).toBeGreaterThan(0);
+    for (const r of rows) {
+      expect(r.r).toBe('0px');
+      expect(['rgba(0, 0, 0, 0)', 'transparent']).toContain(r.bg);
+    }
+    const heads = await page.locator('.dayh').evaluateAll((els) => {
+      const probe = document.createElement('span');
+      probe.style.color = 'var(--ink)';
+      document.body.appendChild(probe);
+      const ink = getComputedStyle(probe).color;
+      probe.remove();
+      return els.map((e) => ({ w: getComputedStyle(e).borderBottomWidth, c: getComputedStyle(e).borderBottomColor, ink }));
+    });
+    expect(heads).toHaveLength(3);
+    for (const h of heads) expect(h).toEqual({ w: '2px', c: h.ink, ink: h.ink });
+    const cur = await page.locator('header a[aria-current="page"]:visible').first().evaluate((el) => {
+      const probe = document.createElement('span');
+      probe.style.color = 'var(--surface-raised)';
+      document.body.appendChild(probe);
+      const want = getComputedStyle(probe).color;
+      probe.remove();
+      return { bg: getComputedStyle(el).backgroundColor, want };
+    });
+    expect(cur.bg).toBe(cur.want);
+  });
+});

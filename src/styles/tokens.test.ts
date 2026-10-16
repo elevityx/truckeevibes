@@ -48,8 +48,12 @@ describe('AC-R1a-03 contrast', () => {
         it(`line-strong on ${bg} >= 3.0`, () => expect(contrast(color('line-strong', theme), color(bg, theme))).toBeGreaterThanOrEqual(3));
     });
   }
-  it('alpenglow-ink on surface-raised is explicitly not a text pair', () => {
+  it('the excluded pair really is below 4.5 in Daylight (why it is not a text pair)', () => {
     expect(NOT_A_TEXT_PAIR).toContainEqual(['alpenglow-ink', 'surface-raised']);
+    for (const [fg, bg] of NOT_A_TEXT_PAIR) expect(contrast(color(fg, 'daylight'), color(bg, 'daylight'))).toBeLessThan(4.5);
+  });
+  it('the contrast check can fail: a fixture pair of #949494 on white is below 4.5', () => {
+    expect(contrast('#949494', '#ffffff')).toBeLessThan(4.5);
   });
 });
 
