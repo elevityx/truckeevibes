@@ -45,7 +45,7 @@ $$;
 create function public.list_event_pages()
 returns jsonb
 language sql stable security definer set search_path = '' as $$
-  with pg as (
+  with recursive pg as (
     select e.*, case when e.status = 'cancelled' then 'cancelled'
                      when coalesce(e.ends_at, e.starts_at + interval '3 hours') > now() - interval '1 hour' then 'upcoming'
                      else 'ended' end as st
@@ -54,15 +54,24 @@ language sql stable security definer set search_path = '' as $$
        and e.starts_at < now() + interval '120 days'
        and coalesce(e.ends_at, e.starts_at + interval '3 hours') > now() - interval '30 days'),
   pages as (select * from pg order by pg.starts_at, pg.slug limit 3000),
-  rd as (
-    select l.slug as loser, s.slug as survivor
-      from public.events l join pages s on s.id = l.merged_into
-     where l.published_at is not null and not private.event_matches_suppression(l)
+  rd0 as (
+    select l.id, l.slug as loser, l.merged_into
+      from public.events l
+     where l.merged_into is not null and l.published_at is not null and not private.event_matches_suppression(l)
        and exists (select 1 from public.event_changes c1 join public.event_changes c2
                      on c2.event_id = c1.event_id and c2.at = c1.at and c2.decided_by = c1.decided_by
                     where c1.event_id = l.id and c1.field = 'status' and c1.new_value = '"hidden"'::jsonb
                       and c1.old_value in ('"published"'::jsonb, '"cancelled"'::jsonb)
-                      and c2.field = 'merged_into' and c2.new_value = to_jsonb(s.id))),
+                      and c2.field = 'merged_into' and c2.new_value = to_jsonb(l.merged_into))),
+  chain as (
+    select r.loser, r.merged_into as cur, 1 as depth, array[r.id, r.merged_into] as seen
+      from rd0 r
+    union all
+    select c.loser, e.merged_into, c.depth + 1, c.seen || e.merged_into
+      from chain c join public.events e on e.id = c.cur
+     where e.merged_into is not null and c.depth < 10 and e.merged_into <> all (c.seen)),
+  rd as (
+    select ch.loser, s.slug as survivor from chain ch join pages s on s.id = ch.cur),
   redirects as (select * from rd order by rd.loser limit 1000),
   page_json as (
     select p.starts_at, p.slug,

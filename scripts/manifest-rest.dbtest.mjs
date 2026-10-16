@@ -44,7 +44,7 @@ before(async () => {
     `insert into public.events (region_id, title, summary, starts_at, time_known, status, published_at, organizer_url)
      select (select r.id from public.regions r order by r.slug limit 1),
             'Example Rest Page ' || n || ' ' || $1::text, 'Synthetic summary for the REST fixture',
-            now() + interval '1 hour' * n, true, 'published', now() - interval '1 day', 'https://example.org/rest/' || n
+            now() + interval '1 hour' * n - interval '90 minutes', true, 'published', now() - interval '1 day', 'https://example.org/rest/' || n
        from generate_series(1, ${PAGES}) n`, [sfx]);
   // one formerly published loser merged into the first page, with the two journal rows of the redirect rule (same at and decided_by)
   const s = await db.query(`select id, slug from public.events where title = $1`, [`Example Rest Page 1 ${sfx}`]);
@@ -64,9 +64,9 @@ before(async () => {
 
 after(async () => {
   try {
-    // the journal is append-only (guard trigger), so the fixture's rows are removed with triggers skipped, in one transaction
+    // the journal is append-only (guard trigger), so the fixture's rows are removed in one transaction under the sanctioned tv.retention switch
     await db.query('begin');
-    await db.query('set local session_replication_role = replica');
+    await db.query("select set_config('tv.retention', 'on', true)");
     await db.query(`delete from public.event_changes where event_id in (select id from public.events where title like '%' || $1)`, [sfx]);
     await db.query(`delete from public.events where title like '%' || $1`, [sfx]);
     await db.query('commit');

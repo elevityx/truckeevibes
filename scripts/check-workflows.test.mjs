@@ -1,6 +1,7 @@
 // AC-M0-03. Contract for scripts/check-workflows.mjs: `node scripts/check-workflows.mjs [rootDir]`
 // checks <rootDir or cwd>/.github/workflows/*.yml; exit 1 on any violation, 0 when clean.
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeRepo, runScript, REPO_ROOT } from './_testlib.mjs';
 
@@ -131,6 +132,27 @@ describe('check-workflows (AC-M0-03)', () => {
     fails({ 'sign-gate-probe.yml': PROBE.replace('FEED_SIGNING_KEY', 'R2_API_TOKEN') }));
 
   it("passes the repo's real workflows", () => expect(runScript(CHECK, REPO_ROOT).status).toBe(0));
+
+  // R2a-db: the db job exports the local stack's public API URL and demo keys for db:test:rest (spec R2a 1(g))
+  const DB_JOB = `  db:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@${SHA}
+      - name: Export the local API URL and keys
+        run: supabase status -o env | grep -E '^(API_URL|ANON_KEY|PUBLISHABLE_KEY)=' | tr -d '"' >> "$GITHUB_ENV"
+      - run: npm run db:test:rest
+`;
+  it('passes a ci.yml whose db job has the API env-export step and db:test:rest', () => passes({ 'ci.yml': CI + DB_JOB }));
+  it('fails that db job when the export step is unpinned or reads a secret', () => {
+    fails({ 'ci.yml': CI + DB_JOB.replace(`checkout@${SHA}`, 'checkout@v4') });
+    fails({ 'ci.yml': CI + DB_JOB.replace('>> "$GITHUB_ENV"', '>> "$GITHUB_ENV"\n        env:\n          K: ${{ secrets.SERVICE_KEY }}') });
+  });
+  it("the repo's ci.yml db job carries the export step before db:test:rest", () => {
+    const ci = readFileSync(join(REPO_ROOT, '.github', 'workflows', 'ci.yml'), 'utf8');
+    const exp = ci.indexOf("grep -E '^(API_URL|ANON_KEY|PUBLISHABLE_KEY)='");
+    expect(exp).toBeGreaterThan(-1);
+    expect(exp).toBeLessThan(ci.indexOf('npm run db:test:rest'));
+  });
 });
 
 // ---- Amendment 4 / AC-M0-16: yaml-parsed adversarial cases ----
