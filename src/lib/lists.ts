@@ -33,7 +33,7 @@ export const LISTS: readonly ListDef[] = [
     match: (e) => has(e, 'music'),
   },
   {
-    slug: '21-plus', path: '/21-plus/', label: '21+', title: '21+ around Truckee', glyph: 'nightlife', ready: true,
+    slug: '21-plus', path: '/21-plus/', label: '21+', title: '21+ around Truckee', glyph: 'twentyone', ready: true,
     lede: 'Shows and nights out that card at the door. Only events the organizer lists as 21 and over.',
     match: (e) => e.age === '21_plus',
   },

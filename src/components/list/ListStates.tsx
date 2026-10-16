@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { VibeEvent, When } from '@/lib/data/types';
 import { activeFilterCount, type FilterState } from '@/lib/filters/state';
 import { addDays, dayLabel, formatTimes, localDate, weekdayName } from '@/lib/time/pacific';
+import { DayHead } from './DayGroup';
 import MessageCard from './MessageCard';
 import Skeleton from './Skeleton';
 
@@ -13,7 +14,7 @@ export function LoadingState({ calendars }: { calendars: number }) {
         <Skeleton key={i} />
       ))}
       <p className="small" role="status">
-        Checking {calendars} {calendars === 1 ? 'calendar' : 'calendars'}…
+        {calendars > 0 ? `Checking ${calendars} ${calendars === 1 ? 'calendar' : 'calendars'}…` : 'Checking the calendars…'}
       </p>
     </div>
   );
@@ -42,6 +43,16 @@ export function EmptyState({ builtAt, now, tz }: { builtAt: string | null; now: 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** One-day When values name the day; the rest are "Nothing matches yet". */
+/** The local date a one-day When names, or null. */
+function dayDate(when: When | null, now: number, tz: string): string | null {
+  if (!when) return null;
+  const today = localDate(now, tz);
+  if (typeof when === 'object') return when.date;
+  if (when === 'today' || when === 'tonight') return today;
+  if (when === 'tomorrow') return addDays(today, 1);
+  return null;
+}
+
 function dayTitle(when: When | null, now: number, tz: string): string | null {
   if (!when) return null;
   const today = localDate(now, tz);
@@ -70,8 +81,10 @@ export function NoResultsState({
 }: { filters: FilterState; listEvents: readonly VibeEvent[]; now: number; tz: string; onShow7d(): void; onClear(): void }) {
   const c = noResultsCopy(filters, listEvents, now, tz);
   const n = activeFilterCount(filters);
+  const date = dayDate(filters.when, now, tz);
   return (
     <div className="state">
+      {date && <DayHead date={date} count={0} today={false} tz={tz} />}
       <MessageCard title={c.title}>
         <p>{c.body}</p>
         {c.showSeven && (
@@ -85,10 +98,8 @@ export function NoResultsState({
   );
 }
 
-/** Error: the live read failed and there are no rows to show. */
-export function ErrorState({
-  builtAt, now, tz, hasRows, onRetry, onShowSnapshot,
-}: { builtAt: string | null; now: number; tz: string; hasRows: boolean; onRetry(): void; onShowSnapshot(): void }): ReactNode {
+/** Error: the live read failed and there are no rows to show (the build snapshot is empty). */
+export function ErrorState({ builtAt, now, tz, onRetry }: { builtAt: string | null; now: number; tz: string; onRetry(): void }): ReactNode {
   const todayStr = localDate(now, tz);
   const morning = builtAt ? localDate(Date.parse(builtAt), tz) === todayStr : false;
   const when = !builtAt ? 'the last update' : morning ? 'this morning' : dayLabel(builtAt, tz);
@@ -98,11 +109,6 @@ export function ErrorState({
         <p>Check your connection and try again. If it keeps failing, the fault is ours: the last good list is from {when}.</p>
         <button type="button" className="btn" onClick={onRetry}>Try again</button>
       </MessageCard>
-      {hasRows && (
-        <button type="button" className="btn ghost wide" onClick={onShowSnapshot}>
-          Show {morning ? "this morning's list" : `the list from ${when}`}
-        </button>
-      )}
     </div>
   );
 }

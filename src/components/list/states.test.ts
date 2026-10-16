@@ -46,18 +46,27 @@ describe('AC-R1b-08 states', () => {
     expect(c({ when: 'today' }).title).toBe('Nothing listed for Thursday yet');
   });
   it('Error with an empty snapshot', () => {
-    const h = text(createElement(ErrorState, { builtAt: null, now: NOW, tz: TZ, hasRows: false, onRetry: noop, onShowSnapshot: noop }));
+    const h = text(createElement(ErrorState, { builtAt: null, now: NOW, tz: TZ, onRetry: noop }));
     expect(h).toContain("Couldn't load the list");
     expect(h).toContain('Check your connection and try again. If it keeps failing, the fault is ours: the last good list is from the last update.');
     expect(h).toContain('>Try again<');
     expect(h).not.toContain('Show the list');
   });
-  it('Error with snapshot rows offers the snapshot', () => {
-    const today = text(createElement(ErrorState, { builtAt: '2026-10-15T13:04:00Z', now: NOW, tz: TZ, hasRows: true, onRetry: noop, onShowSnapshot: noop }));
+  it('Error offers only Try again (R1b-1 #4) and names the last good list', () => {
+    const today = text(createElement(ErrorState, { builtAt: '2026-10-15T13:04:00Z', now: NOW, tz: TZ, onRetry: noop }));
     expect(today).toContain('the last good list is from this morning.');
-    expect(today).toContain("Show this morning's list");
-    const old = text(createElement(ErrorState, { builtAt: '2026-10-14T13:04:00Z', now: NOW, tz: TZ, hasRows: true, onRetry: noop, onShowSnapshot: noop }));
+    expect(today).not.toContain('Show ');
+    const old = text(createElement(ErrorState, { builtAt: '2026-10-14T13:04:00Z', now: NOW, tz: TZ, onRetry: noop }));
     expect(old).toContain('the last good list is from Wed Oct 14.');
-    expect(old).toContain('Show the list from Wed Oct 14');
+  });
+  it('Loading with no known calendars says "Checking the calendars…"', () => {
+    expect(text(createElement(LoadingState, { calendars: 0 }))).toContain('Checking the calendars…');
+  });
+  it('No results for one day keeps its day head with a 0 count', () => {
+    const f = { when: { date: '2026-10-17' }, areas: [], free: true };
+    const h = text(createElement(NoResultsState, { filters: f, listEvents: [row()], now: NOW, tz: TZ, onShow7d: noop, onClear: noop }));
+    expect(h).toContain('Saturday, Oct 17');
+    expect(h).toContain('Sat Oct 17');
+    expect(h).toContain('<span class="cnt">0</span>');
   });
 });

@@ -33,7 +33,6 @@ export function EventRow({ e, tz, onOpen }: RowProps) {
       type="button"
       className="drow"
       onClick={() => onOpen(e.id)}
-      aria-label={`${e.title}, ${whenLine(e, tz)}${town ? `, ${town}` : ''}${free ? ', free' : ''}${a21 ? ', 21 and over' : ''}${a18 ? ', 18 and over' : ''}${far ? ', worth the drive' : ''}`}
     >
       <span className="t">
         {timeText(e, tz)}
@@ -61,6 +60,13 @@ export function EventRow({ e, tz, onOpen }: RowProps) {
         <span className="chev phn">
           <ChevIcon />
         </span>
+      </span>
+      {/* The name is the visible text; this hidden tail adds the full date and the age words (label-in-name, WCAG 2.5.3). */}
+      <span className="sr-only">
+        . {whenLine(e, tz)}
+        {a21 ? ', 21 and over' : ''}
+        {a18 ? ', 18 and over' : ''}
+        {far ? ', worth the drive' : ''}
       </span>
     </button>
   );

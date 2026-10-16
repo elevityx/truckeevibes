@@ -6,11 +6,13 @@ import { AREAS, AREA_LABELS, type FilterState } from '@/lib/filters/state';
 interface Props {
   counts: Pick<BuildCounts, 'areas' | 'kinds' | 'sources'>;
   filters: FilterState;
+  /** false = counts unknown: none are shown. Default true. */
+  known?: boolean;
   onChange(next: FilterState): void;
 }
 
 /** The desktop rail (>= 1024 px): Area checkboxes with live counts, the Kind list, the calendars we read, the land acknowledgement. */
-export default function Rail({ counts, filters, onChange }: Props) {
+export default function Rail({ counts, filters, known = true, onChange }: Props) {
   const toggle = (a: Area) =>
     onChange({ ...filters, areas: filters.areas.includes(a) ? filters.areas.filter((x) => x !== a) : AREAS.filter((x) => x === a || filters.areas.includes(x)) });
   const order = (c: string) => CATEGORY_SLUGS.indexOf(c);
@@ -26,7 +28,7 @@ export default function Rail({ counts, filters, onChange }: Props) {
                 <input type="checkbox" checked={filters.areas.includes(a)} onChange={() => toggle(a)} />
                 <span className="bx" aria-hidden="true" />
                 {AREA_LABELS[a]}
-                <span className="n">{counts.areas[a] ?? 0}</span>
+                {known && <span className="n">{counts.areas[a] ?? 0}</span>}
               </label>
             </li>
           ))}
@@ -38,7 +40,7 @@ export default function Rail({ counts, filters, onChange }: Props) {
           {kinds.map((c) => (
             <li key={c} className="kind">
               {CATEGORY_LABELS[c]}
-              <span className="n">{counts.kinds[c] ?? 0}</span>
+              {known && <span className="n">{counts.kinds[c] ?? 0}</span>}
             </li>
           ))}
         </ul>

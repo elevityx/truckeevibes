@@ -178,7 +178,7 @@ test.describe('R1b home layout', () => {
   test('tiles: 8 in order, 4 columns from 760 px and 2 below; Kids says Soon', async ({ page }, info) => {
     await page.clock.install({ time: NOW });
     await page.goto('/');
-    const tiles = page.locator('nav[aria-label="Lists"] .tile');
+    const tiles = page.locator('[aria-label="Lists"] .tile');
     await expect(tiles).toHaveCount(8);
     await expect(tiles.nth(4)).toContainText('Soon');
     const lefts = await tiles.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().left)));
@@ -218,4 +218,35 @@ test.describe('R1b home layout', () => {
     await page.locator('button.drow').first().click();
     await expect(page.getByRole('dialog', { name: 'Event details' })).toBeVisible();
   });
+});
+
+test.describe('AC-R1b-15 the Filters button never covers a control (phone)', () => {
+  for (const [name, url] of [['home', '/'], ['no-results', '/?free=1&when=date:2026-10-17'], ['error', `${VARIANT.error}/`]] as const) {
+    test(`${name}: first view and page end`, async ({ page }, info) => {
+      test.skip(!info.project.name.startsWith('phone'), 'phone only');
+      await page.clock.install({ time: NOW });
+      await page.goto(url);
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(250);
+      const overlaps = () =>
+        page.evaluate(() => {
+          const fab = document.querySelector('.fbtn') as HTMLElement | null;
+          if (!fab) return [];
+          const f = fab.getBoundingClientRect();
+          const bad: string[] = [];
+          for (const el of document.querySelectorAll<HTMLElement>('a, button, input, summary')) {
+            if (el === fab || fab.contains(el)) continue;
+            const cs = getComputedStyle(el);
+            const r = el.getBoundingClientRect();
+            if (cs.display === 'none' || cs.visibility === 'hidden' || r.width === 0 || r.height === 0) continue;
+            if (r.left < f.right && r.right > f.left && r.top < f.bottom && r.bottom > f.top) bad.push(`${el.tagName} "${(el.textContent ?? '').trim().slice(0, 30)}"`);
+          }
+          return bad;
+        });
+      if (name === 'home') expect(await overlaps()).toEqual([]);
+      else await expect(page.locator('.fbtn')).toHaveCount(0); // hidden while the state card is the content
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      expect(await overlaps()).toEqual([]);
+    });
+  }
 });

@@ -3,9 +3,19 @@ import { LIST_ROUTES_LIVE } from '@/config/features';
 import { LISTS, type ListSlug } from '@/lib/lists';
 
 interface Props {
-  counts: Record<ListSlug, number>;
+  /** null = unknown: no counts are shown. */
+  counts: Record<ListSlug, number> | null;
   active: ListSlug;
   onSelect(slug: ListSlug): void;
+}
+
+/** While the routes are off the tiles are a group of toggle buttons; once they are links (R2a) they are a nav. */
+function Wrap({ children }: { children: React.ReactNode }) {
+  return LIST_ROUTES_LIVE ? (
+    <nav className="tiles" aria-label="Lists">{children}</nav>
+  ) : (
+    <div className="tiles" role="group" aria-label="Lists">{children}</div>
+  );
 }
 
 /**
@@ -14,16 +24,16 @@ interface Props {
  */
 export default function Tiles({ counts, active, onSelect }: Props) {
   return (
-    <section aria-label="The lists" className="tiles-sec">
+    <div className="tiles-sec">
       <p className="eyebrow">The lists</p>
-      <nav className="tiles" aria-label="Lists">
+      <Wrap>
         {LISTS.map((l) => {
           const on = l.slug === active;
           const inner = (
             <>
               <span className="glyph" aria-hidden="true"><EventGlyph categories={l.glyph ? [l.glyph] : []} /></span>
               <span className="lb">{l.label}</span>
-              <span className="n">{l.ready ? counts[l.slug] : 'Soon'}</span>
+              {!l.ready ? <span className="n">Soon</span> : counts ? <span className="n">{counts[l.slug]}</span> : null}
             </>
           );
           const cls = `tile${on ? ' on' : ''}${l.ready ? '' : ' soon'}`;
@@ -42,7 +52,7 @@ export default function Tiles({ counts, active, onSelect }: Props) {
             </button>
           );
         })}
-      </nav>
-    </section>
+      </Wrap>
+    </div>
   );
 }

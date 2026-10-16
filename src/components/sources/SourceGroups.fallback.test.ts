@@ -20,4 +20,8 @@ describe('AC-R1b-CO1 SourceGroups with no rows', () => {
     expect(out).toContain('1 read daily, 0 not yet, 0 link only.');
     expect(out).not.toContain('Loading the calendar list');
   });
+  it('a group with no rows says so once the list is known (R1b-1 #8)', () => {
+    const out = h([{ name: 'Example', homepageUrl: 'https://example.org/', status: 'active' }]);
+    expect(out.match(/No calendars listed right now\./g)).toHaveLength(2);
+  });
 });

@@ -36,4 +36,9 @@ describe('AC-R1b-03 hero', () => {
     const h = { n7: 1, nw: 0, total: 1, lastStart: '2026-10-15' };
     expect(heroProof(h, 1, 'desktop')).toBe('1 thing in the next 7 days, 0 this weekend. 1 event through Oct 15 from 1 local calendar, checked daily.');
   });
+  it('k = 0 omits the calendars clause (AC-R1b-14)', () => {
+    const h = { n7: 9, nw: 5, total: 35, lastStart: '2026-11-11' };
+    expect(heroProof(h, 0, 'desktop')).toBe('9 things in the next 7 days, 5 this weekend. 35 events through Nov 11, checked daily.');
+    expect(heroProof(h, 0, 'phone')).toBe('9 things in 7 days, 5 this weekend. 35 events, checked daily.');
+  });
 });

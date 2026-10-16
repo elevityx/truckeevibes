@@ -51,7 +51,7 @@ interface Props {
   onOpen(id: string): void;
 }
 
-function DayHead({ date, count, today, tz }: { date: string; count: number; today: boolean; tz: string }) {
+export function DayHead({ date, count, today, tz }: { date: string; count: number; today: boolean; tz: string }) {
   const iso = new Date(startOfDay(date, tz) + 12 * 3_600_000).toISOString();
   return (
     <div className="dayh">

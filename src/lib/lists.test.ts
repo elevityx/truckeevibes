@@ -27,7 +27,7 @@ describe('AC-R1b-01 LISTS', () => {
     expect(listBySlug('kids')!.ready).toBe(false);
   });
   it('glyph keys follow the table', () => {
-    expect(LISTS.map((l) => l.glyph)).toEqual([null, 'arts', 'music', 'nightlife', 'family', 'family', 'outdoors', 'food-drink']);
+    expect(LISTS.map((l) => l.glyph)).toEqual([null, 'arts', 'music', 'twentyone', 'family', 'family', 'outdoors', 'food-drink']);
   });
   it('the rules', () => {
     expect(inList('kids', { categories: ['kids'], age: '21_plus' })).toBe(false);

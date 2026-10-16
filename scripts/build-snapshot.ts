@@ -38,6 +38,11 @@ async function sourceRows(url: string, key: string): Promise<SnapshotSource[]> {
 }
 
 async function main() {
+  // The forced live failure is for visual test builds only: it needs a fixture and can never be set on a Pages build.
+  if (process.env.NEXT_PUBLIC_FORCE_LIVE_ERROR && (process.env.CF_PAGES || !process.env.SNAPSHOT_FIXTURE)) {
+    console.error('snapshot: NEXT_PUBLIC_FORCE_LIVE_ERROR is a test-only flag; it needs SNAPSHOT_FIXTURE and cannot be set on a Pages build');
+    process.exit(1);
+  }
   const fixture = process.env.SNAPSHOT_FIXTURE ?? '';
   if (fixture) {
     mkdirSync(dirname(OUT), { recursive: true });

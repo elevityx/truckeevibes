@@ -19,6 +19,7 @@ const GLYPHS: Record<string, ReactNode> = {
   sports: <><path d="M3 10v4M6 8v8M18 8v8M21 10v4M6 12h12" /></>,
   nightlife: <><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z" /></>,
   learning: <><path d="M4 5h6a3 3 0 0 1 3 3v12a2 2 0 0 0-2-2H4zM20 5h-6a3 3 0 0 0-3 3v12a2 2 0 0 1 2-2h7z" /></>,
+  twentyone: <><path d="M6 3h12l-1 8a5 5 0 0 1-10 0zM12 16v5M8 21h8" /></>,
   holiday: <><rect x="3" y="9" width="18" height="12" rx="1" /><path d="M2 9h20v-3H2zM12 6v15M12 6c-2-4-6-3-5 0M12 6c2-4 6-3 5 0" /></>,
   'halloween-fall': <><path d="M12 7c4-1 8 2 8 7 0 4-3 7-8 7s-8-3-8-7c0-5 4-8 8-7zM12 7c0-2 1-3 3-3" /></>,
 };
