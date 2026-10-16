@@ -34,9 +34,13 @@ describe('AC-R1b-07 EventRow', () => {
     const none = html({});
     for (const t of ['>Free<', '>21+<', '>18+<', 'Worth the drive']) expect(none).not.toContain(t);
   });
-  it('aria-label: today pattern plus ", 18 and over"', () => {
-    expect(html({ age: '18_plus' })).toContain(', 18 and over"');
-    expect(html({ age: '21_plus' })).toContain(', 21 and over"');
+  it('the accessible name is the visible text (label-in-name), plus a hidden date and age words', () => {
+    const h = html({ age: '18_plus' });
+    expect(h).not.toContain('aria-label');
+    expect(h.indexOf('Example Event')).toBeGreaterThan(-1);
+    expect(h).toMatch(/<span class="sr-only">[^<]*18 and over<\/span>/);
+    expect(html({ age: '21_plus' })).toMatch(/<span class="sr-only">[^<]*21 and over<\/span>/);
+    expect(h.indexOf('class="t"')).toBeLessThan(h.indexOf('class="sr-only"'));
   });
   it('a button, with the short venue and town', () => {
     const h = html({});
@@ -53,5 +57,13 @@ describe('AC-R1b-07 list.css', () => {
     expect(css).not.toContain('text-overflow: ellipsis');
     expect(css).not.toContain('text-overflow:ellipsis');
     expect(css).not.toContain('-webkit-line-clamp');
+  });
+});
+
+describe('R1b-1 #6 list.css is on tokens', () => {
+  const css = readFileSync(join(process.cwd(), 'src/components/list/list.css'), 'utf8');
+  it('no raw px font sizes and no px radii', () => {
+    expect(css.match(/font-size:\s*\d[\d.]*px/g) ?? []).toEqual([]);
+    expect(css.match(/border-radius:\s*\d[\d.]*px/g) ?? []).toEqual([]);
   });
 });

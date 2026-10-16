@@ -1,6 +1,7 @@
 // AC-R1a-04, 06, 07, 08. BUILD-TIME checks: they read the static export in out/, so run `npm run build` first (CI `web` does).
 import { describe, expect, it } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { REPO_ROOT } from './_testlib.mjs';
 
@@ -103,5 +104,32 @@ describe('AC-R1b-CO1 sources build fallback [build-time]', () => {
     const h = html('sources/index.html');
     expect(h).not.toContain('>0 read daily');
     expect(h).not.toMatch(/class="cnt">0</);
+  });
+});
+
+// AC-R1b-14 [build-time]: built with an empty snapshot (no env), the home page has no zero counts.
+describe('AC-R1b-14 home with an empty snapshot [build-time]', () => {
+  it('out/index.html has no "0 local calendars" and no tile count 0', () => {
+    const h = html('index.html');
+    expect(h).not.toMatch(/(^|\D)0 local calendars/);
+    expect(h).not.toMatch(/<span class="n">0<\/span>/);
+  });
+});
+
+// AC-R1b-16: the force-error flag cannot reach a production build.
+describe('AC-R1b-16 NEXT_PUBLIC_FORCE_LIVE_ERROR guard', () => {
+  const run = (env) => spawnSync('npm', ['run', 'snapshot'], { cwd: REPO_ROOT, encoding: 'utf8', env: { ...process.env, ...env }, timeout: 60000 });
+  it('exits 1 with CF_PAGES=1 and the flag set', () => {
+    const r = run({ CF_PAGES: '1', NEXT_PUBLIC_FORCE_LIVE_ERROR: '1', SNAPSHOT_FIXTURE: 'scripts/fixtures/snapshot-empty.json' });
+    expect(r.status).toBe(1);
+    expect(`${r.stdout}${r.stderr}`).toContain('NEXT_PUBLIC_FORCE_LIVE_ERROR');
+  });
+  it('exits 1 with the flag set and no SNAPSHOT_FIXTURE', () => {
+    const r = run({ NEXT_PUBLIC_FORCE_LIVE_ERROR: '1', SNAPSHOT_FIXTURE: '', CF_PAGES: '' });
+    expect(r.status).toBe(1);
+  });
+  it('is fine with the fixture and no CF_PAGES', () => {
+    const r = run({ NEXT_PUBLIC_FORCE_LIVE_ERROR: '1', SNAPSHOT_FIXTURE: 'scripts/fixtures/snapshot-visual.json', CF_PAGES: '' });
+    expect(r.status).toBe(0);
   });
 });

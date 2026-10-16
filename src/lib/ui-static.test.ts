@@ -96,10 +96,10 @@ describe('R1a: the shell is server-only', () => {
 });
 
 describe('AC-R1b-13 no legacy color aliases outside the back office', () => {
-  it('no file under src/ except the admin styles references --bg, --text, --accent, --surface-2 or --on-accent', () => {
+  it('no file under src/ except admin-legacy.css and admin.css references --bg, --text, --accent, --surface-2 or --on-accent', () => {
     const LEGACY = /var\(\s*--(bg|text|accent|surface-2|on-accent)\b|--(bg|text|accent|surface-2|on-accent)\s*:/;
     const hits = walk(join(ROOT, 'src'))
-      .filter((f) => /\.(css|tsx?)$/.test(f) && !f.includes('/components/admin/') && !/ui-static\.test\.ts$/.test(f))
+      .filter((f) => /\.(css|tsx?)$/.test(f) && !/components\/admin\/(admin-legacy|admin)\.css$/.test(f) && !/ui-static\.test\.ts$/.test(f))
       .filter((f) => LEGACY.test(readFileSync(f, 'utf8')));
     expect(hits.map((f) => f.slice(ROOT.length + 1))).toEqual([]);
   });

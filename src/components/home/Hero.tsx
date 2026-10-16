@@ -19,11 +19,13 @@ const calendars = (k: number) => `${k} local ${k === 1 ? 'calendar' : 'calendars
 /** The proof line as three parts, so the middle can be the /sources/ link. */
 export function proofParts(h: HeroCounts, k: number, mode: 'desktop' | 'phone'): { before: string; link: string; after: string } {
   const last = h.lastStart ? ` through ${monthDay(h.lastStart)}` : '';
-  const before =
+  const head =
     mode === 'desktop'
-      ? `${things(h.n7)} in the next 7 days, ${h.nw} this weekend. ${events(h.total)}${last} from `
-      : `${things(h.n7)} in 7 days, ${h.nw} this weekend. ${events(h.total)} from `;
-  return { before, link: calendars(k), after: ', checked daily.' };
+      ? `${things(h.n7)} in the next 7 days, ${h.nw} this weekend. ${events(h.total)}${last}`
+      : `${things(h.n7)} in 7 days, ${h.nw} this weekend. ${events(h.total)}`;
+  // An unknown source count (0) drops the clause; "0 local calendars" is never printed.
+  if (k <= 0) return { before: head, link: '', after: ', checked daily.' };
+  return { before: `${head} from `, link: calendars(k), after: ', checked daily.' };
 }
 
 export function heroProof(h: HeroCounts, k: number, mode: 'desktop' | 'phone'): string {
@@ -37,7 +39,8 @@ interface Props {
   /** Events in the active list, and the Pacific date (YYYY-MM-DD) of the last start. */
   listCount: number;
   listLast: string | null;
-  hero: HeroCounts;
+  /** null = unknown: no proof line. */
+  hero: HeroCounts | null;
   activeSources: number;
 }
 
@@ -46,7 +49,7 @@ function Proof({ h, k, mode }: { h: HeroCounts; k: number; mode: 'desktop' | 'ph
   return (
     <p className={`proof ${mode === 'desktop' ? 'dsk' : 'phn'}`}>
       {p.before}
-      <a href="/sources/">{p.link}</a>
+      {p.link && <a href="/sources/">{p.link}</a>}
       {p.after}
     </p>
   );
@@ -64,8 +67,8 @@ export default function Hero({ now, list, listCount, listLast, hero, activeSourc
         </p>
         <div className="rule" />
         <h1 className="hero">{heroLine(now)}</h1>
-        <Proof h={hero} k={activeSources} mode="desktop" />
-        <Proof h={hero} k={activeSources} mode="phone" />
+        {hero && <Proof h={hero} k={activeSources} mode="desktop" />}
+        {hero && <Proof h={hero} k={activeSources} mode="phone" />}
       </section>
     );
   }

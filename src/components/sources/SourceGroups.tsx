@@ -82,6 +82,8 @@ export default function SourceGroups({ initial }: { initial: SnapshotSource[] })
           <p className="small">{g.blurb}</p>
           {unknown && !settled ? (
             <p className="small">Loading the calendar list…</p>
+          ) : by(g.status).length === 0 ? (
+            <p className="small">No calendars listed right now.</p>
           ) : (
             <ul className="srows">
               {by(g.status).map((s) => (

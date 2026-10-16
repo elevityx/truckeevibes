@@ -46,7 +46,7 @@ describe('AC-M1-75 (b) ListApp server render', () => {
 describe('AC-R1b-04 tiles', () => {
   const snap = parseSnapshot(JSON.parse(readFileSync(join(process.cwd(), 'scripts/fixtures/snapshot-visual.json'), 'utf8')));
   const html = renderToString(createElement(ListApp, { list: 'all', ...firstPaint(snap, 'all'), picks: [] })).replace(/<!-- -->/g, '');
-  const nav = /<nav[^>]*aria-label="Lists"[^>]*>(.*?)<\/nav>/.exec(html)![1];
+  const nav = /<div[^>]*role="group"[^>]*aria-label="Lists"[^>]*>(.*?)<\/div><\/div>/.exec(html)![1];
   const tiles = [...nav.matchAll(/<(button|a)\b[^>]*class="tile[^"]*"[^>]*>.*?<\/\1>/g)].map((m) => m[0]);
   it('8 tiles in LISTS order, all buttons while the routes are not live', () => {
     expect(tiles).toHaveLength(8);
@@ -65,6 +65,19 @@ describe('AC-R1b-04 tiles', () => {
   });
   it('counts', () => {
     expect(tiles.map((t) => /<span class="n">([^<]*)<\/span>/.exec(t)![1])).toEqual(['35', '11', '10', '2', 'Soon', '1', '6', '23']);
+  });
+});
+
+describe('AC-R1b-14 empty snapshot render', () => {
+  const html = renderToString(createElement(ListApp, { ...props({ builtAt: '2026-10-15T13:04:00Z', events: [] }), list: 'all' })).replace(/<!-- -->/g, '');
+  it('no "0 local calendars", no zero tile or rail counts, no zero hero numbers', () => {
+    expect(html).not.toMatch(/(^|\D)0 local calendars/);
+    expect(html).not.toMatch(/<span class="n">0<\/span>/);
+    expect(html).not.toContain('0 things');
+  });
+  it('the tiles are a group of toggle buttons, not a nav', () => {
+    expect(html).toContain('role="group"');
+    expect(html).not.toMatch(/<nav[^>]*aria-label="Lists"/);
   });
 });
 

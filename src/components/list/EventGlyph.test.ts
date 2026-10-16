@@ -13,6 +13,11 @@ describe('AC-R1b-11 EventGlyph', () => {
     expect(new Set(all).size).toBe(12);
   });
   it('kids uses the family glyph', () => expect(svg(['kids'])).toBe(svg(['family'])));
+  it('twentyone (the 21+ tile) has its own glyph, distinct from nightlife', () => {
+    expect(svg(['twentyone'])).not.toBe(svg(['nightlife']));
+    expect(svg(['twentyone'])).not.toBe(svg([]));
+    expect(CATS.map((c) => svg([c]))).not.toContain(svg(['twentyone']));
+  });
   it('an empty list or an unknown slug gives the calendar fallback, distinct from every category', () => {
     expect(svg([])).toBe(svg(['no-such-category']));
     expect(CATS.map((c) => svg([c]))).not.toContain(svg([]));
