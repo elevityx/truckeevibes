@@ -2,7 +2,7 @@
 // `interval(e)` returns [startMs, endMs); all-day events carry startDate / endDate (endDate exclusive, as the feed/ICS gives it).
 import { describe, expect, it } from 'vitest';
 import type { VibeEvent } from '@/lib/data/types';
-import { applyFilters, interval, matchesArea, matchesFree, matchesWhen } from './predicates';
+import { applyFilters, interval, matchesArea, matchesCats, matchesFree, matchesKids, matchesQuery, matchesWhen } from './predicates';
 
 const LA = 'America/Los_Angeles';
 const T = (iso: string) => Date.parse(iso);
@@ -139,15 +139,52 @@ describe('applyFilters', () => {
   ];
   const ids = (xs: VibeEvent[]) => xs.map((x) => x.id).sort();
   it('with no filters it only drops ended events (1 h grace, like list_events)', () => {
-    expect(ids(applyFilters(list, { when: null, areas: [], free: false }, NOW, LA))).toEqual(['free-reno', 'free-truckee', 'just-ended', 'paid-truckee']);
+    expect(ids(applyFilters(list, { when: null, areas: [], cats: [], free: false, kids: false, q: '' }, NOW, LA))).toEqual(['free-reno', 'free-truckee', 'just-ended', 'paid-truckee']);
   });
   it('combines When, Area and Free with AND', () => {
-    expect(ids(applyFilters(list, { when: 'today', areas: ['truckee'], free: true }, NOW, LA))).toEqual(['free-truckee', 'just-ended']);
-    expect(ids(applyFilters(list, { when: null, areas: ['reno_carson'], free: false }, NOW, LA))).toEqual(['free-reno']);
+    expect(ids(applyFilters(list, { when: 'today', areas: ['truckee'], cats: [], free: true, kids: false, q: '' }, NOW, LA))).toEqual(['free-truckee', 'just-ended']);
+    expect(ids(applyFilters(list, { when: null, areas: ['reno_carson'], cats: [], free: false, kids: false, q: '' }, NOW, LA))).toEqual(['free-reno']);
   });
   it('does not mutate its input', () => {
     const copy = [...list];
-    applyFilters(list, { when: 'today', areas: [], free: true }, NOW, LA);
+    applyFilters(list, { when: 'today', areas: [], cats: [], free: true, kids: false, q: '' }, NOW, LA);
     expect(list).toEqual(copy);
+  });
+});
+
+describe('AC-R1c-02 cats, kids, query', () => {
+  it('matchesCats: any overlap, empty = all', () => {
+    expect(matchesCats(ev({ categories: ['music', 'arts'] }), [])).toBe(true);
+    expect(matchesCats(ev({ categories: ['music', 'arts'] }), ['arts', 'sports'])).toBe(true);
+    expect(matchesCats(ev({ categories: ['music'] }), ['arts', 'sports'])).toBe(false);
+    expect(matchesCats(ev({ categories: [] }), ['arts'])).toBe(false);
+  });
+  it('matchesKids is the Family friendly rule including the adult guard', () => {
+    expect(matchesKids(ev({ categories: [], age: 'all_ages' }))).toBe(true);
+    expect(matchesKids(ev({ categories: ['family'], age: 'unknown' }))).toBe(true);
+    expect(matchesKids(ev({ categories: ['kids'], age: 'unknown' }))).toBe(true);
+    expect(matchesKids(ev({ categories: ['kids'], age: '21_plus' }))).toBe(false);
+    expect(matchesKids(ev({ categories: ['family'], age: '18_plus' }))).toBe(false);
+    expect(matchesKids(ev({ categories: ['music'], age: 'unknown' }))).toBe(false);
+  });
+  it('matchesQuery: case and accents ignored, every token must match across title, venue and town', () => {
+    expect(matchesQuery(ev({ title: 'Cafe Night' }), 'caf\u00e9')).toBe(true);
+    expect(matchesQuery(ev({ title: 'Caf\u00e9 Night' }), 'cafe NIGHT')).toBe(true);
+    const t = ev({ title: 'Trivia Tuesdays', venue: 'Example Hall', town: 'Truckee' });
+    expect(matchesQuery(t, 'trivia truckee')).toBe(true);
+    expect(matchesQuery(t, 'trivia hall')).toBe(true);
+    expect(matchesQuery(t, 'trivia reno')).toBe(false);
+    expect(matchesQuery(t, '')).toBe(true);
+    expect(matchesQuery(ev({ title: 'A', venue: null, town: null }), 'null')).toBe(false);
+  });
+  it('applyFilters applies cats, kids and q after the list rule', () => {
+    const list = [
+      ev({ id: 'a', title: 'Bluegrass', categories: ['music'], age: 'all_ages', startsAt: '2026-11-06T02:00:00Z' }),
+      ev({ id: 'b', title: 'Trivia', categories: ['nightlife'], age: '21_plus', startsAt: '2026-11-06T02:00:00Z' }),
+    ];
+    const f = { when: null, areas: [], cats: [], free: false, kids: false, q: '' };
+    expect(applyFilters(list, { ...f, cats: ['music'] }, NOW, LA).map((e) => e.id)).toEqual(['a']);
+    expect(applyFilters(list, { ...f, kids: true }, NOW, LA).map((e) => e.id)).toEqual(['a']);
+    expect(applyFilters(list, { ...f, q: 'triv' }, NOW, LA).map((e) => e.id)).toEqual(['b']);
   });
 });

@@ -85,4 +85,21 @@ writeFileSync(
   join(DIR, 'event-pages-visual.json'),
   JSON.stringify({ v: 1, pageTotal: pages.length, redirectTotal: 0, pageCapHit: false, redirectCapHit: false, pages, redirects: [] }) + '\n',
 );
+// Three picks on fixture ids inside the week of 2026-10-15 (Oct 18, Oct 19, Oct 21). Synthetic lines (V10).
+const pickIds = [5, 7, 9].map((n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`);
+writeFileSync(
+  join(DIR, 'picks-visual.json'),
+  JSON.stringify(
+    {
+      weekOf: '2026-10-15',
+      picks: [
+        { eventId: pickIds[0], line: 'Example pick line one. A short sentence about an example event.' },
+        { eventId: pickIds[1], line: 'Example pick line two, with an evening time and a venue.' },
+        { eventId: pickIds[2], line: 'Example pick line three. Written from the facts only.' },
+      ],
+    },
+    null,
+    1,
+  ) + '\n',
+);
 console.log(`visual fixture: ${events.length} events, ${sources.length} sources`);

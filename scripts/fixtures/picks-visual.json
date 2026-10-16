@@ -1,0 +1,17 @@
+{
+ "weekOf": "2026-10-15",
+ "picks": [
+  {
+   "eventId": "00000000-0000-4000-8000-000000000005",
+   "line": "Example pick line one. A short sentence about an example event."
+  },
+  {
+   "eventId": "00000000-0000-4000-8000-000000000007",
+   "line": "Example pick line two, with an evening time and a venue."
+  },
+  {
+   "eventId": "00000000-0000-4000-8000-000000000009",
+   "line": "Example pick line three. Written from the facts only."
+  }
+ ]
+}

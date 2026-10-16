@@ -10,6 +10,8 @@ const VARIANT = { empty: 'http://127.0.0.1:4174', error: 'http://127.0.0.1:4175'
 const ROUTES: { path: string; name: string; admin?: boolean; hydrate?: boolean }[] = [
   { path: '/', name: 'home', hydrate: true },
   { path: '/?free=1&when=date:2026-10-17', name: 'home-noresults' },
+  { path: '/?event=00000000-0000-4000-8000-000000000005', name: 'home-sheet' },
+  { path: '/?q=nothing-matches-this', name: 'home-nosearch' },
   { path: `${VARIANT.empty}/`, name: 'home-empty' },
   { path: `${VARIANT.error}/`, name: 'home-error' },
   { path: '/about/', name: 'about' },
@@ -70,7 +72,7 @@ for (const r of ROUTES) {
 
     // (f) hydration: a When pill responds (list pages)
     if (r.hydrate) {
-      const pill = page.getByRole('button', { name: 'Today', exact: true });
+      const pill = page.getByRole('button', { name: /^Today/ });
       await expect(pill).toHaveAttribute('aria-pressed', 'false');
       await pill.click();
       await expect(pill).toHaveAttribute('aria-pressed', 'true');
@@ -198,6 +200,9 @@ test.describe('R1b home layout', () => {
     await page.goto('/');
     const desktop = info.project.name.startsWith('desktop');
     await expect(page.locator('aside.rail')).toBeVisible({ visible: desktop });
+    // The floating button waits until the finder has scrolled out of view.
+    await expect(page.getByRole('button', { name: /^Filters/ })).toHaveCount(0);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     await expect(page.getByRole('button', { name: /^Filters/ })).toBeVisible({ visible: !desktop });
     if (desktop) {
       const w = await page.locator('aside.rail').evaluate((e) => Math.round(e.getBoundingClientRect().width));
@@ -220,8 +225,20 @@ test.describe('R1b home layout', () => {
   });
 });
 
+test.describe('AC-R1c-CO4 the Filters button on the empty build (phone)', () => {
+  test('no visible button, link or "Last checked" line sits under it, and the button is hidden', async ({ page }, info) => {
+    test.skip(!info.project.name.startsWith('phone'), 'phone only');
+    await page.clock.install({ time: NOW });
+    await page.goto(`${VARIANT.empty}/`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(250);
+    await expect(page.getByText('Last checked')).toBeVisible();
+    await expect(page.locator('.fbtn')).toHaveCount(0);
+  });
+});
+
 test.describe('AC-R1b-15 the Filters button never covers a control (phone)', () => {
-  for (const [name, url] of [['home', '/'], ['no-results', '/?free=1&when=date:2026-10-17'], ['error', `${VARIANT.error}/`]] as const) {
+  for (const [name, url] of [['home', '/'], ['no-results', '/?free=1&when=date:2026-10-17'], ['error', `${VARIANT.error}/`], ['empty', `${VARIANT.empty}/`]] as const) {
     test(`${name}: first view and page end`, async ({ page }, info) => {
       test.skip(!info.project.name.startsWith('phone'), 'phone only');
       await page.clock.install({ time: NOW });

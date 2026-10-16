@@ -29,7 +29,7 @@ describe('AC-R1b-08 states', () => {
     expect(text(createElement(EmptyState, { builtAt: null, now: NOW, tz: TZ }))).not.toContain('Last checked');
   });
   it('No results for when=date:2026-10-17&free=1', () => {
-    const f = { when: { date: '2026-10-17' }, areas: [], free: true };
+    const f = { when: { date: '2026-10-17' }, areas: [], cats: [], free: true, kids: false, q: '' };
     const h = text(createElement(NoResultsState, { filters: f, listEvents: [row()], now: NOW, tz: TZ, onShow7d: noop, onClear: noop }));
     expect(h).toContain('Nothing listed for Saturday yet');
     expect(h).toContain('Try Next 7 days, or turn off Free: every event we have this month is missing a price, so Free hides all of them.');
@@ -38,8 +38,8 @@ describe('AC-R1b-08 states', () => {
   });
   it('No results clauses', () => {
     const c = (f: Partial<typeof EMPTY_FILTERS>, evs: VibeEvent[] = [row()]) => noResultsCopy({ ...EMPTY_FILTERS, ...f }, evs, NOW, TZ);
-    expect(c({ when: '7d', free: true })).toMatchObject({ title: 'Nothing matches yet', body: 'Turn off Free: every event we have this month is missing a price, so Free hides all of them.', showSeven: false });
-    expect(c({ when: '7d', free: true }, [row({ priceKind: 'free' })]).body).toBe('Try clearing a filter.');
+    expect(c({ when: '7d', cats: [], free: true, kids: false, q: '' })).toMatchObject({ title: 'Nothing matches yet', body: 'Turn off Free: every event we have this month is missing a price, so Free hides all of them.', showSeven: false });
+    expect(c({ when: '7d', cats: [], free: true, kids: false, q: '' }, [row({ priceKind: 'free' })]).body).toBe('Try clearing a filter.');
     expect(c({ areas: ['truckee'], when: '7d' }).body).toBe('Clear the area filter.');
     expect(c({ areas: ['truckee'], when: 'weekend' }).body).toBe('Try Next 7 days.');
     expect(c({ when: 'tomorrow' }).title).toBe('Nothing listed for Friday yet');
@@ -63,10 +63,34 @@ describe('AC-R1b-08 states', () => {
     expect(text(createElement(LoadingState, { calendars: 0 }))).toContain('Checking the calendars…');
   });
   it('No results for one day keeps its day head with a 0 count', () => {
-    const f = { when: { date: '2026-10-17' }, areas: [], free: true };
+    const f = { when: { date: '2026-10-17' }, areas: [], cats: [], free: true, kids: false, q: '' };
     const h = text(createElement(NoResultsState, { filters: f, listEvents: [row()], now: NOW, tz: TZ, onShow7d: noop, onClear: noop }));
     expect(h).toContain('Saturday, Oct 17');
     expect(h).toContain('Sat Oct 17');
     expect(h).toContain('<span class="cnt">0</span>');
+  });
+});
+
+describe('AC-R1c-05 no-results composition', () => {
+  const render = (f: Partial<typeof EMPTY_FILTERS>, evs: VibeEvent[] = [row()]) =>
+    text(createElement(NoResultsState, { filters: { ...EMPTY_FILTERS, ...f }, listEvents: evs, now: NOW, tz: TZ, onShow7d: noop, onClear: noop }));
+  it('(when=date, free): both clauses joined by ", or " and the Show Next 7 days button', () => {
+    const h = render({ when: { date: '2026-10-17' }, free: true });
+    expect(h).toContain('Try Next 7 days, or turn off Free: every event we have this month is missing a price, so Free hides all of them.');
+    expect(h).toContain('>Show Next 7 days<');
+  });
+  it('(when=7d, free): only the Free clause, no Show Next 7 days button', () => {
+    const h = render({ when: '7d', free: true });
+    expect(h).toContain('Turn off Free: every event we have this month is missing a price, so Free hides all of them.');
+    expect(h).not.toContain('Try Next 7 days');
+    expect(h).not.toContain('Show Next 7 days');
+  });
+  it('(when=7d, areas only): "Clear the area filter."', () => {
+    const h = render({ when: '7d', areas: ['truckee'] });
+    expect(h).toContain('Clear the area filter.');
+    expect(h).not.toContain('Show Next 7 days');
+  });
+  it('Clear filters counts the six keys (kind, kids and search included)', () => {
+    expect(render({ cats: ['music'], kids: true, q: 'zzz' })).toContain('>Clear filters (3)<');
   });
 });

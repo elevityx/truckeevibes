@@ -67,3 +67,11 @@ describe('R1b-1 #6 list.css is on tokens', () => {
     expect(css.match(/border-radius:\s*\d[\d.]*px/g) ?? []).toEqual([]);
   });
 });
+
+describe('AC-R1c-CO6 tile corner radius', () => {
+  const css = readFileSync(join(process.cwd(), 'src/components/list/list.css'), 'utf8');
+  it('the tile uses a radius token (tokens.json defines no 12 px; the nearest is radius-md, 10 px)', () => {
+    const tile = /\.tile\{[^}]*\}/.exec(css)![0];
+    expect(tile).toContain('border-radius:var(--radius-md)');
+  });
+});

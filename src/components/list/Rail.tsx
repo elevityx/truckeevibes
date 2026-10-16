@@ -15,6 +15,8 @@ interface Props {
 export default function Rail({ counts, filters, known = true, onChange }: Props) {
   const toggle = (a: Area) =>
     onChange({ ...filters, areas: filters.areas.includes(a) ? filters.areas.filter((x) => x !== a) : AREAS.filter((x) => x === a || filters.areas.includes(x)) });
+  const toggleCat = (c: string) =>
+    onChange({ ...filters, cats: filters.cats.includes(c) ? filters.cats.filter((x) => x !== c) : CATEGORY_SLUGS.filter((x) => x === c || filters.cats.includes(x)) });
   const order = (c: string) => CATEGORY_SLUGS.indexOf(c);
   const kinds = [...CATEGORY_SLUGS].sort((a, b) => (counts.kinds[b] ?? 0) - (counts.kinds[a] ?? 0) || order(a) - order(b));
   return (
@@ -38,9 +40,13 @@ export default function Rail({ counts, filters, known = true, onChange }: Props)
         <h3 className="eyebrow">Kind</h3>
         <ul>
           {kinds.map((c) => (
-            <li key={c} className="kind">
-              {CATEGORY_LABELS[c]}
-              {known && <span className="n">{counts.kinds[c] ?? 0}</span>}
+            <li key={c}>
+              <label>
+                <input type="checkbox" checked={filters.cats.includes(c)} onChange={() => toggleCat(c)} />
+                <span className="bx" aria-hidden="true" />
+                {CATEGORY_LABELS[c]}
+                {known && <span className="n">{counts.kinds[c] ?? 0}</span>}
+              </label>
             </li>
           ))}
         </ul>
