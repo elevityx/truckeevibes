@@ -1,8 +1,12 @@
 import type { Metadata, Viewport } from 'next';
 import { Atkinson_Hyperlegible_Next, Bricolage_Grotesque } from 'next/font/google';
+import localFont from 'next/font/local';
 import './globals.css';
 
 const bricolage = Bricolage_Grotesque({ subsets: ['latin'], weight: ['700', '800'], variable: '--font-bricolage', display: 'swap', preload: false });
+// The wordmark only: Bricolage ExtraBold at width 90 / optical size 96 (the approved mockup's setting), subset to the letters of
+// "TruckeeVibes" (about 1 KB). Everything else in the display face comes from the Google font above. OFL: see scripts/og/fonts.
+const wordmark = localFont({ src: './fonts/BricolageWordmark.woff2', weight: '800', variable: '--font-wordmark', display: 'swap' });
 const atkinson = Atkinson_Hyperlegible_Next({ subsets: ['latin'], weight: ['400', '700'], variable: '--font-atkinson', display: 'swap' });
 
 const TITLE = 'TruckeeVibes: events in Truckee and North Lake Tahoe';
@@ -34,7 +38,7 @@ export const viewport: Viewport = { width: 'device-width', initialScale: 1, them
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${bricolage.variable} ${atkinson.variable}`}>
+    <html lang="en" className={`${bricolage.variable} ${wordmark.variable} ${atkinson.variable}`}>
       <body>{children}</body>
     </html>
   );

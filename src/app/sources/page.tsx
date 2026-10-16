@@ -16,17 +16,22 @@ export default function SourcesPage() {
   return (
     <>
       <Header current="sources" />
-      <main className="wrap pg">
-        <p className="eyebrow">Sources</p>
-        <h1 className="h1">The calendars we read</h1>
-        <SourceGroups initial={sources} />
-        <aside className="aside" id="add">
-          <p className="eyebrow">Organizers</p>
-          <h2 className="h2">Ask to be included</h2>
-          <p>Send us your public calendar page. To fix or remove a listing, use the same mailbox.</p>
-          <a className="btn" href="mailto:takedown@truckeevibes.com?subject=Add%20my%20calendar">Ask to be included</a>
-          <p><a href="/bot/">Our bot</a></p>
-        </aside>
+      <main className="wrap">
+        <div className="pg">
+          <p className="eyebrow">Sources</p>
+          <div className="rule" />
+          <h1 className="hero">The calendars we read</h1>
+          <SourceGroups initial={sources} />
+          <aside className="card" id="add">
+            <p className="eyebrow">Organizers</p>
+            <h2 className="h2">Ask to be included</h2>
+            <p className="small" style={{ margin: 0 }}>Send us your public calendar page. To fix or remove a listing, use the same mailbox.</p>
+            <div className="row">
+              <a className="btn" href="mailto:takedown@truckeevibes.com?subject=Add%20my%20calendar">Ask to be included</a>
+              <a className="btn ghost" href="/bot/">Our bot</a>
+            </div>
+          </aside>
+        </div>
       </main>
       <Footer />
     </>

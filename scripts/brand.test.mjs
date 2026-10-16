@@ -1,6 +1,6 @@
 // AC-R1a-05: the committed brand files.
 import { describe, expect, it } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { REPO_ROOT } from './_testlib.mjs';
 
@@ -28,4 +28,45 @@ describe('AC-R1a-05 brand files', () => {
         { src: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
       ],
     }));
+});
+
+// AC-R1a-16..19 (font hygiene): name tables and license notices.
+function psName(file) {
+  const b = readFileSync(file);
+  const n = b.readUInt16BE(4);
+  let nameOff = 0;
+  for (let i = 0; i < n; i++) if (b.toString('latin1', 12 + i * 16, 16 + i * 16) === 'name') nameOff = b.readUInt32BE(20 + i * 16);
+  const count = b.readUInt16BE(nameOff + 2);
+  const strOff = nameOff + b.readUInt16BE(nameOff + 4);
+  for (let i = 0; i < count; i++) {
+    const r = nameOff + 6 + i * 12;
+    if (b.readUInt16BE(r + 6) === 6) {
+      const len = b.readUInt16BE(r + 8);
+      const off = strOff + b.readUInt16BE(r + 10);
+      const raw = Buffer.from(b.subarray(off, off + len));
+      return b.readUInt16BE(r) === 1 ? raw.toString('latin1') : raw.swap16().toString('utf16le');
+    }
+  }
+  return '';
+}
+describe('AC-R1a-19 fonts', () => {
+  const dir = join(REPO_ROOT, 'scripts/og/fonts');
+  it('the two Atkinson files have distinct PostScript names', () => {
+    const a = psName(join(dir, 'AtkinsonHyperlegibleNext-Regular.ttf'));
+    const b = psName(join(dir, 'AtkinsonHyperlegibleNext-Bold.ttf'));
+    expect(a).toContain('Atkinson');
+    expect(b).toContain('Bold');
+    expect(a).not.toBe(b);
+  });
+  it('each OFL file carries its family Copyright line', () => {
+    const files = readdirSync(dir).filter((f) => /^OFL.*\.txt$/.test(f));
+    expect(files.length).toBeGreaterThanOrEqual(2);
+    for (const f of files) {
+      const t = readFileSync(join(dir, f), 'utf8');
+      const family = /Atkinson/i.test(f) ? 'Atkinson Hyperlegible Next' : 'Bricolage Grotesque';
+      expect(t, f).toMatch(new RegExp(`Copyright[^\\n]*${family}`));
+    }
+    expect(files.some((f) => /Atkinson/i.test(f))).toBe(true);
+    expect(files.some((f) => /Bricolage/i.test(f))).toBe(true);
+  });
 });

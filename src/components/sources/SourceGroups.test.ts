@@ -21,7 +21,7 @@ const html = renderToStaticMarkup(createElement(SourceGroups, { initial: fixture
 
 describe('AC-R1a-10 SourceGroups', () => {
   it('renders three groups with counts 4, 2, 8 in order and their status labels', () => {
-    const counts = [...html.matchAll(/<h2[^>]*>([^<]*)<span class="count">(\d+)<\/span><\/h2>/g)].map((m) => [m[1].trim(), m[2]]);
+    const counts = [...html.matchAll(/<h2[^>]*>([^<]*)<\/h2><span class="cnt">(\d+)<\/span>/g)].map((m) => [m[1].trim(), m[2]]);
     expect(counts).toEqual([['Calendars we read', '4'], ['Not included yet', '2'], ['Link only', '8']]);
     expect(html).toContain('Read every morning');
     expect(html).toContain('Not included yet');

@@ -3,12 +3,14 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
+const state = vi.hoisted(() => ({ sources: [] as unknown[] }));
 const sources = [
   ...Array.from({ length: 4 }, (_, i) => ({ name: `Example A${i}`, homepageUrl: 'https://example.org/a', status: 'active' as const })),
   ...Array.from({ length: 2 }, (_, i) => ({ name: `Example P${i}`, homepageUrl: 'https://example.org/p', status: 'paused' as const })),
   ...Array.from({ length: 8 }, (_, i) => ({ name: `Example L${i}`, homepageUrl: 'https://example.org/l', status: 'link_only' as const })),
 ];
-vi.mock('@/lib/data/snapshotFile', () => ({ readBuildSnapshot: () => ({ builtAt: null, events: [], sources }) }));
+state.sources = sources;
+vi.mock('@/lib/data/snapshotFile', () => ({ readBuildSnapshot: () => ({ builtAt: null, events: [], sources: state.sources }) }));
 
 import AboutPage from './page';
 
@@ -36,5 +38,17 @@ describe('AC-R1a-09 About', () => {
   it('has exactly one plain mailto:takedown@ link (the button adds only a subject)', () => {
     expect(html.match(/href="mailto:takedown@truckeevibes\.com"/g)).toHaveLength(1);
     expect(html.match(/href="mailto:takedown@truckeevibes\.com\?subject=Add%20my%20calendar"/g)).toHaveLength(1);
+  });
+});
+
+describe('AC-R1a-18 About with no sources', () => {
+  it('an empty sources list omits the count sentence and never says 0 calendars', () => {
+    state.sources = [];
+    const h = renderToStaticMarkup(createElement(AboutPage));
+    const t = h.replace(/<[^>]*>/g, '');
+    expect(t).not.toContain('0 calendars');
+    expect(t).not.toContain('Today we read');
+    expect(t).toContain('shows each one and its status');
+    state.sources = sources;
   });
 });

@@ -57,8 +57,9 @@ describe('AC-R1a-06 head [build-time]', () => {
 describe('AC-R1a-07 header [build-time]', () => {
   const h = () => html('about/index.html');
   it('has one home link with its label, /sources/ and /about/ (current)', () => {
-    expect(h().match(/<a [^>]*aria-label="TruckeeVibes home"[^>]*>/g)).toHaveLength(1);
-    expect(h().match(/<a [^>]*href="\/"[^>]*>/g)).toHaveLength(1);
+    const header = /<header[\s\S]*?<\/header>/.exec(h())[0];
+    expect(header.match(/<a [^>]*aria-label="TruckeeVibes home"[^>]*>/g)).toHaveLength(1);
+    expect(header.match(/<a [^>]*href="\/"[^>]*>/g)).toHaveLength(1);
     expect(h()).toMatch(/<header[\s\S]*href="\/sources\/"[\s\S]*<\/header>/);
     expect(h()).toMatch(/<header[\s\S]*<a href="\/about\/" aria-current="page">About<\/a>[\s\S]*<\/header>/);
   });
