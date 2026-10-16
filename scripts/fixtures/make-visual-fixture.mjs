@@ -7,7 +7,6 @@ import { fileURLToPath } from 'node:url';
 
 const DIR = dirname(fileURLToPath(import.meta.url));
 const BUILT_AT = '2026-10-15T13:04:00Z';
-const ISO = (d, hhmm) => `${d}T${hhmm}:00.000Z`; // all times are UTC instants; Pacific is 7 hours behind in October
 
 // [pacific date, start hour (24h Pacific), town, area, categories, age]
 const CATS = ['arts', 'music', 'food-drink', 'nightlife', 'outdoors', 'learning', 'halloween-fall', 'sports', 'markets'];
