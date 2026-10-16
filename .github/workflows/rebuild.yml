@@ -1,0 +1,13 @@
+name: Daily rebuild
+on:
+  schedule: [{ cron: '0 13 * * *' }]   # 6 am PDT / 5 am PST
+  workflow_dispatch: {}
+permissions: {}
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Call the Pages deploy hook
+        env: { HOOK: '${{ secrets.PAGES_DEPLOY_HOOK_URL }}' }
+        run: test -n "$HOOK" && curl -fsS -X POST --max-time 20 "$HOOK" -o /dev/null -w 'status=%{http_code}\n'

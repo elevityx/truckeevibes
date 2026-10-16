@@ -35,7 +35,7 @@ Local env: copy `.env.example` to `.env.local`. It holds the `NEXT_PUBLIC_*` val
 - `supabase/migrations` (schema; never edited after merge), `supabase/tests` (pgTAP), `supabase/functions` (Edge Functions and `_shared/`), `supabase/seed.sql` (fake local data only)
 - `scripts` (repo checks and their tests), `ingest` (ingest code and synthetic `fixtures/`)
 - `public/robots.txt` and `public/sitemap.xml` are hand-written: add every new indexable page to the sitemap and keep `/admin/` out of it.
-- `.github/workflows/ci.yml`
+- `.github/workflows/` (`ci.yml`, `ingest.yml`, `rebuild.yml`, signer workflows)
 
 ## Invariants (do not break)
 - V1 Every table in `public`/`private` has RLS enabled and forced; anon/authenticated have no table privileges at all. Public reads go only through `list_events`, `list_sources_public` and (M3) `feed_lights_snapshot`.
@@ -55,6 +55,7 @@ Conventions: every function sets `search_path = ''` and uses fully qualified nam
 
 ## CI
 `.github/workflows/ci.yml`: job `web` (install, lint, typecheck, build, test, Deno tests, audit, repo checks) and job `db` (start the local stack, reset, pgTAP). It uses no secrets and no `pull_request_target`; every action is pinned to a commit SHA.
+`.github/workflows/rebuild.yml`: a daily (13:00 UTC) and manual call of the Cloudflare Pages deploy hook so the static site rebuilds from fresh data. One `curl` step, `permissions: {}`, no checkout, no `uses:`, no package manager; its only secret is `PAGES_DEPLOY_HOOK_URL`. `scripts/check-workflows.mjs` enforces this.
 
 ## Workflow
 - Changes go through pull requests to `main`. Agents never deploy, never touch production or a hosted database, and never handle secrets. Merging and deploying are maintainer-only.
