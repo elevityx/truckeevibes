@@ -5,16 +5,27 @@
 update public.categories set sort = sort + 1 where sort >= 5;
 insert into public.categories (slug, label, sort, noun) values ('kids', 'Kids', 5, 'kids'' event');
 
--- 2. Notice parity function (TS twin: ingest/core/notices.ts, R4b).
-create function private.is_notice_title(p text) returns boolean
+-- 2. Notice matcher (Amendment R4a-1; TS twin: ingest/core/notices.ts, R4b). A notice is: (a) a whole word closed/closing directly
+-- followed by at|early|today|tonight|for|until, with no ':' '(' ',' in the title; (b) holiday hours / special hours; (c) 'No <rest>
+-- tonight|today' only when a same-source, same-Pacific-day event titled <rest> exists.
+create function private.notice_rest(p text) returns text
 language sql immutable set search_path = '' as $$
-  select p is not null
-     and lower(p) !~ '(closing party|season closing|no cover|no host)'
-     and (lower(p) ~ 'clos(ed|ing) (at|early|today|tonight)'
-       or lower(p) ~ '\mclosed\M.*\m(today|tonight|for)\M'
-       or lower(p) ~ 'kitchen closed'
-       or lower(p) ~ '(holiday|special) hours'
-       or lower(p) ~ '^no\s+.+\s+(tonight|today)\M')
+  select nullif(btrim(regexp_replace(substring(lower(btrim(p)) from '^no\s+(.+)\s+(?:tonight|today)$'), '\s+', ' ', 'g')), '')
+$$;
+create function private.notice_sibling_exists(p_title text, p_source uuid, p_day date, p_exclude uuid default null) returns boolean
+language sql stable set search_path = '' as $$
+  select private.notice_rest(p_title) is not null and exists (
+    select 1 from public.events e join public.source_events se on se.cluster_id = e.id
+     where se.source_id = p_source and e.start_day = p_day and e.merged_into is null
+       and e.status not in ('rejected', 'hidden') and (p_exclude is null or e.id <> p_exclude)
+       and btrim(regexp_replace(lower(e.title), '\s+', ' ', 'g')) = private.notice_rest(p_title))
+$$;
+create function private.is_notice_title(p text, p_sibling boolean default false) returns boolean
+language sql immutable set search_path = '' as $$
+  select p is not null and (
+       (lower(p) ~ '\mclos(ed|ing)\M\s+(at|early|today|tonight|for|until)\M' and p !~ '[:(,]')
+    or lower(p) ~ '(holiday|special) hours'
+    or (coalesce(p_sibling, false) and private.notice_rest(p) is not null))
 $$;
 
 -- 3. Reason-code vocabulary (the closed list; TS twin: ingest/core/reasonCodes.ts, R4b).
@@ -66,9 +77,6 @@ begin
     v_title := case when v_cut = '' then left(v_title, 80) else v_cut end;
   end if;
   if char_length(private.normalize_title(v_title)) < 3 then return jsonb_build_object('reject', 'title'); end if;
-  -- R4a begin
-  if private.is_notice_title(v_title) then return jsonb_build_object('reject', 'notice'); end if;
-  -- R4a end
 
   -- allDay, startsAt, endsAt
   if private.jt(item, 'allDay') = 'boolean' then v_all_day := (item ->> 'allDay')::boolean;
@@ -105,6 +113,11 @@ begin
   end if;
   if v_start < now() - interval '1 day' or v_start > now() + interval '120 days' then return jsonb_build_object('reject', 'window'); end if;
   if v_end is not null and (v_end <= v_start or v_end > v_start + interval '120 days') then return jsonb_build_object('reject', 'ends_at'); end if;
+  -- R4a begin
+  if private.is_notice_title(v_title, private.notice_sibling_exists(v_title, s.id, (v_start at time zone v_tz)::date)) then
+    return jsonb_build_object('reject', 'notice');
+  end if;
+  -- R4a end
 
   -- url must be https, valid, and on an allowed host (or a subdomain of one); ticketUrl only needs to be valid
   if private.jt(item, 'url') <> 'null' then
@@ -191,6 +204,10 @@ begin
     if exists (select 1 from jsonb_array_elements(item -> 'tagReasons') c where jsonb_typeof(c) <> 'string') then return jsonb_build_object('reject', 'tag_reasons'); end if;
     v_reasons := array(select c from jsonb_array_elements_text(item -> 'tagReasons') with ordinality t(c, o)
                         where private.valid_reason_code(c) group by c order by min(o) limit 16);
+  end if;
+  -- DR12 mirror: an adult-age item or one carrying an adult/conflict reason never keeps kids or family (fail-closed)
+  if v_age in ('18_plus', '21_plus') or exists (select 1 from unnest(v_reasons) r where r like 'conflict:%' or r like 'age:21%' or r like 'age:18%') then
+    v_cats := array_remove(array_remove(v_cats, 'kids'), 'family');
   end if;
   -- R4a end
 
@@ -305,7 +322,9 @@ declare v_n integer;
 begin
   with h as (
     update public.events e set status = 'hidden', status_by_admin = true, reject_reason = 'notice'
-     where e.origin = 'ingest' and e.status = 'published' and private.is_notice_title(e.title)
+     where e.origin = 'ingest' and e.status = 'published'
+       and private.is_notice_title(e.title, exists (select 1 from public.source_events s0
+                                                    where s0.cluster_id = e.id and private.notice_sibling_exists(e.title, s0.source_id, e.start_day, e.id)))
        and not ('title' = any (e.locked_fields))
     returning e.id),
   ins as (

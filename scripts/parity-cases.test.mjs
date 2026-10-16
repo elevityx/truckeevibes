@@ -10,14 +10,15 @@ const MIG_DIR = join(REPO_ROOT, 'supabase', 'migrations');
 const MIG = readFileSync(join(MIG_DIR, readdirSync(MIG_DIR).find((f) => f.endsWith('_tags_notices.sql'))), 'utf8');
 
 describe('notices.cases.json is the SSOT for the notice parity table', () => {
-  it('has the 16 spec rows, 8 notices and 8 non-notices, with unique titles', () => {
-    expect(CASES.length).toBe(16);
+  it('has 26 rows (8 notices), with a sibling column and unique title+sibling pairs', () => {
+    expect(CASES.length).toBe(26);
     expect(CASES.filter((c) => c.notice).length).toBe(8);
-    expect(new Set(CASES.map((c) => c.title)).size).toBe(16);
-    for (const c of CASES) expect(typeof c.notice).toBe('boolean');
+    expect(new Set(CASES.map((c) => `${c.title}|${c.sibling}`)).size).toBe(26);
+    for (const c of CASES) { expect(typeof c.notice).toBe('boolean'); expect(typeof c.sibling).toBe('string'); }
+    expect(CASES.filter((c) => c.sibling).map((c) => c.title).sort()).toEqual(['NO Country Fridays Tonight', 'No Trivia Today']);
   });
-  it('every row appears in 21_tags_notices.test.sql as (\'<title>\', <bool>)', () => {
-    for (const c of CASES) expect(PGTAP, c.title).toContain(`('${c.title.replace(/'/g, "''")}', ${c.notice})`);
+  it('every row appears in 21_tags_notices.test.sql as (\'<title>\', \'<sibling>\', <bool>)', () => {
+    for (const c of CASES) expect(PGTAP, c.title).toContain(`('${c.title.replace(/'/g, "''")}', '${c.sibling.replace(/'/g, "''")}', ${c.notice})`);
   });
 });
 
