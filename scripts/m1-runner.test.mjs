@@ -17,7 +17,7 @@ describe('.github/workflows/ingest.yml (S1.10, A4-1)', () => {
   it('the real repo passes `node scripts/check-workflows.mjs` (exit 0)', () => {
     const r = runScript(join(REPO_ROOT, 'scripts', 'check-workflows.mjs'), REPO_ROOT);
     expect(r.status).toBe(0);
-    expect(r.out).toMatch(/ok \(2 files\)/); // ci.yml + ingest.yml
+    expect(r.out).toMatch(/ok \(3 files\)/); // ci.yml + ingest.yml + rebuild.yml
   });
   it('triggers: only schedule (4 runs a day) and workflow_dispatch', () => {
     const on = wf().on;
