@@ -19,6 +19,13 @@ describe('AC-M0-01 repo wiring', () => {
     for (const s of ['secret-scan', 'check-workflows', 'check-fixtures', 'check-no-html'])
       expect(scripts['check:repo']).toContain(s);
   });
+  it('AC-R2a-11 AGENTS.md invariant V1 names list_event_pages among the public reads', () => {
+    const v1 = read('AGENTS.md').split('\n').find((l) => l.startsWith('- V1 '));
+    expect(v1).toBeTruthy();
+    expect(v1).toContain('`list_event_pages`');
+    expect(v1).toContain('`list_events`');
+    expect(v1).toContain('`list_sources_public`');
+  });
   it('ci.yml exists with web and db jobs', () => {
     const ci = read('.github', 'workflows', 'ci.yml');
     expect(ci).toMatch(/^ {2}web:/m);

@@ -24,6 +24,7 @@ npm run test:functions   # Deno tests for the Edge Functions (needs Deno 2)
 npm run db:start   # local Supabase stack (sets local-only auth env; don't run bare `supabase start`)
 npm run db:reset
 npm run db:test    # pgTAP
+npm run db:test:rest # PostgREST-level manifest test (needs the running local stack; env from `supabase status -o env`)
 npm run test:visual # fixture build + Playwright visual checks (phone and desktop, light and dark); needs `npx playwright install chromium`
 npm run check:repo # secret scan, workflow rules, fixture size, no raw HTML, tokens up to date
 npm run ingest     # ingest entry point
@@ -39,7 +40,7 @@ Local env: copy `.env.example` to `.env.local`. It holds the `NEXT_PUBLIC_*` val
 - `.github/workflows/` (`ci.yml`, `ingest.yml`, `rebuild.yml`, signer workflows)
 
 ## Invariants (do not break)
-- V1 Every table in `public`/`private` has RLS enabled and forced; anon/authenticated have no table privileges at all. Public reads go only through `list_events`, `list_sources_public` and (M3) `feed_lights_snapshot`.
+- V1 Every table in `public`/`private` has RLS enabled and forced; anon/authenticated have no table privileges at all. Public reads go only through `list_events`, `list_sources_public`, `list_event_pages` and (M3) `feed_lights_snapshot`.
 - V2 Every write goes through an RPC. `svc_*` = `service_role` only (Edge Functions). `admin_*` = `private.is_admin()` (non-anonymous, `aal2`, `amr` has `password` and `totp`).
 - V3 The service/secret key exists only in Supabase Edge Function env. The Actions ingest job holds only `INGEST_HMAC_KEY` + the Pages deploy-hook URL. Cloudflare Pages holds no secret.
 - V4 No source is fetched unless it is enabled with a `permitted`/`official_api_only` disposition whose `terms_recheck_at` is in the future, and the request kind is in `allowed_methods` (DB trigger + grant + batch + `politeFetch`). Robots/terms fetches are the only exception.

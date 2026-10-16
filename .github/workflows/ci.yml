@@ -68,6 +68,10 @@ jobs:
       - run: npm ci
       - run: test -n "$DB_URL"
       - run: npm run db:test:concurrency
+      # the REST-level manifest test talks to PostgREST: hand it the local stack's public demo URL and keys (not secrets)
+      - name: Export the local API URL and keys
+        run: supabase status -o env | grep -E '^(API_URL|ANON_KEY|PUBLISHABLE_KEY)=' | tr -d '"' >> "$GITHUB_ENV"
+      - run: npm run db:test:rest
 
   visual:
     runs-on: ubuntu-latest
