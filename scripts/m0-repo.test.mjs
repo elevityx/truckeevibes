@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 import { REPO_ROOT } from './_testlib.mjs';
 
 const p = (...s) => join(REPO_ROOT, ...s);
@@ -59,5 +60,45 @@ describe('AC-M0-12 robots.txt', () => {
     const t = readFileSync(f, 'utf8');
     expect(t).toContain('Disallow: /admin/');
     expect(t).toContain('Disallow: /feed/');
+  });
+});
+
+// R1a: package scripts and the CI `visual` job are pinned. Each later web PR updates the expected lists in the same PR.
+describe('AC-R1a-15 pinned scripts, vitest include and the CI visual job', () => {
+  const scripts = JSON.parse(read('package.json')).scripts;
+  it('build:fixture and test:visual equal the Package scripts table', () => {
+    expect(scripts['build:fixture']).toBe(
+      'SNAPSHOT_FIXTURE=scripts/fixtures/snapshot-visual.json MANIFEST_FIXTURE=scripts/fixtures/event-pages-visual.json PICKS_PATH=scripts/fixtures/picks-visual.json npm run build',
+    );
+    expect(scripts['test:visual']).toBe('npm run build:fixture && playwright test');
+  });
+  it('check:repo includes the token check', () => expect(scripts['check:repo']).toContain('node scripts/build-tokens.mjs --check'));
+  it('vitest include equals the r2 value', () => {
+    expect(read('vitest.config.ts')).toContain("include: ['src/**/*.test.ts', 'ingest/**/*.test.ts', 'scripts/**/*.test.{mjs,ts}']");
+  });
+
+  const VISUAL_RUNS = ['npm ci', 'npx playwright install --with-deps chromium', 'npm run test:visual']; // R1b appends test:lhci, test:budget; R2c og:bench; R3b test:clarity
+  const steps = parseYaml(read('.github', 'workflows', 'ci.yml')).jobs.visual.steps;
+  it('jobs.visual has the pinned job keys', () => {
+    const job = parseYaml(read('.github', 'workflows', 'ci.yml')).jobs.visual;
+    expect(job['runs-on']).toBe('ubuntu-latest');
+    expect(job['timeout-minutes']).toBe(25);
+    expect(job.needs).toBeUndefined();
+    expect(job.env).toBeUndefined();
+    expect(JSON.stringify(job)).not.toContain('secrets.');
+  });
+  it('the ordered run list equals the R1a list, with no later PR step', () => {
+    expect(steps.filter((s) => s.run).map((s) => s.run)).toEqual(VISUAL_RUNS);
+  });
+  it('every npm run <x> in the visual job names a package.json script', () => {
+    for (const s of steps.filter((x) => x.run && x.run.startsWith('npm run '))) expect(scripts).toHaveProperty(s.run.slice('npm run '.length));
+  });
+  it('the last step uploads the artifact with if: always()', () => {
+    const last = steps.at(-1);
+    expect(last.uses).toMatch(/^actions\/upload-artifact@[0-9a-f]{40}$/);
+    expect(last.if).toBe('always()');
+    expect(last.with.name).toBe('visual-${{ github.sha }}');
+    expect(last.with.path).toBe('e2e-artifacts/');
+    expect(last.with['retention-days']).toBe(14);
   });
 });
