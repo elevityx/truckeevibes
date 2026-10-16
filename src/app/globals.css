@@ -5,7 +5,7 @@
 html,body{margin:0}
 [hidden]{display:none!important}
 body{background:var(--ground); color:var(--ink); font-family:var(--font-body); font-size:var(--fs-body); line-height:var(--lh-body); min-height:100dvh}
-a{color:var(--river)}
+a{color:var(--river); text-decoration:underline; text-underline-offset:3px}
 :focus-visible{outline:3px solid var(--river); outline-offset:2px}
 .sr-only{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
 .wrap{max-width:1120px; margin:0 auto; padding:0 var(--space-4)}
@@ -83,6 +83,7 @@ a{color:var(--river)}
   border-radius:var(--radius-lg); background:var(--surface); border:1px solid var(--line)}
 .srow-main{display:flex; flex-direction:column; gap:2px; min-width:0}
 .srow-main a,.srow-name{font-weight:var(--fw-row-title); overflow-wrap:anywhere}
+.srow-main a{display:inline-flex; align-items:center; min-height:44px; align-self:flex-start}
 .srow-url{font-size:var(--fs-meta); line-height:var(--lh-meta); color:var(--ink-muted); overflow-wrap:anywhere}
 .srow-status{font-size:var(--fs-small); font-weight:var(--fw-control)}
 .st-pine{color:var(--pine)}

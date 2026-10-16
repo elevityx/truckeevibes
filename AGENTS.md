@@ -7,7 +7,7 @@ truckeevibes.com is a free, plain list of events in Truckee and North Lake Tahoe
 
 ## Stack
 - Next.js 16 App Router, static export (`output: 'export'`, `trailingSlash: true`). Client pages load their data in effects only, because the build prerenders with empty env. There is no server runtime, so security comes **only** from Postgres RLS, constraints and RPC grants.
-- TypeScript, Tailwind 4 (one theme, tokens in `globals.css`).
+- TypeScript, Tailwind 4; design tokens generated from `src/styles/tokens.json` into `src/styles/tokens.css` (`node scripts/build-tokens.mjs`), Daylight + After dark by `prefers-color-scheme`.
 - Supabase: Postgres + Auth (admin password + TOTP MFA: `private.is_admin()` needs a non-anonymous `aal2` JWT whose `amr` has both a `password` and a `totp` entry, plus a row in `public.admins`). Edge Functions (Deno) arrive with the ingest work.
 - Cloudflare Pages hosts the static site.
 
@@ -24,13 +24,14 @@ npm run test:functions   # Deno tests for the Edge Functions (needs Deno 2)
 npm run db:start   # local Supabase stack (sets local-only auth env; don't run bare `supabase start`)
 npm run db:reset
 npm run db:test    # pgTAP
-npm run check:repo # secret scan, workflow rules, fixture size, no raw HTML
+npm run test:visual # fixture build + Playwright visual checks (phone and desktop, light and dark); needs `npx playwright install chromium`
+npm run check:repo # secret scan, workflow rules, fixture size, no raw HTML, tokens up to date
 npm run ingest     # ingest entry point
 ```
 Local env: copy `.env.example` to `.env.local`. It holds the `NEXT_PUBLIC_*` values (Supabase URL and publishable key, Turnstile site key, site URL), all public. The local stack also reads `SUPABASE_AUTH_SITE_URL` and `SUPABASE_AUTH_CAPTCHA_SECRET` through `supabase/config.toml`; `supabase/start-local.sh` (via `npm run db:start`) defaults them to local-only values. Never put a real captcha secret in the repo.
 
 ## Layout
-- `src/app` (pages: `/`, `/sources/`, `/bot/`, `/about/`, and noindex `/admin/`), `src/components`, `src/config/public-env.ts`
+- `src/app` (pages: `/`, `/sources/`, `/bot/`, `/about/`, and noindex `/admin/`), `src/components` (`layout/` Header and Footer, server-only), `src/config/public-env.ts`, `src/config/features.ts`
 - `src/lib/data` (the **only** Supabase caller: `admin.ts` auth, `sources.ts` RPC wrappers, `errors.ts`)
 - `supabase/migrations` (schema; never edited after merge), `supabase/tests` (pgTAP), `supabase/functions` (Edge Functions and `_shared/`), `supabase/seed.sql` (fake local data only)
 - `scripts` (repo checks and their tests), `ingest` (ingest code and synthetic `fixtures/`)
@@ -54,7 +55,7 @@ Local env: copy `.env.example` to `.env.local`. It holds the `NEXT_PUBLIC_*` val
 Conventions: every function sets `search_path = ''` and uses fully qualified names. `service_role` has no table access. Each migration ends with the exact EXECUTE allowlist, and `supabase/tests/01_acl.test.sql` asserts it.
 
 ## CI
-`.github/workflows/ci.yml`: job `web` (install, lint, typecheck, build, test, Deno tests, audit, repo checks) and job `db` (start the local stack, reset, pgTAP). It uses no secrets and no `pull_request_target`; every action is pinned to a commit SHA.
+`.github/workflows/ci.yml`: job `web` (install, lint, typecheck, build, test, Deno tests, audit, repo checks), job `db` (start the local stack, reset, pgTAP) and job `visual` (Playwright visual checks on a fixture build; uploads screenshots as an artifact). It uses no secrets and no `pull_request_target`; every action is pinned to a commit SHA.
 `.github/workflows/rebuild.yml`: a daily (13:00 UTC) and manual call of the Cloudflare Pages deploy hook so the static site rebuilds from fresh data. One `curl` step, `permissions: {}`, no checkout, no `uses:`, no package manager; its only secret is `PAGES_DEPLOY_HOOK_URL`. `scripts/check-workflows.mjs` enforces this.
 
 ## Workflow
