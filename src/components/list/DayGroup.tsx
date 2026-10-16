@@ -48,6 +48,8 @@ interface Props {
   now: number;
   /** true = list "All" with no filter active: every one of the next seven days is shown. */
   fillEmpty: boolean;
+  /** Ids of Our picks: their rows carry the "Our pick" tag. */
+  pickedIds?: ReadonlySet<string>;
   onOpen(id: string): void;
 }
 
@@ -65,7 +67,9 @@ export function DayHead({ date, count, today, tz }: { date: string; count: numbe
 }
 
 /** The day-by-day list: seven day groups, then "Later". */
-export default function DayGroup({ events, tz, now, fillEmpty, onOpen }: Props) {
+const NO_PICKS: ReadonlySet<string> = new Set();
+
+export default function DayGroup({ events, tz, now, fillEmpty, pickedIds = NO_PICKS, onOpen }: Props) {
   const [all, setAll] = useState(false);
   const plan = planDays(events, { now, tz, fillEmpty });
   const today = localDate(now, tz);
@@ -88,7 +92,7 @@ export default function DayGroup({ events, tz, now, fillEmpty, onOpen }: Props) 
             <ul className="rows">
               {d.events.map((e) => (
                 <li key={e.id}>
-                  <EventRow e={e} tz={tz} onOpen={onOpen} />
+                  <EventRow e={e} tz={tz} picked={pickedIds.has(e.id)} onOpen={onOpen} />
                 </li>
               ))}
             </ul>
@@ -112,7 +116,7 @@ export default function DayGroup({ events, tz, now, fillEmpty, onOpen }: Props) 
                 <ul className="rows">
                   {g.rows.map((e) => (
                     <li key={e.id}>
-                      <EventRow e={e} tz={tz} onOpen={onOpen} />
+                      <EventRow e={e} tz={tz} picked={pickedIds.has(e.id)} onOpen={onOpen} />
                     </li>
                   ))}
                 </ul>

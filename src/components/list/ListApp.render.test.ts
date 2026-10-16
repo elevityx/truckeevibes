@@ -88,3 +88,35 @@ describe('AC-M1-75 (e) useClock first render', () => {
     expect(renderToString(createElement(Probe))).toContain(`now=${T}`);
   });
 });
+
+describe('AC-R1c-09 picks in the render', async () => {
+  const { loadPicks } = await import('@/lib/picks');
+  const snap = parseSnapshot(JSON.parse(readFileSync(join(process.cwd(), 'scripts/fixtures/snapshot-visual.json'), 'utf8')));
+  const file = JSON.parse(readFileSync(join(process.cwd(), 'scripts/fixtures/picks-visual.json'), 'utf8'));
+  const picks = loadPicks(file, snap.events, () => {});
+  const html = (p: typeof picks) =>
+    renderToString(createElement(ListApp, { list: 'all', ...firstPaint(snap, 'all'), picks: p })).replace(/<!-- -->/g, '');
+  const rows = (h: string) => [...h.matchAll(/<button type="button" class="drow[^"]*"[^>]*>.*?<\/button>/g)].map((m) => m[0]);
+
+  it('the fixture has three picks inside the week', () => expect(picks).toHaveLength(3));
+  it('a picked event\'s row carries the Our pick tag and the aspen class; an unpicked row carries neither', () => {
+    const h = html(picks);
+    const r = rows(h);
+    const picked = r.filter((x) => x.startsWith('<button type="button" class="drow pick"'));
+    expect(picked).toHaveLength(3);
+    for (const x of picked) expect(x).toContain('<span class="tg pick">Our pick</span>');
+    const plain = r.filter((x) => !x.startsWith('<button type="button" class="drow pick"'));
+    expect(plain.length).toBeGreaterThan(0);
+    for (const x of plain) expect(x).not.toContain('Our pick');
+  });
+  it('3 picks: the row shows its heading and three cards; the cards open the sheet by id', () => {
+    const h = html(picks);
+    expect(h).toContain('Three a week, from the local who keeps this list.');
+    expect(h.match(/class="card pick"/g)).toHaveLength(3);
+  });
+  it('no picks (the owner veto): no Our picks text and no pick tag anywhere', () => {
+    const h = html([]);
+    expect(h).not.toContain('Our pick');
+    expect(h).not.toContain('class="card pick"');
+  });
+});

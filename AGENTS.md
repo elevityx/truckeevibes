@@ -19,13 +19,13 @@ npm run dev
 npm run build      # snapshot (empty without env), then static export to out/
 npm run lint
 npm run typecheck
-npm test           # Vitest; scripts/m0-repo.test.mjs reads out/, so build first on a clean checkout
+npm test           # Vitest; scripts/m0-repo.test.mjs reads out/, so build first on a clean checkout; *.dom.test.ts files opt into happy-dom with a `// @vitest-environment happy-dom` first line
 npm run test:functions   # Deno tests for the Edge Functions (needs Deno 2)
 npm run db:start   # local Supabase stack (sets local-only auth env; don't run bare `supabase start`)
 npm run db:reset
 npm run db:test    # pgTAP
 npm run db:test:rest # PostgREST-level manifest test (needs the running local stack; env from `supabase status -o env`)
-npm run test:visual # fixture build + Playwright visual checks (phone and desktop, light and dark; also builds the empty and error state variants into out-empty/ and out-error/); needs `npx playwright install chromium`
+npm run test:visual # fixture build + Playwright visual checks (phone and desktop, light and dark; also builds the empty and error state variants into out-empty/ and out-error/; includes e2e/interactions.spec.ts); needs `npx playwright install chromium`
 npm run test:lhci  # Lighthouse (mobile, median of 3) on test:visual's out/; needs Chrome (set CHROME_PATH locally)
 npm run test:budget # 700-event fixture build: gzipped home HTML <= 100 KiB, <= 300 embedded rows; rebuilds out/
 npm run check:repo # secret scan, workflow rules, fixture size, no raw HTML, tokens up to date
@@ -34,7 +34,7 @@ npm run ingest     # ingest entry point
 Local env: copy `.env.example` to `.env.local`. It holds the `NEXT_PUBLIC_*` values (Supabase URL and publishable key, Turnstile site key, site URL), all public. The local stack also reads `SUPABASE_AUTH_SITE_URL` and `SUPABASE_AUTH_CAPTCHA_SECRET` through `supabase/config.toml`; `supabase/start-local.sh` (via `npm run db:start`) defaults them to local-only values. Never put a real captcha secret in the repo.
 
 ## Layout
-- `src/app` (pages: `/`, `/sources/`, `/bot/`, `/about/`, and noindex `/admin/`), `src/components` (`layout/` Header and Footer, server-only; `home/` Hero and Tiles; `list/` ListApp, Rail, DayGroup, EventRow, states), `src/lib/lists.ts` (the lists SSOT), `src/lib/data/firstPaint.ts` (build counts and the first-paint rows), `src/config/public-env.ts`, `src/config/features.ts`
+- `src/app` (pages: `/`, `/sources/`, `/bot/`, `/about/`, and noindex `/admin/`), `src/components` (`layout/` Header and Footer, server-only; `home/` Hero, Tiles, FinderBar, PicksRow and PickCard; `filters/` WhenRow, FilterSheet; `ui/` Sheet; `list/` ListApp, Rail, DayGroup, EventRow, EventSheet, AlsoOn, states), `src/lib/lists.ts` (the lists SSOT), `src/lib/filters/` (six-key filter state and predicates), `src/lib/picks.ts` + `src/lib/picksFile.ts` and `src/content/picks.json` (Our picks: schema and lint, build-time read; a bad file fails the build, a pick outside its week is dropped with a warning; `"picks": []` hides the row), `src/lib/data/firstPaint.ts` (build counts and the first-paint rows), `src/config/public-env.ts`, `src/config/features.ts`
 - `src/lib/data` (the **only** Supabase caller: `admin.ts` auth, `sources.ts` RPC wrappers, `errors.ts`)
 - `supabase/migrations` (schema; never edited after merge), `supabase/tests` (pgTAP), `supabase/functions` (Edge Functions and `_shared/`), `supabase/seed.sql` (fake local data only)
 - `scripts` (repo checks and their tests), `ingest` (ingest code and synthetic `fixtures/`)

@@ -23,7 +23,7 @@ export default function FilterSheet({ state, resultCount, onChange, onClose }: P
           </button>
         </div>
         <FilterControls state={state} onChange={onChange} />
-        <div className="eacts">
+        <div className="eacts end">
           <button type="button" className="btn ghost" onClick={() => onChange(EMPTY_FILTERS)}>
             Clear all
           </button>

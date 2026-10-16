@@ -1,5 +1,6 @@
 import type { Area, VibeEvent, When } from '@/lib/data/types';
 import { DEFAULT_LENGTH_MS, GRACE_MS, addDays, localDate, startOfDay, toUtc, wallClock } from '@/lib/time/pacific';
+import { listBySlug } from '@/lib/lists';
 import type { FilterState } from './state';
 
 export const REGION_TZ = 'America/Los_Angeles';
@@ -65,9 +66,37 @@ export function notEndedAt(e: VibeEvent, now: number, tz: string = REGION_TZ): b
   return interval(e, tz)[1] > now - GRACE_MS;
 }
 
+/** Any overlap with the chosen categories; no categories chosen = everything. */
+export function matchesCats(e: VibeEvent, cats: readonly string[]): boolean {
+  return cats.length === 0 || e.categories.some((c) => cats.includes(c));
+}
+
+/** "Kids OK" is the Family friendly list rule (with its adult guard). */
+export function matchesKids(e: VibeEvent): boolean {
+  return listBySlug('family')!.match(e);
+}
+
+const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+
+/** Every whitespace token of q is a substring of title + venue + town (case and accents ignored). Empty q matches everything. */
+export function matchesQuery(e: VibeEvent, q: string): boolean {
+  const tokens = fold(q).split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return true;
+  const hay = fold(`${e.title} ${e.venue ?? ''} ${e.town ?? ''}`);
+  return tokens.every((t) => hay.includes(t));
+}
+
+/** The six filters over rows the list rule has already accepted. */
 export function applyFilters(events: readonly VibeEvent[], f: FilterState, now: number, tz: string = REGION_TZ): VibeEvent[] {
   return events.filter(
-    (e) => notEndedAt(e, now, tz) && matchesWhen(e, f.when, now, tz) && matchesArea(e, f.areas) && (!f.free || matchesFree(e)),
+    (e) =>
+      notEndedAt(e, now, tz) &&
+      matchesWhen(e, f.when, now, tz) &&
+      matchesArea(e, f.areas) &&
+      matchesCats(e, f.cats) &&
+      (!f.free || matchesFree(e)) &&
+      (!f.kids || matchesKids(e)) &&
+      matchesQuery(e, f.q),
   );
 }
 

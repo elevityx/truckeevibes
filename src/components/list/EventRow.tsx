@@ -8,6 +8,8 @@ import { isFar, timeText, whenLine } from './when';
 interface RowProps {
   e: VibeEvent;
   tz: string;
+  /** One of Our picks: the aspen top edge and the "Our pick" tag. */
+  picked?: boolean;
   onOpen(id: string): void;
 }
 
@@ -22,7 +24,7 @@ export function shortVenue(v: string | null | undefined): string {
  * One day-list row (canvas .drow). A button in R1b (the sheet opens in place); an anchor from R2a. Every string is data and renders as
  * React text. Desktop: time | title + "venue · town" + tags | glyph. Phone: "time · town" above the title, venue as meta, chevron.
  */
-export const EventRow = memo(function EventRow({ e, tz, onOpen }: RowProps) {
+export const EventRow = memo(function EventRow({ e, tz, picked = false, onOpen }: RowProps) {
   const town = e.town ?? (e.address ? townOf(e.address) : '');
   const venue = shortVenue(e.venue);
   const free = e.priceKind === 'free';
@@ -32,7 +34,7 @@ export const EventRow = memo(function EventRow({ e, tz, onOpen }: RowProps) {
   return (
     <button
       type="button"
-      className="drow"
+      className={`drow${picked ? ' pick' : ''}`}
       onClick={() => onOpen(e.id)}
     >
       <span className="t">
@@ -48,6 +50,7 @@ export const EventRow = memo(function EventRow({ e, tz, onOpen }: RowProps) {
               {town && <span className={venue ? 'dsk' : undefined}>{venue ? ` · ${town}` : town}</span>}
             </span>
           )}
+          {picked && <span className="tg pick">Our pick</span>}
           {free && <span className="tg free">Free</span>}
           {a21 && <span className="tg t21">21+</span>}
           {a18 && <span className="tg t21">18+</span>}
