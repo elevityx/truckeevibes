@@ -66,6 +66,21 @@ jobs:
           PRESENT: \${{ secrets.FEED_SIGNING_KEY != '' }}
 `;
 
+const REBUILD = `name: Daily rebuild
+on:
+  schedule: [{ cron: '0 13 * * *' }]
+  workflow_dispatch: {}
+permissions: {}
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Call the Pages deploy hook
+        env: { HOOK: '\${{ secrets.PAGES_DEPLOY_HOOK_URL }}' }
+        run: test -n "$HOOK" && curl -fsS -X POST --max-time 20 "$HOOK" -o /dev/null -w 'status=%{http_code}\\n'
+`;
+
 const check = (wf) => {
   const files = {};
   for (const [name, body] of Object.entries(wf)) files[`.github/workflows/${name}`] = body;
@@ -151,6 +166,34 @@ jobs:
       - run: node scripts/sign-feed.mjs
 `;
 
+describe('check-workflows rebuild.yml (AC-R0-03)', () => {
+  const STEP = '    steps:\n';
+  it('passes a clean rebuild.yml', () => passes({ 'rebuild.yml': REBUILD }));
+  it('fails rebuild.yml with a uses: line', () =>
+    failsWith({ 'rebuild.yml': REBUILD.replace(STEP, `${STEP}      - uses: actions/checkout@${SHA}\n`) }, 'rebuild_uses'));
+  it('fails rebuild.yml with a flow-style uses', () =>
+    failsWith({ 'rebuild.yml': REBUILD.replace(STEP, `${STEP}      - { uses: actions/setup-node@${SHA} }\n`) }, 'rebuild_uses'));
+  it('fails rebuild.yml running npm ci', () =>
+    failsWith({ 'rebuild.yml': REBUILD.replace(STEP, `${STEP}      - run: npm ci\n`) }, 'rebuild_pkg'));
+  it('fails rebuild.yml mentioning actions/checkout', () =>
+    failsWith({ 'rebuild.yml': REBUILD.replace(STEP, `${STEP}      - run: echo actions/checkout\n`) }, 'rebuild_checkout'));
+  it('fails rebuild.yml with permissions missing', () =>
+    failsWith({ 'rebuild.yml': REBUILD.replace('permissions: {}\n', '') }, 'rebuild_permissions'));
+  it('fails rebuild.yml with permissions contents: read', () =>
+    failsWith({ 'rebuild.yml': REBUILD.replace('permissions: {}', 'permissions:\n  contents: read') }, 'rebuild_permissions'));
+  it('fails rebuild.yml with a second secret', () =>
+    failsWith({ 'rebuild.yml': REBUILD.replace("HOOK: '", "OTHER: '\${{ secrets.R2_API_TOKEN }}', HOOK: '") }, 'rebuild_secret'));
+  it('fails rebuild.yml with secrets: inherit', () =>
+    failsWith({ 'rebuild.yml': REBUILD.replace('    runs-on: ubuntu-latest', '    secrets: inherit\n    runs-on: ubuntu-latest') }, 'rebuild_secret'));
+  it('fails rebuild.yml with an extra trigger', () =>
+    failsWith({ 'rebuild.yml': REBUILD.replace('  workflow_dispatch: {}', '  workflow_dispatch: {}\n  push: {}') }, 'trigger_set'));
+  it("passes the repo's real rebuild.yml on its own", async () => {
+    const { readFileSync } = await import('node:fs');
+    const real = readFileSync(join(REPO_ROOT, '.github', 'workflows', 'rebuild.yml'), 'utf8');
+    passes({ 'rebuild.yml': real });
+  });
+});
+
 describe('check-workflows adversarial cases (AC-M0-16)', () => {
   it('passes a ci.yml with an identity job', () => passes({ 'ci.yml': CI + IDENTITY_JOB }));
 
@@ -225,7 +268,7 @@ describe('check-workflows adversarial cases (AC-M0-16)', () => {
     const mod = await import(CHECK);
     expect(mod.checkWorkflow('ci.yml', CI + IDENTITY_JOB)).toEqual([]);
     expect(mod.checkWorkflow('ci.yml', CI.replace('pull_request:', 'pull_request_target:')).join('\n')).toContain('trigger_set');
-    expect(Object.keys(mod.ALLOWED_TRIGGERS).sort()).toEqual(['ci.yml', 'ingest.yml', 'sign-feed.yml', 'sign-gate-probe.yml']);
+    expect(Object.keys(mod.ALLOWED_TRIGGERS).sort()).toEqual(['ci.yml', 'ingest.yml', 'rebuild.yml', 'sign-feed.yml', 'sign-gate-probe.yml']);
   });
 
   it('the real ci.yml has the identity job and passes', async () => {

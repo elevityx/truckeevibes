@@ -10,6 +10,7 @@ import { parseAllDocuments } from 'yaml';
 export const ALLOWED_TRIGGERS = {
   'ci.yml': ['pull_request', 'push'],
   'ingest.yml': ['schedule', 'workflow_dispatch'],
+  'rebuild.yml': ['schedule', 'workflow_dispatch'],
   'sign-feed.yml': ['schedule', 'workflow_dispatch'],
   'sign-gate-probe.yml': ['workflow_dispatch'],
 };
@@ -113,7 +114,10 @@ export function checkWorkflow(name, text) {
   });
 
   // permissions
-  if (!(isMap(wf.permissions) && sameArr(Object.keys(wf.permissions), ['contents']) && wf.permissions.contents === 'read')) {
+  if (name === 'rebuild.yml') {
+    // The rebuild workflow holds no token at all: `permissions: {}` (AC-R0-03).
+    if (!(isMap(wf.permissions) && Object.keys(wf.permissions).length === 0)) add('rebuild_permissions', 'top-level permissions must be exactly {}');
+  } else if (!(isMap(wf.permissions) && sameArr(Object.keys(wf.permissions), ['contents']) && wf.permissions.contents === 'read')) {
     add('permissions_top', 'top-level permissions must be exactly { contents: read }');
   }
   if (permsViolation(wf.permissions) && wf.permissions !== undefined) add('permissions_write', 'top-level');
@@ -142,6 +146,16 @@ export function checkWorkflow(name, text) {
   if (!signerFile) {
     for (const id of jobIds) if (envName(jobs[id]) === 'feed-signing') add('env_reserved', `job ${id}`);
     if (text.includes('feed-signing')) add('env_reserved', 'raw text mentions feed-signing');
+  }
+
+  if (name === 'rebuild.yml') {
+    let anyUses = false;
+    walk(wf, (_p, _n, key) => { if (key === 'uses') anyUses = true; });
+    if (anyUses || /(^|[\s{,-])uses\s*:/m.test(text)) add('rebuild_uses', 'uses is not allowed');
+    if (PKG_RE.test(text)) add('rebuild_pkg', 'no package manager');
+    if (/checkout/i.test(text)) add('rebuild_checkout', 'no checkout');
+    const rest = text.replace(/\bsecrets\.PAGES_DEPLOY_HOOK_URL\b/g, '');
+    if (/\bsecrets\b/.test(rest)) add('rebuild_secret', 'only secrets.PAGES_DEPLOY_HOOK_URL may be referenced');
   }
 
   if (name === 'sign-feed.yml') {
