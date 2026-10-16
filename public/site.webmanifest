@@ -1,0 +1,21 @@
+{
+  "name": "TruckeeVibes",
+  "short_name": "TruckeeVibes",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#f3f2ee",
+  "theme_color": "#f3f2ee",
+  "icons": [
+    {
+      "src": "/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}
