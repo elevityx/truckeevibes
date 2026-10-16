@@ -1,37 +1,39 @@
 @import "tailwindcss";
+@import "../styles/tokens.css";
 
-/* One theme. Tokens follow the sister project's palette; no seasonal theming. */
-:root{
-  --body: var(--font-atkinson), system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-display: var(--font-fraunces), serif;
-  --bg:#0B1626; --surface:#13233A; --surface-2:#1B2F4B; --line:#2c4466; --text:#F7F5EF; --muted:#AFC0D6;
-  --accent:#F2C14E; --on-accent:#0B1626; --accent-2:#C62828; --on-accent-2:#FFFFFF; --focus:#F2C14E;
-  --danger:#FF8A80; --ok:#7FD6A0; --radius:16px;
-  color-scheme: dark;
-}
 *,*::before,*::after{box-sizing:border-box}
 html,body{margin:0}
 [hidden]{display:none!important}
-body{background:var(--bg); color:var(--text); font-family:var(--body); font-size:16px; line-height:1.5; min-height:100dvh}
-a{color:var(--accent)}
-:focus-visible{outline:3px solid var(--focus); outline-offset:2px}
-.disp{font-family:var(--font-display); font-weight:600; letter-spacing:.01em}
+body{background:var(--ground); color:var(--ink); font-family:var(--font-body); font-size:var(--fs-body); line-height:var(--lh-body); min-height:100dvh}
+a{color:var(--river)}
+:focus-visible{outline:3px solid var(--river); outline-offset:2px}
 .sr-only{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
+.wrap{max-width:1120px; margin:0 auto; padding:0 var(--space-4)}
 
-.btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:44px; padding:0 18px; border-radius:999px; border:2px solid transparent;
-  font-weight:700; font-size:15px; cursor:pointer; text-decoration:none; white-space:nowrap}
-.btn.primary{background:var(--accent); color:var(--on-accent)}
-.btn.alt{background:var(--accent-2); color:var(--on-accent-2)}
-.btn.ghost{background:transparent; color:var(--text); border-color:var(--line)}
-.btn:disabled{opacity:.5; cursor:not-allowed}
+/* Buttons: pill, 44 px tall, river fill. */
+.btn{display:inline-flex; align-items:center; justify-content:center; gap:var(--space-2); min-height:44px; padding:0 18px; border-radius:var(--radius-pill);
+  border:2px solid transparent; background:var(--river); color:var(--on-river); font-family:var(--font-body); font-size:var(--fs-control); line-height:var(--lh-control);
+  font-weight:var(--fw-control); cursor:pointer; text-decoration:none; white-space:nowrap;
+  transition:background-color var(--motion-duration) var(--motion-ease), border-color var(--motion-duration) var(--motion-ease)}
+.btn.ghost{background:transparent; color:var(--ink); border-color:var(--line-strong)}
+.btn.share{background:var(--alpenglow); color:var(--on-alpenglow)}
 
-.page{max-width:720px; margin:0 auto; padding:24px 16px 48px; display:flex; flex-direction:column; gap:16px}
-.page h1{margin:0; font-size:32px; line-height:1.2}
-.page h2{margin:16px 0 0; font-size:21px}
-.page p,.page ul{margin:0}
-.page ul{padding-left:20px; display:flex; flex-direction:column; gap:6px}
-.site-nav{display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center}
-.site-nav a{color:var(--muted)}
-.card{padding:16px; border-radius:var(--radius); background:var(--surface); border:1px solid var(--line)}
-.src-list{list-style:none; padding:0!important; display:flex; flex-direction:column; gap:8px}
-.src-list li{display:flex; flex-wrap:wrap; gap:6px 12px; align-items:center; justify-content:space-between; padding:12px 14px; border-radius:12px; background:var(--surface); border:1px solid var(--line)}
+/* Type helpers. */
+.eyebrow{margin:0; font-size:var(--fs-eyebrow); line-height:var(--lh-eyebrow); font-weight:var(--fw-eyebrow); letter-spacing:var(--ls-eyebrow); text-transform:uppercase; color:var(--ink-muted)}
+.h1{margin:0; font-family:var(--font-display); font-size:28px; line-height:32px; font-weight:var(--fw-h1); letter-spacing:var(--ls-h1)}
+.h2{margin:0; font-family:var(--font-display); font-size:var(--fs-h2); line-height:var(--lh-h2); font-weight:var(--fw-h2); letter-spacing:var(--ls-h2)}
+.gh{margin:0; font-family:var(--font-display); font-size:var(--fs-group-head); line-height:var(--lh-group-head); font-weight:var(--fw-group-head)}
+@media (min-width:760px){.h1{font-size:var(--fs-h1); line-height:var(--lh-h1)}}
+.tg{display:inline-block; padding:0 var(--space-2); border-radius:var(--radius-sm); border:1px solid var(--line-strong); background:var(--surface);
+  font-size:var(--fs-tag); line-height:var(--lh-tag); font-weight:var(--fw-tag); letter-spacing:var(--ls-tag); text-transform:uppercase; color:var(--ink)}
+.tg.free{border-color:var(--pine); color:var(--pine)}
+.tg.pick{border-color:var(--aspen); background:var(--aspen); color:var(--on-aspen)}
+.tg.cancelled{border-color:var(--danger); color:var(--danger)}
+.fine{color:var(--ink-muted); font-size:var(--fs-small); line-height:var(--lh-small); margin:0}
+.card{padding:var(--space-4); border-radius:var(--radius-lg); background:var(--surface); border:1px solid var(--line)}
+
+/* R1a legacy aliases: removed in R1b */
+:root{
+  --bg:var(--ground); --surface-2:var(--surface-raised); --text:var(--ink); --muted:var(--ink-muted); --accent:var(--river); --on-accent:var(--on-river);
+  --focus:var(--river); --radius:var(--radius-lg); --ok:var(--pine);
+}
