@@ -70,3 +70,65 @@ describe('AC-R1a-19 fonts', () => {
     expect(files.some((f) => /Bricolage/i.test(f))).toBe(true);
   });
 });
+
+// AC-R1b-CO3: the wordmark woff2 carries the OFL copyright (nameID 0) and license (nameID 13) records.
+import { brotliDecompressSync } from 'node:zlib';
+const KNOWN = ['cmap', 'head', 'hhea', 'hmtx', 'maxp', 'name', 'OS/2', 'post', 'cvt ', 'fpgm', 'glyf', 'loca', 'prep', 'CFF '];
+function woff2Table(file, want) {
+  const b = readFileSync(file);
+  expect(b.toString('latin1', 0, 4)).toBe('wOF2');
+  const num = b.readUInt16BE(12);
+  const compressed = b.readUInt32BE(20);
+  let p = 48;
+  const base128 = () => {
+    let v = 0;
+    for (let i = 0; i < 5; i++) {
+      const c = b[p++];
+      v = v * 128 + (c & 0x7f);
+      if (!(c & 0x80)) return v;
+    }
+    throw new Error('bad UIntBase128');
+  };
+  const dir = [];
+  for (let i = 0; i < num; i++) {
+    const flags = b[p++];
+    const idx = flags & 0x3f;
+    const tag = idx === 0x3f ? b.toString('latin1', p, (p += 4)) : KNOWN[idx];
+    const ver = flags >> 6;
+    const orig = base128();
+    const transformed = tag === 'glyf' || tag === 'loca' ? ver === 0 : ver !== 0;
+    dir.push({ tag, len: transformed ? base128() : orig });
+  }
+  const data = brotliDecompressSync(b.subarray(p, p + compressed));
+  let off = 0;
+  for (const t of dir) {
+    if (t.tag === want) return data.subarray(off, off + t.len);
+    off += t.len;
+  }
+  return null;
+}
+function nameRecords(buf) {
+  const count = buf.readUInt16BE(2);
+  const strOff = buf.readUInt16BE(4);
+  const out = {};
+  for (let i = 0; i < count; i++) {
+    const r = 6 + i * 12;
+    const [plat, , , id, len, off] = [buf.readUInt16BE(r), buf.readUInt16BE(r + 2), buf.readUInt16BE(r + 4), buf.readUInt16BE(r + 6), buf.readUInt16BE(r + 8), buf.readUInt16BE(r + 10)];
+    const raw = Buffer.from(buf.subarray(strOff + off, strOff + off + len));
+    if (plat === 3) out[id] = raw.swap16().toString('utf16le');
+    else out[id] ??= raw.toString('latin1');
+  }
+  return out;
+}
+describe('AC-R1b-CO3 wordmark notice', () => {
+  const names = nameRecords(woff2Table(join(REPO_ROOT, 'src/app/fonts/BricolageWordmark.woff2'), 'name'));
+  it('has the OFL copyright (nameID 0) naming the Bricolage Grotesque Project', () => expect(names[0]).toMatch(/Copyright.*Bricolage Grotesque Project Authors/));
+  it('has the license name (nameID 13) and its URL (nameID 14)', () => {
+    expect(names[13]).toContain('SIL Open Font License, Version 1.1');
+    expect(names[14]).toContain('openfontlicense.org');
+  });
+  it('has family and PostScript names', () => {
+    expect(names[1]).toContain('Bricolage');
+    expect(names[6]).toMatch(/Bricolage.*Wordmark|Bricolage/);
+  });
+});

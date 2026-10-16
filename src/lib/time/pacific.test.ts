@@ -146,3 +146,12 @@ describe('utcToLocal', () => {
     expect(utcToLocal('2026-11-01T03:30:00.000Z', 'America/Los_Angeles')).toEqual({ date: '2026-10-31', time: '20:30' });
   });
 });
+
+describe('R1b helpers dayLabel and longDay', () => {
+  it('dayLabel is formatDay without the comma; longDay spells the weekday', async () => {
+    const { dayLabel, longDay } = await import('./pacific');
+    expect(dayLabel('2026-10-19T01:00:00Z', LA)).toBe('Sun Oct 18');
+    expect(longDay('2026-10-19T01:00:00Z', LA)).toBe('Sunday, Oct 18');
+    expect(longDay('2026-10-15T15:00:00Z', LA)).toBe('Thursday, Oct 15');
+  });
+});

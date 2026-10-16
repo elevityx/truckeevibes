@@ -18,14 +18,14 @@ export default function FilterControls({ state, onChange }: Props) {
         <legend>Area</legend>
         <div className="chips">
           {AREAS.map((a) => (
-            <button key={a} type="button" className="fchip" aria-pressed={state.areas.includes(a)} onClick={() => toggleArea(a)}>
+            <button key={a} type="button" className="chip" aria-pressed={state.areas.includes(a)} onClick={() => toggleArea(a)}>
               {AREA_LABELS[a]}
             </button>
           ))}
         </div>
       </fieldset>
-      <button type="button" className="fsw" role="switch" aria-checked={state.free} onClick={() => onChange({ ...state, free: !state.free })}>
-        <span className="ftr" aria-hidden="true" />
+      <button type="button" className="sw" role="switch" aria-checked={state.free} onClick={() => onChange({ ...state, free: !state.free })}>
+        <span className="tr" aria-hidden="true" />
         <span>Free events only</span>
       </button>
     </div>

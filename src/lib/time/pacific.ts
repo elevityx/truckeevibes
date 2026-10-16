@@ -5,6 +5,7 @@ const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 /** An event with no end time counts as 3 hours long (same as the database's "not ended" rule). */
 export const DEFAULT_LENGTH_MS = 3 * HOUR;
@@ -148,6 +149,30 @@ function endsAtMidnight(s: WallClock, e: WallClock): boolean {
 export function formatDay(iso: string, tz: string): string {
   const w = wallClock(Date.parse(iso), tz);
   return `${WEEKDAYS[w.weekday]}, ${MONTHS[w.month - 1]} ${w.day}`;
+}
+
+/** "Sun Oct 18": formatDay without the comma (phone day heads, eyebrows). */
+export function dayLabel(iso: string, tz: string): string {
+  const w = wallClock(Date.parse(iso), tz);
+  return `${WEEKDAYS[w.weekday]} ${MONTHS[w.month - 1]} ${w.day}`;
+}
+
+/** "Sunday, Oct 18" (desktop day heads). */
+export function longDay(iso: string, tz: string): string {
+  const w = wallClock(Date.parse(iso), tz);
+  return `${WEEKDAYS_LONG[w.weekday]}, ${MONTHS[w.month - 1]} ${w.day}`;
+}
+
+/** The long weekday name of a local date "YYYY-MM-DD": "Saturday". */
+export function weekdayName(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return WEEKDAYS_LONG[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+}
+
+/** "Nov 11" from a local date "YYYY-MM-DD". */
+export function monthDay(ymd: string): string {
+  const [, m, d] = ymd.split('-').map(Number);
+  return `${MONTHS[m - 1]} ${d}`;
 }
 
 /** Whole local calendar days from the start's date to the end's date. */

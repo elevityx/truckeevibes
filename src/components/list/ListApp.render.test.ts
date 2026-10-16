@@ -1,5 +1,7 @@
-// AC-M1-75 (b, e): the server render of the list already has the snapshot rows, and useClock's first render uses the given time.
+// AC-M1-75 (b, e) and AC-R1b-04: the server render of the list already has the snapshot rows, the tiles, and useClock's first render uses the given time.
 // effects do not run in renderToString, so the live read is pending by construction.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
@@ -11,6 +13,8 @@ vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: unknown }) => createElement('a', { href, ...rest }, children as never),
 }));
 
+import { parseSnapshot } from '@/components/list/snapshot';
+import { firstPaint } from '@/lib/data/firstPaint';
 import { useClock } from '@/lib/time/useClock';
 import ListApp from './ListApp';
 
@@ -22,15 +26,45 @@ const row = {
   url: 'https://example.org/x', ticketUrl: null, sources: ['Example Source'],
 } as VibeEvent;
 
+const props = (snapshot: { builtAt: string | null; events: VibeEvent[] }) => {
+  const fp = firstPaint({ ...snapshot, sources: [] }, 'all');
+  return { list: 'all' as const, ...fp, picks: [] };
+};
+
 describe('AC-M1-75 (b) ListApp server render', () => {
   it('has the snapshot row and not the loading copy while the live call is pending', () => {
-    const html = renderToString(createElement(ListApp, { initialSnapshot: { builtAt: '2026-11-05T18:00:00.000Z', events: [row] } }));
+    const html = renderToString(createElement(ListApp, props({ builtAt: '2026-11-05T18:00:00.000Z', events: [row] })));
     expect(html).toContain('SNAPSHOT-STATIC-SENTINEL');
-    expect(html).not.toContain('Loading events');
+    expect(html).not.toContain('Checking');
   });
-  it('an empty snapshot with the live call pending still shows the loading copy', () => {
-    const html = renderToString(createElement(ListApp, { initialSnapshot: { builtAt: null, events: [] } }));
-    expect(html).toContain('Loading events');
+  it('an empty snapshot with the live call pending still shows the loading state', () => {
+    const html = renderToString(createElement(ListApp, props({ builtAt: null, events: [] })));
+    expect(html).toContain('Checking');
+  });
+});
+
+describe('AC-R1b-04 tiles', () => {
+  const snap = parseSnapshot(JSON.parse(readFileSync(join(process.cwd(), 'scripts/fixtures/snapshot-visual.json'), 'utf8')));
+  const html = renderToString(createElement(ListApp, { list: 'all', ...firstPaint(snap, 'all'), picks: [] })).replace(/<!-- -->/g, '');
+  const nav = /<nav[^>]*aria-label="Lists"[^>]*>(.*?)<\/nav>/.exec(html)![1];
+  const tiles = [...nav.matchAll(/<(button|a)\b[^>]*class="tile[^"]*"[^>]*>.*?<\/\1>/g)].map((m) => m[0]);
+  it('8 tiles in LISTS order, all buttons while the routes are not live', () => {
+    expect(tiles).toHaveLength(8);
+    expect(tiles.every((t) => t.startsWith('<button'))).toBe(true);
+    const labels = tiles.map((t) => /<span class="lb">([^<]*)<\/span>/.exec(t)![1]);
+    expect(labels).toEqual(['All', 'Art', 'Music', '21+', 'Kids', 'Family friendly', 'Outdoors', 'Food & drink'].map((l) => l.replace('&', '&amp;')));
+  });
+  it('the Kids tile says Soon and has no digit', () => {
+    const kids = tiles[4];
+    expect(kids).toContain('Soon');
+    expect(kids.replace(/<[^>]*>/g, '')).not.toMatch(/\d/);
+  });
+  it('the All tile is pressed and the others are not', () => {
+    expect(tiles[0]).toContain('aria-pressed="true"');
+    for (const t of tiles.slice(1)) expect(t).toContain('aria-pressed="false"');
+  });
+  it('counts', () => {
+    expect(tiles.map((t) => /<span class="n">([^<]*)<\/span>/.exec(t)![1])).toEqual(['35', '11', '10', '2', 'Soon', '1', '6', '23']);
   });
 });
 

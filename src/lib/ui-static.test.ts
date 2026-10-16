@@ -94,3 +94,16 @@ describe('R1a: the shell is server-only', () => {
     expect(hits.map((f) => f.slice(ROOT.length + 1))).toEqual([]);
   });
 });
+
+describe('AC-R1b-13 no legacy color aliases outside the back office', () => {
+  it('no file under src/ except the admin styles references --bg, --text, --accent, --surface-2 or --on-accent', () => {
+    const LEGACY = /var\(\s*--(bg|text|accent|surface-2|on-accent)\b|--(bg|text|accent|surface-2|on-accent)\s*:/;
+    const hits = walk(join(ROOT, 'src'))
+      .filter((f) => /\.(css|tsx?)$/.test(f) && !f.includes('/components/admin/') && !/ui-static\.test\.ts$/.test(f))
+      .filter((f) => LEGACY.test(readFileSync(f, 'utf8')));
+    expect(hits.map((f) => f.slice(ROOT.length + 1))).toEqual([]);
+  });
+  it('globals.css has no legacy alias block', () => {
+    expect(read('src/app/globals.css')).not.toContain('R1a legacy aliases');
+  });
+});

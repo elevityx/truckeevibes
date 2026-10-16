@@ -38,12 +38,6 @@ a{color:var(--river); text-decoration:underline; text-underline-offset:3px}
 .tg.ph{color:var(--alpenglow-ink); border-style:dashed}
 .card{display:flex; flex-direction:column; gap:10px; padding:var(--space-4); border-radius:var(--radius-lg); background:var(--surface); border:1px solid var(--line)}
 
-/* R1a legacy aliases: removed in R1b */
-:root{
-  --bg:var(--ground); --surface-2:var(--surface-raised); --text:var(--ink); --muted:var(--ink-muted); --accent:var(--river); --on-accent:var(--on-river);
-  --focus:var(--river); --radius:var(--radius-lg); --ok:var(--pine);
-}
-
 /* Shell: header, lock-up, menu, footer (canvas .nav, .lock, .wm, .foot). */
 .nav{display:flex; align-items:center; justify-content:space-between; gap:var(--space-4); min-height:64px; padding:var(--space-3) 0}
 .lock{display:inline-flex; align-items:center; gap:10px; min-height:44px; color:var(--ink); text-decoration:none}

@@ -58,9 +58,9 @@ export default function EventSheet({ event: e, tz, onClose, onToast }: Props) {
             <h2 className="etitle">{e.title}</h2>
             {(price || is21(e) || isFar(e)) && (
               <p className="etags">
-                {price && <span className="chipf big">{price}</span>}
-                {is21(e) && <span className="t21 big">21+ · Adults only</span>}
-                {isFar(e) && <span className="tdrive big">Worth the drive</span>}
+                {price && <span className="tg free">{price}</span>}
+                {is21(e) && <span className="tg t21">21+ · Adults only</span>}
+                {isFar(e) && <span className="tg drive">Worth the drive</span>}
               </p>
             )}
           </div>
