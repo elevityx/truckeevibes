@@ -14,12 +14,12 @@ const full = {
 
 describe('readBuildSnapshot', () => {
   it('a missing file is the empty snapshot', () => {
-    expect(readBuildSnapshot(join(dir, 'nope.json'))).toEqual({ builtAt: null, events: [] });
+    expect(readBuildSnapshot(join(dir, 'nope.json'))).toEqual({ builtAt: null, events: [], sources: [] });
   });
   it('invalid JSON is the empty snapshot', () => {
     const p = join(dir, 'bad.json');
     writeFileSync(p, '{not json');
-    expect(readBuildSnapshot(p)).toEqual({ builtAt: null, events: [] });
+    expect(readBuildSnapshot(p)).toEqual({ builtAt: null, events: [], sources: [] });
   });
   it('keeps good rows and builtAt, and drops keys that are not VibeEvent keys', () => {
     const p = join(dir, 'ok.json');

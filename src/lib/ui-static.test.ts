@@ -71,8 +71,8 @@ describe('AC-M1-77 one URL policy', () => {
     for (const m of uses) expect(ics.slice(Math.max(0, m.index! - 12), m.index! + 5), 'e.url outside safeWebsite').toContain('safeWebsite(e.url');
     expect(ics).toContain('safeWebsite(');
   });
-  it('SourcesList.tsx uses safeWebsite(', () => {
-    expect(read('src/components/SourcesList.tsx')).toContain('safeWebsite(');
+  it('SourceGroups.tsx uses safeWebsite(', () => {
+    expect(read('src/components/sources/SourceGroups.tsx')).toContain('safeWebsite(');
   });
 });
 describe('AC-M1-79 (d) request gates', () => {
@@ -83,5 +83,14 @@ describe('AC-M1-79 (d) request gates', () => {
     const refresh = /disabled=\{([^}]*)\}[^>]*>\s*Refresh/.exec(q);
     expect(refresh, 'Refresh button not found').toBeTruthy();
     expect(refresh![1]).toContain('busy');
+  });
+});
+
+describe('R1a: the shell is server-only', () => {
+  it('no file with a use client directive imports the Header or Footer, or (R3a) lib/analytics', () => {
+    const hits = [...src('src')]
+      .filter((f) => /^\s*['"]use client['"]/m.test(readFileSync(f, 'utf8')))
+      .filter((f) => /components\/layout\/(Header|Footer)|lib\/analytics\//.test(readFileSync(f, 'utf8')));
+    expect(hits.map((f) => f.slice(ROOT.length + 1))).toEqual([]);
   });
 });

@@ -12,7 +12,7 @@ export interface ListLoad {
   truncated: boolean;
 }
 
-export function initialLoad(s: Snapshot, configured: boolean): ListLoad {
+export function initialLoad(s: Pick<Snapshot, 'builtAt' | 'events'>, configured: boolean): ListLoad {
   return { events: s.events, source: 'snapshot', builtAt: s.builtAt, livePending: configured, liveFailed: false, truncated: false };
 }
 

@@ -10,7 +10,7 @@ describe('parseSnapshot', () => {
     expect(s.builtAt).toBe('2026-11-05T12:00:00Z');
   });
   it('treats junk as an empty snapshot', () => {
-    expect(parseSnapshot(null)).toEqual({ builtAt: null, events: [] });
-    expect(parseSnapshot({ builtAt: 'nope', events: 'x' })).toEqual({ builtAt: null, events: [] });
+    expect(parseSnapshot(null)).toEqual({ builtAt: null, events: [], sources: [] });
+    expect(parseSnapshot({ builtAt: 'nope', events: 'x' })).toEqual({ builtAt: null, events: [], sources: [] });
   });
 });
