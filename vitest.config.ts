@@ -5,6 +5,6 @@ export default defineConfig({
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts', 'ingest/**/*.test.ts', 'scripts/**/*.test.mjs'],
+    include: ['src/**/*.test.ts', 'ingest/**/*.test.ts', 'scripts/**/*.test.{mjs,ts}'],
   },
 });
