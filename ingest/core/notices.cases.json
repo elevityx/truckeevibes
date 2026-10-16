@@ -128,5 +128,35 @@
     "title": "No Doubt Tribute Today",
     "sibling": "",
     "notice": false
+  },
+  {
+    "title": "NO Country Fridays Tonight",
+    "sibling": "Country Fridays",
+    "offsets": [-7, 7],
+    "notice": true
+  },
+  {
+    "title": "NO Country Fridays Tonight",
+    "sibling": "Country Fridays",
+    "offsets": [-14, 14],
+    "notice": true
+  },
+  {
+    "title": "NO Country Fridays Tonight",
+    "sibling": "Country Fridays",
+    "offsets": [7],
+    "notice": false
+  },
+  {
+    "title": "NO Country Fridays Tonight",
+    "sibling": "Country Fridays",
+    "offsets": [-15, 15],
+    "notice": false
+  },
+  {
+    "title": "No Trivia Today",
+    "sibling": "Trivia Night",
+    "offsets": [0],
+    "notice": false
   }
 ]

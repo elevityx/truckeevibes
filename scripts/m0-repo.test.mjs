@@ -79,6 +79,9 @@ describe('AC-R1a-15 pinned scripts, vitest include and the CI visual job', () =>
     );
     expect(scripts['test:visual']).toBe('npm run build:fixture && playwright test');
   });
+  it('classify-report equals the Package scripts table (R4b)', () => {
+    expect(scripts['classify-report']).toBe('tsx ingest/tools/classify-report.ts');
+  });
   it('test:lhci and test:budget equal the Package scripts table (R1b)', () => {
     expect(scripts['test:lhci']).toBe('lhci autorun');
     expect(scripts['test:budget']).toBe(

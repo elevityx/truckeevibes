@@ -44,7 +44,7 @@ function toEvent(e: TribeEvent, tz: string): { item: SourceEvent; city: string; 
     endDate: allDay ? addDays((e.end_date ?? e.start_date).slice(0, 10), 1) : undefined,
     tz, venueName: venue?.venue, address: venue?.address, town: venue?.city,
     lat: num(venue?.geo_lat), lng: num(venue?.geo_lng), url: typeof e.url === 'string' ? e.url : undefined,
-    priceText: typeof e.cost === 'string' ? e.cost : undefined, hints: slugs,
+    priceText: typeof e.cost === 'string' ? e.cost : undefined, hints: slugs, family: 'tribe',
   }, description);
   const startMs = Date.parse(startsAt);
   const endMs = endsAt ? Date.parse(endsAt) : startMs;

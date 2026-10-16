@@ -10,6 +10,6 @@ export async function fetchIcsFeed(ctx: AdapterCtx, url: string, o: { conditiona
   const res = await ctx.fetch(url, { kind: 'feed', conditional: o.conditional });
   if (res.notModified) return { ok: false, result: { items: [], status: 'not_modified', httpStatus: res.status } };
   if (res.status !== 200) return { ok: false, result: { items: [], status: 'http_error', httpStatus: res.status } };
-  const parsed = parseIcs(decodeUtf8(res.body), { now: ctx.now, tz: tzOf(ctx.source.config), eventUrl: o.eventUrl, allowedHosts: ctx.source.allowed_hosts });
+  const parsed = parseIcs(decodeUtf8(res.body), { now: ctx.now, family: ctx.source.family, tz: tzOf(ctx.source.config), eventUrl: o.eventUrl, allowedHosts: ctx.source.allowed_hosts });
   return { ok: true, res, parsed, hash: sha256Hex(res.body) };
 }

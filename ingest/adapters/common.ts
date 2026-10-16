@@ -19,6 +19,9 @@ export function tzOf(config: Record<string, unknown>): string {
   return typeof config.tz === 'string' && config.tz ? config.tz : DEFAULT_TZ;
 }
 
+/** Test and report hook: the classify-report sets `current` to collect unmapped source labels. Unset in the runner. */
+export const classifyObserver: { current?: (e: { externalKey: string; unmapped: string[] }) => void } = {};
+
 export interface EventFacts {
   externalKey: string;
   title: string;
@@ -38,6 +41,8 @@ export interface EventFacts {
   priceText?: string;
   ageText?: string;
   hints?: string[];
+  /** Source family (`sources.family`): selects the category map. */
+  family?: string;
   cancelled?: boolean;
   seriesUid?: string;
 }
@@ -47,7 +52,9 @@ export function makeEvent(f: EventFacts, description?: string): SourceEvent {
   const title = cleanTitle(plainText(f.title));
   const priceText = cap(f.priceText, 80);
   const ageText = cap(f.ageText, 80);
-  const c = classify({ title, categoriesHint: f.hints ?? [], priceText, ageText }, description);
+  const venue = cap(f.venueName, 80);
+  const c = classify({ title, categoriesHint: f.hints ?? [], priceText, ageText, venueName: venue, family: f.family }, description);
+  classifyObserver.current?.({ externalKey: f.externalKey, unmapped: c.unmapped });
   const e: SourceEvent = {
     externalKey: f.externalKey, title, startsAt: f.startsAt, allDay: f.allDay, timeKnown: !f.allDay, tz: f.tz,
     categoriesHint: c.categories, rawSummaryLength: description ? description.length : 0,
@@ -55,8 +62,8 @@ export function makeEvent(f: EventFacts, description?: string): SourceEvent {
   };
   if (f.endsAt && !f.allDay) e.endsAt = f.endsAt;
   if (f.allDay) { e.startDate = f.startDate; e.endDate = f.endDate; }
-  const venue = cap(f.venueName, 80);
   if (venue) e.venueName = venue;
+  if (c.reasons.length) e.tagReasons = c.reasons;
   const address = cap(f.address, 160);
   if (address) e.address = address;
   const town = cap(f.town, 60);

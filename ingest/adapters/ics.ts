@@ -4,7 +4,7 @@ import { isoZ, isValidZone, toUtcFromLocal } from '../core/normalize';
 import type { SourceEvent } from '../types';
 import { addDays, DEFAULT_TZ, makeEvent } from './common';
 
-export interface IcsOptions { now: Date; tz?: string; eventUrl?: string; allowedHosts?: string[] }
+export interface IcsOptions { now: Date; family?: string; tz?: string; eventUrl?: string; allowedHosts?: string[] }
 export interface IcsResult { items: SourceEvent[]; dropped: Record<string, number>; truncated: number }
 
 const DAY = 86_400_000;
@@ -115,7 +115,7 @@ export function parseIcs(text: string, opts: IcsOptions): IcsResult {
     const x = facts(f, uid);
     const common = {
       externalKey: `${uid}#${rid}`, title: x.title, venueName: x.venueName, address: x.address, lat: x.lat, lng: x.lng, url: x.url,
-      hints: x.hints, cancelled: x.cancelled, seriesUid: recurring ? uid : undefined,
+      hints: x.hints, family: opts.family, cancelled: x.cancelled, seriesUid: recurring ? uid : undefined,
     };
     if (start.isDate) {
       const sd = ymd(start);

@@ -1,5 +1,6 @@
 // Pure text and time helpers shared by the adapters (spec S1.8).
 import type { SourceEvent } from '../types';
+import { isReasonCode, MAX_REASONS } from './reasonCodes';
 
 const NAMED: Record<string, string> = {
   amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', ndash: '–', mdash: '—', hellip: '…', lsquo: '‘', rsquo: '’',
@@ -103,6 +104,11 @@ export function validateSourceEvent(x: SourceEvent): SourceEvent | { invalid: st
     if (typeof x.startDate !== 'string' || typeof x.endDate !== 'string' || !YMD.test(x.startDate) || !YMD.test(x.endDate)) return { invalid: 'dates' };
   } else if (typeof x.startsAt !== 'string' || !ISO.test(x.startsAt) || Number.isNaN(Date.parse(x.startsAt))) {
     return { invalid: 'starts_at' };
+  }
+  if (x.tagReasons !== undefined && !(Array.isArray(x.tagReasons) && x.tagReasons.length <= MAX_REASONS && x.tagReasons.every(isReasonCode))) {
+    const { tagReasons: _drop, ...rest } = x; // a bad reason list never invalidates the item
+    void _drop;
+    return rest;
   }
   return x;
 }

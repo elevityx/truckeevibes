@@ -94,7 +94,7 @@ export const adapter: Adapter = {
       const res = await ctx.fetch(`${origin}/events/ical/${id}.ics`, { kind: 'feed' });
       if (res.status !== 200) return { items: [], status: 'http_error', httpStatus: res.status, errorCode: 'detail_http' };
       hashes.push(sha256Hex(res.body));
-      const parsed = parseIcs(decodeUtf8(res.body), { now: ctx.now, tz: tzOf(ctx.source.config), eventUrl: details, allowedHosts: ctx.source.allowed_hosts });
+      const parsed = parseIcs(decodeUtf8(res.body), { now: ctx.now, family: ctx.source.family, tz: tzOf(ctx.source.config), eventUrl: details, allowedHosts: ctx.source.allowed_hosts });
       const mine: SourceEvent[] = [];
       for (const i of parsed.items) {
         if (Date.parse(i.startsAt) > latest) { filtered++; continue; }
