@@ -28,11 +28,11 @@ export default function WhenRow({ when, minDate, onChange }: Props) {
     <div className="when" role="group" aria-label="When">
       <div className="when-in">
         {NAMED.map(([v, label]) => (
-          <button key={v} type="button" className="wseg" aria-pressed={when === v} onClick={() => onChange(when === v ? null : v)}>
+          <button key={v} type="button" className="pill" aria-pressed={when === v} onClick={() => onChange(when === v ? null : v)}>
             {label}
           </button>
         ))}
-        <label className={`wseg datepick${dateOn ? ' on' : ''}`} htmlFor={id}>
+        <label className={`pill datepick${dateOn ? ' on' : ''}`} htmlFor={id}>
           <span>{dateOn ? when.date : 'Pick a date'}</span>
           <input
             id={id}

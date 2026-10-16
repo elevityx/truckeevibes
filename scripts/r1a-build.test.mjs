@@ -33,13 +33,13 @@ describe('AC-R1a-04 fonts [build-time]', () => {
     expect(extra.length).toBeGreaterThanOrEqual(1);
     expect(cssOf('admin/index.html').join('\n')).toMatch(/font-family:\s*"?Fraunces/);
   });
-  it('the woff2 files the index css loads total <= 120 KiB', () => {
+  it('the woff2 files the index css loads total <= 124 KiB (126,976 bytes; R1b-CO3 allows the wordmark's OFL notice)', () => {
     const files = new Set();
     for (const css of cssOf('index.html')) for (const m of css.matchAll(/url\(\.\.\/media\/([^)]*\.woff2)\)/g)) files.add(m[1]);
     expect(files.size).toBeGreaterThan(0);
     let total = 0;
     for (const f of files) total += statSync(out('_next/static/media', f)).size;
-    expect(total).toBeLessThanOrEqual(120 * 1024);
+    expect(total).toBeLessThanOrEqual(126_976);
   });
 });
 
@@ -95,4 +95,13 @@ describe('AC-R1a-08 footer [build-time]', () => {
     expect(foot).not.toMatch(/<a [^>]*>TruckeeFrights<\/a>/);
   });
   it('the out/ tree exists', () => expect(existsSync(out('about/index.html'))).toBe(true));
+});
+
+// AC-R1b-CO1: with the sources read failing and no previous snapshot, /sources/ shows no zero counts.
+describe('AC-R1b-CO1 sources build fallback [build-time]', () => {
+  it('out/sources/index.html has no ">0 read daily" and no group with a 0 count', () => {
+    const h = html('sources/index.html');
+    expect(h).not.toContain('>0 read daily');
+    expect(h).not.toMatch(/class="cnt">0</);
+  });
 });

@@ -1,35 +1,49 @@
 'use client';
 
-import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import FilterButton from '@/components/filters/FilterButton';
-import FilterControls from '@/components/filters/FilterControls';
 import FilterSheet from '@/components/filters/FilterSheet';
 import WhenRow from '@/components/filters/WhenRow';
+import Hero from '@/components/home/Hero';
+import Tiles from '@/components/home/Tiles';
 import { supabaseConfigured } from '@/config/public-env';
+import { areaCounts, heroCounts, kindCounts, type BuildCounts } from '@/lib/data/firstPaint';
 import { listEventsWithMeta } from '@/lib/data/public';
 import { applyFilters, REGION_TZ, withSpan } from '@/lib/filters/predicates';
 import { EMPTY_FILTERS, activeFilterCount, filtersUrl, parseFilters, type FilterState } from '@/lib/filters/state';
+import { LISTS, countLists, listBySlug, type ListSlug } from '@/lib/lists';
 import { formatDay, formatTimes, localDate } from '@/lib/time/pacific';
 import { CLOCK_TICK_MS, useClock } from '@/lib/time/useClock';
+import DayGroup from './DayGroup';
 import EventSheet from './EventSheet';
-import EventsList from './EventsList';
-import { initialLoad, liveFailedLoad, liveLoaded, showLoading } from './listLoad';
+import { initialLoad, liveFailedLoad, liveLoaded, retryLoad, showLoading } from './listLoad';
+import { EmptyState, ErrorState, LoadingState, NoResultsState } from './ListStates';
+import Rail from './Rail';
 import type { Snapshot } from './snapshot';
 import './list.css';
 
 const TZ = REGION_TZ;
 
+interface Props {
+  list: ListSlug;
+  initialSnapshot: Pick<Snapshot, 'builtAt' | 'events'>;
+  counts: BuildCounts;
+  /** The picks row arrives in R1c; always empty here. */
+  picks: readonly { id: string }[];
+}
+
 /** The public list: first paint from the build snapshot, then the live read. Filters and the open event live in the URL. */
-export default function ListApp({ initialSnapshot }: { initialSnapshot: Pick<Snapshot, 'builtAt' | 'events'> }) {
+export default function ListApp({ list, initialSnapshot, counts }: Props) {
   // The first render uses the build time as "now" so server and hydration agree; the real clock takes over right after mount.
   const builtMs = initialSnapshot.builtAt ? Date.parse(initialSnapshot.builtAt) : 0;
   const now = useClock(CLOCK_TICK_MS, builtMs);
   const [load, setLoad] = useState(() => initialLoad(initialSnapshot, supabaseConfigured()));
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
+  const [active, setActive] = useState<ListSlug>(list);
   const [eventId, setEventId] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false);
   const [toast, setToast] = useState('');
+  const [attempt, setAttempt] = useState(0);
   const ready = useRef(false);
 
   // Filters and ?event= come from the URL after mount (the static export has no search string at build time).
@@ -50,9 +64,9 @@ export default function ListApp({ initialSnapshot }: { initialSnapshot: Pick<Sna
     };
   }, []);
 
-  // The snapshot is already state; the live read only reconciles it.
+  // The snapshot is already state; the live read only reconciles it. A retry (attempt > 0) always tries.
   useEffect(() => {
-    if (!supabaseConfigured()) return;
+    if (!supabaseConfigured() && attempt === 0) return;
     let alive = true;
     listEventsWithMeta()
       .then((r) => alive && setLoad((c) => liveLoaded(c, r)))
@@ -60,7 +74,7 @@ export default function ListApp({ initialSnapshot }: { initialSnapshot: Pick<Sna
     return () => {
       alive = false;
     };
-  }, []);
+  }, [attempt]);
 
   const writeUrl = useCallback((f: FilterState, id: string | null) => {
     const u = new URL(window.location.href);
@@ -86,12 +100,28 @@ export default function ListApp({ initialSnapshot }: { initialSnapshot: Pick<Sna
     [filters, writeUrl],
   );
 
+  const def = listBySlug(active) ?? LISTS[0];
   const events = useMemo(() => load.events.map((e) => withSpan(e, TZ)), [load.events]);
-  const shown = useMemo(() => applyFilters(events, filters, now, TZ), [events, filters, now]);
+  const upcoming = useMemo(() => applyFilters(events, EMPTY_FILTERS, now, TZ), [events, now]);
+  const listEvents = useMemo(() => upcoming.filter((e) => def.match(e)), [upcoming, def]);
+  const shown = useMemo(() => applyFilters(listEvents, filters, now, TZ), [listEvents, filters, now]);
   const selected = useMemo(() => (eventId ? events.find((e) => e.id === eventId) ?? null : null), [events, eventId]);
   const today = localDate(now, TZ);
   const nFilters = (filters.areas.length ? 1 : 0) + (filters.free ? 1 : 0);
-  const filtered = activeFilterCount(filters) > 0;
+  const nActive = activeFilterCount(filters);
+
+  // Build-time counts cover the full snapshot (first paint embeds at most 300 rows); live rows replace them.
+  const fromBuild = load.source === 'snapshot' && active === list;
+  const tileCounts = load.source === 'snapshot' ? counts.lists : countLists(upcoming);
+  const hero = load.source === 'snapshot' ? counts.hero : heroCounts(load.events, now, TZ);
+  const railCounts = useMemo(
+    () => ({ areas: fromBuild ? counts.areas : areaCounts(listEvents), kinds: fromBuild ? counts.kinds : kindCounts(listEvents), sources: counts.sources }),
+    [fromBuild, counts, listEvents],
+  );
+  const listLast = listEvents.reduce<string | null>((m, e) => {
+    const d = localDate(Date.parse(e.startsAt), TZ);
+    return m === null || d > m ? d : m;
+  }, null);
 
   useEffect(() => {
     if (!toast) return;
@@ -100,49 +130,56 @@ export default function ListApp({ initialSnapshot }: { initialSnapshot: Pick<Sna
   }, [toast]);
 
   const asOf = load.builtAt ? `${formatDay(load.builtAt, TZ)} · ${formatTimes(load.builtAt, null, TZ)}` : null;
+  const empty = events.length === 0;
+
+  let body;
+  if (showLoading(load)) body = <LoadingState calendars={counts.sources.active} />;
+  else if (load.liveFailed && empty) {
+    body = (
+      <ErrorState
+        builtAt={load.builtAt}
+        now={now}
+        tz={TZ}
+        hasRows={initialSnapshot.events.length > 0}
+        onRetry={() => {
+          setLoad(retryLoad);
+          setAttempt((n) => n + 1);
+        }}
+        onShowSnapshot={() => setLoad({ ...initialLoad(initialSnapshot, false), liveFailed: true })}
+      />
+    );
+  } else if (upcoming.length === 0) body = <EmptyState builtAt={load.builtAt} now={now} tz={TZ} />;
+  else if (shown.length === 0) {
+    body = (
+      <NoResultsState
+        filters={filters}
+        listEvents={listEvents}
+        now={now}
+        tz={TZ}
+        onShow7d={() => setF({ ...filters, when: '7d' })}
+        onClear={() => setF(EMPTY_FILTERS)}
+      />
+    );
+  } else body = <DayGroup events={shown} tz={TZ} now={now} fillEmpty={active === 'all' && nActive === 0} onOpen={open} />;
 
   return (
-    <div className="lp">
-      <header className="lp-head">
-        <div className="lp-bar">
-          <Link className="wm disp" href="/">TruckeeVibes</Link>
-          <nav className="lp-nav" aria-label="Site">
-            <Link href="/sources/">Sources</Link>
-            <Link href="/about/">About</Link>
-          </nav>
-        </div>
-        <WhenRow when={filters.when} minDate={today} onChange={(w) => setF({ ...filters, when: w })} />
-      </header>
+    <div className={`lp${active === 'all' ? '' : ' is-list'}`}>
+      <div className="wrap">
+        <Hero now={now} list={def} listCount={listEvents.length} listLast={listLast} hero={hero} activeSources={counts.sources.active} />
+        <Tiles counts={tileCounts} active={active} onSelect={(s) => setActive((cur) => (cur === s ? 'all' : s))} />
+        <section className="find" aria-label="Find an event">
+          <WhenRow when={filters.when} minDate={today} onChange={(w) => setF({ ...filters, when: w })} />
+          <button type="button" className="sw" role="switch" aria-checked={filters.free} onClick={() => setF({ ...filters, free: !filters.free })}>
+            <span className="tr" aria-hidden="true" />
+            Free only
+          </button>
+        </section>
+      </div>
 
-      <div className="lp-body">
-        <aside className="rail" aria-label="Filters">
-          <h2>Filters</h2>
-          <FilterControls state={filters} onChange={setF} />
-          {filtered && (
-            <button type="button" className="linkbtn" onClick={() => setF(EMPTY_FILTERS)}>
-              Clear all
-            </button>
-          )}
-        </aside>
-
-        <main className="lp-main">
-          <div className="list-head">
-            <h1 className="disp">Events in Truckee and North Lake Tahoe</h1>
-            <p>
-              Pacific time
-              {!showLoading(load) && ` · ${shown.length} ${shown.length === 1 ? 'event' : 'events'}`}
-            </p>
-          </div>
-          <div className="lp-tools">
-            <FilterButton count={nFilters} onClick={() => setSheet(true)} />
-            {filtered && (
-              <button type="button" className="linkbtn" onClick={() => setF(EMPTY_FILTERS)}>
-                Clear all
-              </button>
-            )}
-          </div>
-
-          {load.liveFailed && (
+      <div className="wrap cols">
+        <Rail counts={railCounts} filters={filters} onChange={setF} />
+        <div className="col">
+          {load.liveFailed && !empty && (
             <p className="notice" role="status">
               Showing events as of {asOf ?? 'the last update'}. We could not reach the server, so this list may be out of date.
             </p>
@@ -150,16 +187,11 @@ export default function ListApp({ initialSnapshot }: { initialSnapshot: Pick<Sna
           {load.truncated && !load.liveFailed && (
             <p className="notice" role="status">Showing the next 60 days of events.</p>
           )}
-
-          {showLoading(load) ? (
-            <p className="fine" role="status">Loading events…</p>
-          ) : (
-            <EventsList events={shown} tz={TZ} now={now} filtered={filtered} onOpen={open} onClear={() => setF(EMPTY_FILTERS)} />
-          )}
-          <p className="land-ack">Truckee sits on the ancestral homeland of the Washoe (Wašiw) people.</p>
-        </main>
+          {body}
+        </div>
       </div>
 
+      <FilterButton count={nFilters} onClick={() => setSheet(true)} />
       {sheet && <FilterSheet state={filters} resultCount={shown.length} onChange={setF} onClose={() => setSheet(false)} />}
       {selected && <EventSheet event={selected} tz={TZ} onClose={() => open(null)} onToast={setToast} />}
       {toast && <div className="ltoast" role="status">{toast}</div>}

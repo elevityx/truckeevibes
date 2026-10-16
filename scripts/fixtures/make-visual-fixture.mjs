@@ -9,8 +9,15 @@ const DIR = dirname(fileURLToPath(import.meta.url));
 const BUILT_AT = '2026-10-15T13:04:00Z';
 
 // [pacific date, start hour (24h Pacific), town, area, categories, age]
-const CATS = ['arts', 'music', 'food-drink', 'nightlife', 'outdoors', 'learning', 'halloween-fall', 'sports', 'markets'];
-const TOWNS = [['Truckee', 'truckee'], ['Incline Village', 'incline']];
+// Category counts the list ACs need (multi-label): arts 11, music 10, food-drink 23, nightlife 22, outdoors 6, learning 6, halloween-fall 6,
+// sports 4, markets 1, family 0. Each category takes `count` events at (offset + j * stride) mod 35; strides are coprime to 35.
+const CAT_PLAN = [
+  ['food-drink', 23, 3, 0], ['nightlife', 22, 4, 1], ['arts', 11, 3, 2], ['music', 10, 4, 3], ['outdoors', 6, 6, 4],
+  ['learning', 6, 6, 5], ['halloween-fall', 6, 6, 7], ['sports', 4, 8, 11], ['markets', 1, 1, 15],
+];
+// Thirteen events in Incline Village (area incline_crystal_bay); the other 22 are in Truckee. None of the weekly-series indices (5, 15, 22, 30).
+const INCLINE = new Set([0, 3, 6, 9, 12, 14, 17, 19, 21, 24, 27, 29, 33]);
+const TOWNS = [['Truckee', 'truckee'], ['Incline Village', 'incline_crystal_bay']];
 
 // Counts the visual protocol needs: Today 1, This weekend 5, Next 7 days 9, Later 26 (35 events), last start Nov 11.
 const DAY_PLAN = [
@@ -28,10 +35,8 @@ const LONG_TITLE = 'Example Harvest Supper with Live Music, Dancing and a Silent
 const slug = (i) => `example-event-${String(i + 1).padStart(2, '0')}`;
 
 const events = DAY_PLAN.map((date, i) => {
-  const [town, area] = TOWNS[i % 3 === 0 ? 1 : 0];
-  const cats = [CATS[i % CATS.length]];
-  if (i % 2 === 0) cats.push('nightlife');
-  if (i % 3 === 1 && !cats.includes('food-drink')) cats.push('food-drink');
+  const [town, area] = TOWNS[INCLINE.has(i) ? 1 : 0];
+  const cats = CAT_PLAN.filter(([, count, stride, off]) => Array.from({ length: count }, (_, j) => (off + j * stride) % 35).includes(i)).map(([c]) => c);
   const start = 17 + (i % 4);
   const startUtc = new Date(Date.parse(`${date}T00:00:00Z`) + (start + 7) * 3600_000).toISOString();
   return {
@@ -51,17 +56,18 @@ const events = DAY_PLAN.map((date, i) => {
     area,
     lat: null,
     lng: null,
-    categories: [...new Set(cats)],
+    categories: cats,
     priceKind: 'unknown',
     priceMin: null,
     priceMax: null,
-    age: i === 3 || i === 20 ? '21_plus' : i === 9 ? '18_plus' : i === 6 ? 'all_ages' : 'all_ages',
+    age: i === 3 || i === 20 ? '21_plus' : i === 9 ? '18_plus' : i === 6 ? 'all_ages' : 'unknown',
     featured: false,
     url: `https://example.org/events/${i + 1}`,
     ticketUrl: null,
     sources: [sourceNames[i % 14]],
   };
 });
+if (events.some((e) => e.categories.length === 0)) throw new Error('fixture: an event has no category');
 // A weekly series: four Sunday occurrences with the same title and venue ("Also on").
 for (const i of [5, 15, 22, 30]) Object.assign(events[i], { title: 'Example Sunday Market', venue: 'Example Plaza', town: 'Truckee', area: 'truckee' });
 events.sort((a, b) => a.startsAt.localeCompare(b.startsAt));

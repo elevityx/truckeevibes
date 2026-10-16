@@ -79,12 +79,32 @@ describe('AC-R1a-15 pinned scripts, vitest include and the CI visual job', () =>
     );
     expect(scripts['test:visual']).toBe('npm run build:fixture && playwright test');
   });
+  it('test:lhci and test:budget equal the Package scripts table (R1b)', () => {
+    expect(scripts['test:lhci']).toBe('lhci autorun');
+    expect(scripts['test:budget']).toBe(
+      'node scripts/fixtures/make-big-fixture.mjs --events 700 --seed 1 && SNAPSHOT_FIXTURE=.build/fixture/snapshot-700.json MANIFEST_FIXTURE=.build/fixture/event-pages-700.json npm run build && node --test scripts/html-budget.budget.mjs',
+    );
+  });
+  it('@lhci/cli is pinned to an exact version', () => {
+    expect(JSON.parse(read('package.json')).devDependencies['@lhci/cli']).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+  it('lighthouserc.json: mobile preset, 3 runs, median, four categories at 0.9', () => {
+    const rc = JSON.parse(read('lighthouserc.json')).ci;
+    expect(rc.collect.startServerCommand).toBe('node scripts/serve-out.mjs --port 4173');
+    expect(rc.collect.staticDistDir).toBeUndefined();
+    expect(rc.collect.numberOfRuns).toBe(3);
+    expect(rc.collect.url).toEqual(['http://127.0.0.1:4173/']);
+    expect(rc.collect.settings?.preset ?? 'mobile').not.toBe('desktop');
+    for (const c of ['performance', 'accessibility', 'best-practices', 'seo']) {
+      expect(rc.assert.assertions[`categories:${c}`]).toEqual(['error', { minScore: 0.9, aggregationMethod: 'median' }]);
+    }
+  });
   it('check:repo includes the token check', () => expect(scripts['check:repo']).toContain('node scripts/build-tokens.mjs --check'));
   it('vitest include equals the r2 value', () => {
     expect(read('vitest.config.ts')).toContain("include: ['src/**/*.test.ts', 'ingest/**/*.test.ts', 'scripts/**/*.test.{mjs,ts}']");
   });
 
-  const VISUAL_RUNS = ['npm ci', 'npx playwright install --with-deps chromium', 'npm run test:visual']; // R1b appends test:lhci, test:budget; R2c og:bench; R3b test:clarity
+  const VISUAL_RUNS = ['npm ci', 'npx playwright install --with-deps chromium', 'npm run test:visual', 'npm run test:lhci', 'npm run test:budget']; // R2c appends og:bench; R3b test:clarity
   const steps = parseYaml(read('.github', 'workflows', 'ci.yml')).jobs.visual.steps;
   it('jobs.visual has the pinned job keys', () => {
     const job = parseYaml(read('.github', 'workflows', 'ci.yml')).jobs.visual;
@@ -94,7 +114,7 @@ describe('AC-R1a-15 pinned scripts, vitest include and the CI visual job', () =>
     expect(job.env).toBeUndefined();
     expect(JSON.stringify(job)).not.toContain('secrets.');
   });
-  it('the ordered run list equals the R1a list, with no later PR step', () => {
+  it('the ordered run list equals the R1b list, with no later PR step', () => {
     expect(steps.filter((s) => s.run).map((s) => s.run)).toEqual(VISUAL_RUNS);
   });
   it('every npm run <x> in the visual job names a package.json script', () => {
