@@ -2,6 +2,7 @@
 // that explains a tag is a closed reason code. When unsure, no tag.
 import type { AgeKind, PriceKind } from '../types';
 import { ageOf } from './ageGrammar';
+import { negatedInSentence, normalizeForNegation } from './negation';
 import { mapHints } from './categoryMaps';
 import { capReasons, type ReasonCode } from './reasonCodes';
 
@@ -23,14 +24,16 @@ const TABLES: [string, RegExp][] = [
 const DESC_POSITIVES: { re: RegExp; cat: 'kids' | 'family' }[] = [
   { re: /\bfor kids\b/g, cat: 'kids' },
   { re: /\bchildren's\b/g, cat: 'kids' },
-  { re: /\bkids\b/g, cat: 'kids' },
+  // A bare "kids" is usually the object being excluded, so only constructive forms count.
+  { re: /\bkids'(?!\w)/g, cat: 'kids' },
+  { re: /\bkids\s+(?:welcome|activities|activity|zone|area|crafts?|games|programs?|menu|tickets?|ages|of all ages|under\s+\d+|eat free|\d+\s*(?:and|&)\s*under)\b/g, cat: 'kids' },
+  { re: /\bbring\s+(?:the|your)\s+kids\b/g, cat: 'kids' },
   { re: /\bstorytime\b/g, cat: 'kids' },
   { re: /\btoddlers?\b/g, cat: 'kids' },
   { re: /\bfamily[- ]friendly\b/g, cat: 'family' },
   { re: /\bfamily event\b/g, cat: 'family' },
   { re: /\ball ages welcome\b/g, cat: 'family' },
 ];
-const DESC_NEGATION = /\b(?:no|not)\s|\bkids?\s+(?:are\s+)?not\b/;
 
 /** TS mirror of `private.adult_signal` (20261020000200_ingest_rpcs.sql:37-40), same word list. Expects lowercase text. */
 const ADULT_WORDS = /\b(?:21|18|bar|bars|pub|pubs|crawl|cocktail|cocktails|happy hour|brewery|breweries|brewing|brewpub|taproom|tap room|alehouse|ale works|ale house|winery|wine|wines|beer|beers|saloon|tavern|lounge|cantina|casino|nightclub|club|burlesque|drag|speakeasy|distillery|spirits|tequila|whiskey|whisky|margarita|mimosa|bottomless)\b/;
@@ -105,8 +108,7 @@ function descCategories(description: string): Map<'kids' | 'family', ReasonCode>
   if (ageOf({ title: '', description }).adult) return out;
   for (const { re, cat } of DESC_POSITIVES) {
     for (const m of description.matchAll(re)) {
-      const before = description.slice(Math.max(0, m.index! - 40), m.index!);
-      if (DESC_NEGATION.test(before)) continue;
+      if (negatedInSentence(description, m.index!, m.index! + m[0].length)) continue;
       out.set(cat, cat === 'kids' ? 'cat:desc_kids' : 'cat:desc_family');
       break;
     }
@@ -115,7 +117,7 @@ function descCategories(description: string): Map<'kids' | 'family', ReasonCode>
 }
 
 export function classify(item: ClassifyInput, descriptionText?: string): Classified {
-  const description = (descriptionText ?? '').toLowerCase().replace(/[‘’]/g, "'").replace(/\s+/g, ' ');
+  const description = normalizeForNegation(descriptionText);
   const title = item.title.toLowerCase();
   const reasons: ReasonCode[] = [];
   const cats = new Set<string>();

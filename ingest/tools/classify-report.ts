@@ -11,13 +11,15 @@ import { createSpacer } from '../core/rateLimit';
 import { validateSourceEvent } from '../core/normalize';
 import { applyNotices } from '../core/notices';
 import { applySourceDefaults } from '../run';
-import type { AdapterResult, GrantOut, SourceEvent } from '../types';
+import type { Adapter, AdapterResult, GrantOut, SourceEvent } from '../types';
 
 export interface ReportRow {
   slug: string; family: string; config: Record<string, unknown>; allowed_hosts: string[]; allowed_methods: string[];
   page_cap: number; ingest_disposition: string; terms_recheck_at: string | null; enabled: boolean;
 }
 export interface ReportDeps {
+  /** Test seam: replaces the adapter registry. */
+  adapters?: Record<string, Adapter>;
   fetch: typeof globalThis.fetch;
   now: () => Date;
   sleep: (ms: number) => Promise<void>;
@@ -42,7 +44,7 @@ export async function runReport(rows: ReportRow[], deps: ReportDeps): Promise<nu
   if (refused.length > 0) { deps.err(`classify-report: refusing, not enabled with a permitted disposition and a future terms_recheck_at: ${refused.join(', ')}`); return 1; }
   const spacer = createSpacer({ now: () => deps.now().getTime(), sleep: deps.sleep });
   for (const row of rows) {
-    const adapter = adapters[row.family];
+    const adapter = (deps.adapters ?? adapters)[row.family];
     if (!adapter) { deps.out(`source=${row.slug} status=skipped code=no_adapter`); continue; }
     const source: GrantOut['source'] = {
       slug: row.slug, family: row.family, config: row.config ?? {}, allowed_hosts: row.allowed_hosts, allowed_methods: row.allowed_methods, page_cap: row.page_cap,
@@ -67,7 +69,7 @@ export async function runReport(rows: ReportRow[], deps: ReportDeps): Promise<nu
     const kept = noticed.items.map((i) => applySourceDefaults(i, source.config));
     const keptKeys = new Set(kept.map((i) => i.externalKey));
     const tags: Record<string, number> = {};
-    let free = 0; let ambiguous = 0; let conflicts = 0; let kidsAdult = 0;
+    let free = 0; let ambiguous = 0; let conflicts = 0; let kidsAdult = 0; let wordlistOnly = 0;
     for (const i of kept) {
       for (const c of new Set(i.categoriesHint)) tags[c] = (tags[c] ?? 0) + 1;
       if (i.priceKind === 'free') free++;
@@ -75,6 +77,8 @@ export async function runReport(rows: ReportRow[], deps: ReportDeps): Promise<nu
       if (r.includes('age:ambiguous')) ambiguous++;
       if (r.some((c) => c.startsWith('conflict:'))) conflicts++;
       const adultish = r.some((c) => c.startsWith('conflict:') || c === 'age:ambiguous' || c === 'age:21_admission' || c === 'age:18_admission' || c === 'age:adult_phrase');
+      // the fingerprint the final invariant leaves when it strips a kids/family positive on the word list alone
+      if (r.includes('conflict:adult_signal') && r.includes('age:ambiguous') && !r.includes('conflict:adult')) wordlistOnly++;
       if (adultish && (i.categoriesHint.includes('kids') || i.categoriesHint.includes('family'))) kidsAdult++;
     }
     deps.out(`source=${row.slug} status=ok found=${valid.length} kept=${kept.length}`);
@@ -83,10 +87,11 @@ export async function runReport(rows: ReportRow[], deps: ReportDeps): Promise<nu
     deps.out(`  age_ambiguous: ${ambiguous}`);
     deps.out(`  conflicts: ${conflicts}`);
     deps.out(`  kids_family_with_adult_code: ${kidsAdult}`);
+    deps.out(`  kids_family_wordlist_only: ${wordlistOnly}`);
     deps.out(`  notices: ${noticed.dropped}/${noticed.cancelled}`);
     deps.out(`  unmapped: ${counts(unmapped) || 'none'}`);
     for (const i of valid) if (!keptKeys.has(i.externalKey)) deps.out(`  notice-dropped ${i.externalKey} ${i.title}`);
-    for (const i of kept) deps.out(`  event ${i.externalKey} ${(i.tagReasons ?? []).join(',') || '-'}${i.cancelled ? ' cancelled' : ''}`);
+    for (const i of kept) deps.out(`  event ${i.externalKey} cats=${[...i.categoriesHint].sort().join(',') || '-'} age=${i.age ?? 'unknown'} price=${i.priceKind ?? 'unknown'} ${(i.tagReasons ?? []).join(',') || '-'}${i.cancelled ? ' cancelled' : ''}`);
   }
   return 0;
 }
