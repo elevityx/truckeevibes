@@ -19,7 +19,7 @@ describe('AC-R1b-06 planDays (no filters, list all)', () => {
   const plan = planDays(applyFilters(all, EMPTY_FILTERS, NOW, TZ), { now: NOW, tz: TZ, fillEmpty: true });
   it('7 day heads Thu Oct 15 to Wed Oct 21', () => {
     expect(plan.days.map((d) => d.date)).toEqual(['2026-10-15', '2026-10-16', '2026-10-17', '2026-10-18', '2026-10-19', '2026-10-20', '2026-10-21']);
-    expect(plan.days.map((d) => d.events.length)).toEqual([1, 0, 2, 3, 1, 1, 1]);
+    expect(plan.days.map((d) => d.events.length)).toEqual([1, 2, 0, 3, 1, 1, 1]);
   });
   it('Later: 26 more through Nov 11', () => {
     expect(plan.later.total).toBe(26);

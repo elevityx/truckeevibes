@@ -5,6 +5,7 @@ const desktop = { viewport: { width: 1440, height: 900 } };
 
 export default defineConfig({
   testDir: 'e2e',
+  globalSetup: './e2e/global-setup.mjs',
   reporter: [['list']],
   use: { trace: 'retain-on-failure', baseURL: 'http://127.0.0.1:4173' },
   // @clarity specs only run on a flag-on build (R3b); test:visual never runs them.

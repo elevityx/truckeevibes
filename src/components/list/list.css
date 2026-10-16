@@ -59,7 +59,7 @@
 .lp .pill[aria-pressed="true"],.lp .pill.on,.lp .chip[aria-pressed="true"]{border-color:var(--river); background:var(--river); color:var(--on-river)}
 .lp .pill:hover,.lp .chip:hover{border-color:var(--river)}
 .datepick{position:relative}
-.datepick input{position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer}
+.datepick input{position:absolute; inset:-2px; width:calc(100% + 4px); height:calc(100% + 4px); opacity:0; cursor:pointer}
 .datepick:focus-within{outline:3px solid var(--river); outline-offset:2px}
 .lp .sw{display:inline-flex; gap:var(--space-3); align-items:center; min-height:44px; border:0; background:none; padding:0; cursor:pointer; color:var(--ink); font:inherit; font-size:var(--fs-control); font-weight:var(--fw-control)}
 .lp .sw .tr{width:46px; height:28px; border-radius:var(--radius-pill); background:var(--line-strong); position:relative; flex:none; transition:background-color var(--motion-duration) var(--motion-ease)}

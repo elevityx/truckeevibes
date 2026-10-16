@@ -49,15 +49,19 @@ function StatusRow({ s, label, tone }: { s: SnapshotSource; label: string; tone:
  */
 export default function SourceGroups({ initial }: { initial: SnapshotSource[] }) {
   const [rows, setRows] = useState<SnapshotSource[]>(initial);
+  // Until the live read answers, an empty list means "not known yet" (R1b-CO1), never "0 calendars".
+  const [settled, setSettled] = useState(false);
 
   useEffect(() => {
     if (!supabaseConfigured()) return;
     let live = true;
     listSourcesPublic()
       .then((r) => {
-        if (live && r.length > 0) setRows(r);
+        if (!live) return;
+        if (r.length > 0) setRows(r);
+        setSettled(true);
       })
-      .catch(() => {});
+      .catch(() => live && setSettled(true));
     return () => {
       live = false;
     };
@@ -65,21 +69,26 @@ export default function SourceGroups({ initial }: { initial: SnapshotSource[] })
 
   const by = (status: Status) => rows.filter((r) => r.status === status);
   const [a, p, l] = [by('active').length, by('paused').length, by('link_only').length];
+  const unknown = rows.length === 0;
   return (
     <>
-      <p className="proof">{`${a} read daily, ${p} not yet, ${l} link only. Every event on the list came from one of the first group.`}</p>
+      {!unknown && <p className="proof">{`${a} read daily, ${p} not yet, ${l} link only. Every event on the list came from one of the first group.`}</p>}
       {GROUPS.map((g) => (
         <section key={g.status} className="sgroup" aria-labelledby={`g-${g.status}`}>
           <div className="dayh">
             <h2 className="gh" id={`g-${g.status}`}>{g.title}</h2>
-            <span className="cnt">{by(g.status).length}</span>
+            {!unknown && <span className="cnt">{by(g.status).length}</span>}
           </div>
           <p className="small">{g.blurb}</p>
-          <ul className="srows">
-            {by(g.status).map((s) => (
-              <StatusRow key={s.homepageUrl + s.name} s={s} label={g.label} tone={g.tone} />
-            ))}
-          </ul>
+          {unknown && !settled ? (
+            <p className="small">Loading the calendar list…</p>
+          ) : (
+            <ul className="srows">
+              {by(g.status).map((s) => (
+                <StatusRow key={s.homepageUrl + s.name} s={s} label={g.label} tone={g.tone} />
+              ))}
+            </ul>
+          )}
         </section>
       ))}
     </>

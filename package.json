@@ -20,10 +20,13 @@
     "test:static": "cp scripts/fixtures/snapshot-static.json public/data/events.json && next build && node scripts/check-static-snapshot.mjs",
     "build:fixture": "SNAPSHOT_FIXTURE=scripts/fixtures/snapshot-visual.json MANIFEST_FIXTURE=scripts/fixtures/event-pages-visual.json PICKS_PATH=scripts/fixtures/picks-visual.json npm run build",
     "test:visual": "npm run build:fixture && playwright test",
+    "test:lhci": "lhci autorun",
+    "test:budget": "node scripts/fixtures/make-big-fixture.mjs --events 700 --seed 1 && SNAPSHOT_FIXTURE=.build/fixture/snapshot-700.json MANIFEST_FIXTURE=.build/fixture/event-pages-700.json npm run build && node --test scripts/html-budget.budget.mjs",
     "check:repo": "node scripts/secret-scan.mjs && node scripts/check-workflows.mjs && node scripts/check-fixtures.mjs && node scripts/check-no-html.mjs && node scripts/check-public-copy.mjs && node scripts/build-tokens.mjs --check"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
+    "@lhci/cli": "0.15.1",
     "@playwright/test": "1.64.1",
     "@resvg/resvg-js": "2.6.2",
     "@tailwindcss/postcss": "4.3.3",

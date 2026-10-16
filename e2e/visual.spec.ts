@@ -6,7 +6,12 @@ import { mkdirSync } from 'node:fs';
 const NOW = new Date('2026-10-15T15:00:00Z'); // Thu Oct 15, 8:00 am PDT
 
 /** Routes covered so far. `admin` keeps its own look, so its focus ring is its own --focus token. */
-const ROUTES: { path: string; name: string; admin?: boolean }[] = [
+const VARIANT = { empty: 'http://127.0.0.1:4174', error: 'http://127.0.0.1:4175' }; // R1b state builds (e2e/global-setup.mjs)
+const ROUTES: { path: string; name: string; admin?: boolean; hydrate?: boolean }[] = [
+  { path: '/', name: 'home', hydrate: true },
+  { path: '/?free=1&when=date:2026-10-17', name: 'home-noresults' },
+  { path: `${VARIANT.empty}/`, name: 'home-empty' },
+  { path: `${VARIANT.error}/`, name: 'home-error' },
   { path: '/about/', name: 'about' },
   { path: '/sources/', name: 'sources' },
   { path: '/bot/', name: 'bot' },
@@ -31,6 +36,7 @@ for (const r of ROUTES) {
     await page.goto(r.path);
     await page.waitForLoadState('networkidle');
     await expect(page.locator('h1, .adm').first()).toBeVisible();
+    if (r.name.startsWith('home')) await page.waitForTimeout(250); // let the clock tick and the URL filters apply after hydration
 
     mkdirSync('e2e-artifacts', { recursive: true });
     await page.screenshot({ path: `e2e-artifacts/${r.name}-${info.project.name}.png`, fullPage: true });
@@ -61,6 +67,15 @@ for (const r of ROUTES) {
     // (d) no CSP violations, no console errors
     expect(await page.evaluate(() => (window as unknown as { __csp: number }).__csp)).toBe(0);
     expect(problems).toEqual([]);
+
+    // (f) hydration: a When pill responds (list pages)
+    if (r.hydrate) {
+      const pill = page.getByRole('button', { name: 'Today', exact: true });
+      await expect(pill).toHaveAttribute('aria-pressed', 'false');
+      await pill.click();
+      await expect(pill).toHaveAttribute('aria-pressed', 'true');
+      await pill.click();
+    }
 
     // (e) one Tab focuses an element with a 3px solid ring in the river color (admin: its own --focus color)
     await page.keyboard.press('Tab');
@@ -133,5 +148,74 @@ test.describe('Amendment R1a-1 canvas alignment', () => {
       return { bg: getComputedStyle(el).backgroundColor, want };
     });
     expect(cur.bg).toBe(cur.want);
+  });
+});
+
+test.describe('AC-R1b-CO2 footer links', () => {
+  test('no side padding; the first link meets the lock-up on phones, the last link meets the right edge on desktop', async ({ page }, info) => {
+    await page.goto('/about/');
+    const m = await page.evaluate(() => {
+      const foot = document.querySelector('footer.foot') as HTMLElement;
+      const lock = foot.querySelector('.lock') as HTMLElement;
+      const links = [...foot.querySelectorAll<HTMLElement>('nav a')];
+      const pad = links.map((a) => [getComputedStyle(a).paddingLeft, getComputedStyle(a).paddingRight]);
+      return {
+        lockLeft: lock.getBoundingClientRect().left,
+        firstLeft: links[0].getBoundingClientRect().left,
+        lastRight: links.at(-1)!.getBoundingClientRect().right,
+        footRight: foot.getBoundingClientRect().right,
+        pad, n: links.length,
+      };
+    });
+    expect(m.n).toBe(4);
+    for (const [l, r] of m.pad) expect([l, r]).toEqual(['0px', '0px']);
+    if (info.project.name.startsWith('phone')) expect(Math.abs(m.firstLeft - m.lockLeft)).toBeLessThanOrEqual(1);
+    else expect(Math.abs(m.lastRight - m.footRight)).toBeLessThanOrEqual(1);
+  });
+});
+
+test.describe('R1b home layout', () => {
+  test('tiles: 8 in order, 4 columns from 760 px and 2 below; Kids says Soon', async ({ page }, info) => {
+    await page.clock.install({ time: NOW });
+    await page.goto('/');
+    const tiles = page.locator('nav[aria-label="Lists"] .tile');
+    await expect(tiles).toHaveCount(8);
+    await expect(tiles.nth(4)).toContainText('Soon');
+    const lefts = await tiles.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().left)));
+    expect(new Set(lefts).size).toBe(info.project.name.startsWith('phone') ? 2 : 4);
+  });
+  test('a tile toggles the in-page list and back (no navigation)', async ({ page }) => {
+    await page.clock.install({ time: NOW });
+    await page.goto('/');
+    await page.getByRole('button', { name: /^Music/ }).click();
+    await expect(page.locator('h1')).toHaveText('Music around Truckee');
+    await expect(page).toHaveURL(/\/$/);
+    await page.getByRole('button', { name: /^Music/ }).click();
+    await expect(page.locator('h1')).toHaveText('Around Truckee this week');
+  });
+  test('the rail shows from 1024 px, the floating Filters button below it', async ({ page }, info) => {
+    await page.clock.install({ time: NOW });
+    await page.goto('/');
+    const desktop = info.project.name.startsWith('desktop');
+    await expect(page.locator('aside.rail')).toBeVisible({ visible: desktop });
+    await expect(page.getByRole('button', { name: /^Filters/ })).toBeVisible({ visible: !desktop });
+    if (desktop) {
+      const w = await page.locator('aside.rail').evaluate((e) => Math.round(e.getBoundingClientRect().width));
+      expect(w).toBe(260);
+    }
+  });
+  test('seven day heads, an empty Saturday, and 26 more through Nov 11', async ({ page }) => {
+    await page.clock.install({ time: NOW });
+    await page.goto('/');
+    await expect(page.locator('.days > .day')).toHaveCount(7);
+    await expect(page.getByText('Nothing listed yet. Organizers:')).toHaveCount(1);
+    await expect(page.getByText('26 more through Nov 11')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Show the rest (20 more)' })).toBeVisible();
+  });
+  test('the sheet opens from a row', async ({ page }) => {
+    await page.clock.install({ time: NOW });
+    await page.goto('/');
+    await page.locator('button.drow').first().click();
+    await expect(page.getByRole('dialog', { name: 'Event details' })).toBeVisible();
   });
 });
