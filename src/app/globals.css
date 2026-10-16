@@ -37,3 +37,39 @@ a{color:var(--river)}
   --bg:var(--ground); --surface-2:var(--surface-raised); --text:var(--ink); --muted:var(--ink-muted); --accent:var(--river); --on-accent:var(--on-river);
   --focus:var(--river); --radius:var(--radius-lg); --ok:var(--pine);
 }
+
+/* Shell: header, lock-up, menu, footer. */
+.nav{display:flex; align-items:center; gap:var(--space-4); padding-top:var(--space-3); padding-bottom:var(--space-3)}
+.lock{display:inline-flex; align-items:center; gap:10px; min-height:44px; margin-right:auto; color:var(--ink); text-decoration:none}
+.lock-badge{width:30px; height:30px; flex:none}
+.wm{font-family:var(--font-display); font-weight:var(--fw-wordmark); font-size:24px; line-height:1; letter-spacing:var(--ls-wordmark); color:var(--ink)}
+.wm b{font-weight:inherit; color:var(--alpenglow-ink)}
+.nav-links{display:none; align-items:center; gap:var(--space-2)}
+.nav-links a,.menu nav a{display:inline-flex; align-items:center; min-height:44px; padding:0 var(--space-3); color:var(--ink); font-size:var(--fs-control); font-weight:var(--fw-control); text-decoration:none}
+.nav-links a:hover,.menu nav a:hover{color:var(--river)}
+.nav-links a[aria-current="page"],.menu nav a[aria-current="page"]{color:var(--river); text-decoration:underline; text-underline-offset:6px}
+.menu{position:relative}
+.menu summary{display:inline-flex; align-items:center; min-height:44px; padding:0 var(--space-4); border:2px solid var(--line-strong); border-radius:var(--radius-pill); cursor:pointer; list-style:none;
+  font-size:var(--fs-control); font-weight:var(--fw-control)}
+.menu summary::-webkit-details-marker{display:none}
+.menu nav{position:absolute; right:0; top:calc(100% + var(--space-1)); z-index:30; min-width:180px; display:flex; flex-direction:column; padding:var(--space-2); border-radius:var(--radius-lg);
+  background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow-float)}
+@media (min-width:760px){
+  .lock-badge{width:34px; height:34px}
+  .wm{font-size:26px}
+  .nav-links{display:flex}
+  .menu{display:none}
+}
+.foot{margin-top:var(--space-12); padding:var(--space-8) 0 var(--space-12); border-top:1px solid var(--line); color:var(--ink-muted); font-size:var(--fs-small); line-height:var(--lh-small)}
+.foot nav{display:flex; flex-wrap:wrap; gap:0 var(--space-2); margin:0 calc(var(--space-3) * -1) var(--space-3)}
+.foot nav a{display:inline-flex; align-items:center; min-height:44px; padding:0 var(--space-3); font-weight:var(--fw-control)}
+.foot p{margin:0 0 var(--space-2); max-width:65ch}
+.foot a{color:var(--river)}
+
+/* Content pages (About, Sources, Bot). */
+.pg{display:flex; flex-direction:column; gap:var(--space-4); padding-top:var(--space-8); max-width:760px}
+.pg p,.pg ul{margin:0}
+.pg ul{padding-left:20px; display:flex; flex-direction:column; gap:6px}
+.pg .h2{margin-top:var(--space-4)}
+.pg .btn{align-self:flex-start}
+.aside{display:flex; flex-direction:column; gap:var(--space-2); padding:var(--space-4); border-radius:var(--radius-lg); background:var(--surface); border:1px solid var(--line)}
