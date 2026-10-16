@@ -1,6 +1,8 @@
 // AC-R4b-10: classify-report refuses non-permitted sources without fetching, and submits nothing for a valid one.
 import { describe, expect, it } from 'vitest';
 import { runReport, type ReportRow } from './classify-report';
+import { makeEvent } from '../adapters/common';
+import type { Adapter, SourceEvent } from '../types';
 import { fakeNet, fixture, makeClock, text } from '../testing/fakes';
 
 const FUTURE = '2027-10-14T00:00:00Z';
@@ -61,5 +63,36 @@ describe('classify-report', () => {
   it('an empty rows list is an error', async () => {
     const h = harness();
     expect(await h.run([])).toBe(1);
+  });
+});
+
+describe('per-event rows and kids_family_wordlist_only (AC-R4b-24)', () => {
+  const fakeAdapter = (items: SourceEvent[]): Adapter => ({ family: 'fake', version: 'fake.1', fetch: async () => ({ items, status: 'ok' }) });
+  const base = { allDay: false, timeKnown: true, tz: 'America/Los_Angeles', rawSummaryLength: 0, startsAt: '2026-10-20T19:00:00Z' };
+  const facts = (externalKey: string, title: string, over: Record<string, unknown> = {}) => ({ externalKey, title, startsAt: '2026-10-20T19:00:00Z', allDay: false, tz: 'America/Los_Angeles', family: 'tribe', ...over });
+  const go = async (items: SourceEvent[]) => {
+    const out: string[] = [];
+    const clock = makeClock();
+    const code = await runReport([row({ slug: 'fake-src', family: 'fake' })], { fetch: fakeNet(() => text('', 404), clock.now).fetch, now: () => new Date(clock.now()), sleep: clock.sleep, out: (l) => out.push(l), err: () => undefined, adapters: { fake: fakeAdapter(items) } });
+    expect(code).toBe(0);
+    return out;
+  };
+  it('prints cats, age, price and codes, with no title', async () => {
+    const out = await go([{ ...base, externalKey: 'k1', title: 'Secret Title One', categoriesHint: ['music'], age: '21_plus', priceKind: 'unknown', tagReasons: ['cat:source_map', 'age:21_admission', 'conflict:adult'] }]);
+    expect(out).toContain('  event k1 cats=music age=21_plus price=unknown cat:source_map,age:21_admission,conflict:adult');
+    expect(out.filter((l) => l.startsWith('  event ')).join('\n')).not.toContain('Secret Title One');
+  });
+  it('an event with no categories or codes prints dashes, and a cancelled one says so', async () => {
+    const out = await go([{ ...base, externalKey: 'k2', title: 'Plain', categoriesHint: [], cancelled: true }]);
+    expect(out).toContain('  event k2 cats=- age=unknown price=unknown - cancelled');
+  });
+  it('counts a kids hint removed only by the word list; a 21+ item with a kids hint is not counted', async () => {
+    const wl = makeEvent(facts('w1', 'Kids Craft Afternoon', { venueName: 'Boys & Girls Club of Truckee', hints: ['kids'] }));
+    const adult = makeEvent(facts('a1', '21+ only Night', { hints: ['kids'] }));
+    const clean = makeEvent(facts('c1', 'Kids Craft Afternoon', { hints: ['kids'] }));
+    expect(wl.tagReasons).toEqual(expect.arrayContaining(['conflict:adult_signal', 'age:ambiguous']));
+    expect(wl.tagReasons).not.toContain('conflict:adult');
+    const out = await go([wl, adult, clean]);
+    expect(out).toContain('  kids_family_wordlist_only: 1');
   });
 });

@@ -226,3 +226,85 @@ describe('descriptions never leave', () => {
     expect('descriptionFacts' in r).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// R4b-2 (AC-R4b-19, 20, 21, 23, 25)
+// ---------------------------------------------------------------------------------------------------------------------
+describe('negated kids/family positives (AC-R4b-19)', () => {
+  const noKidsReasons = (r: ReturnType<typeof c>) => { expect(r.categories).not.toContain('kids'); expect(r.categories).not.toContain('family'); expect(r.reasons).not.toContain('cat:desc_kids'); expect(r.reasons).not.toContain('cat:desc_family'); };
+  it.each([
+    'Leave the kids at home and join us for a raunchy evening.', 'A night out without the kids.', 'Kids are not welcome at this one.', 'Kids not welcome.',
+    "This show isn't for kids.", 'Kids will be bored.', "Children's tickets not available.", 'Babysitter recommended. Kids will be bored.',
+    'A night out w/o the kids.', 'A kids-free evening.', 'Child-free night.', 'Date night minus the kids.', 'Sans kids, please.', 'Need a break from the kids? Join us.',
+    "Bring the kids? No — this one's for grown-ups.", 'Kids... not this time.', 'Kids? Not tonight!', 'No costumes required, kids welcome.', 'Kids are welcome to watch.',
+  ])('%s', (d) => { noKidsReasons(c('Comedy Night', {}, d)); });
+  it('Rated R humor + children\'s tickets not available -> no kids, adult phrase and conflict', () => {
+    const r = c('Comedy Night', {}, "Rated R humor. Children's tickets not available.");
+    noKidsReasons(r);
+    expect(r.reasons).toEqual(expect.arrayContaining(['age:adult_phrase', 'conflict:adult']));
+  });
+  it('title Evening Social + "Grab a babysitter, kids stay home. Cash bar." -> no categories', () => {
+    expect(c('Evening Social', {}, 'Grab a babysitter, kids stay home. Cash bar.').categories).toEqual([]);
+  });
+  it.each([
+    ["Kids' storytime at the library.", 'kids', 'cat:desc_kids'], ['Kids welcome!', 'kids', 'cat:desc_kids'], ['Bring the kids!', 'kids', 'cat:desc_kids'],
+    ['Kids menu and crafts.', 'kids', 'cat:desc_kids'], ['There is no parking on site. Great for kids!', 'kids', 'cat:desc_kids'],
+    ["Don't miss this family-friendly fair.", 'family', 'cat:desc_family'], ['Kids activities all day.', 'kids', 'cat:desc_kids'], ['Kids under 12 welcome.', 'kids', 'cat:desc_kids'],
+    ['Bring your kids to the fair.', 'kids', 'cat:desc_kids'], ["Kids' crafts at noon.", 'kids', 'cat:desc_kids'],
+  ])('control: %s', (d, cat, code) => {
+    const r = c('Comedy Night', {}, d);
+    expect(r.categories).toContain(cat);
+    expect(r.reasons).toContain(code);
+  });
+  it('a bare "kids" is not a positive', () => {
+    expect(c('Comedy Night', {}, 'Kids ate pizza.').categories).not.toContain('kids');
+  });
+});
+
+describe('negated all-ages / family-friendly (AC-R4b-20)', () => {
+  it.each(['This show is not suitable for all ages.', 'Not for all ages.', "This show isn't family-friendly.", 'This is not exactly family-friendly.'])('%s', (d) => {
+    const r = c('Comedy Night', {}, d);
+    expect(r.age).toBe('unknown');
+    expect(r.reasons).not.toContain('age:all_ages');
+    expect(r.reasons).not.toContain('age:family');
+    expect(r.categories).not.toContain('family');
+    expect(r.reasons).not.toContain('cat:desc_family');
+  });
+  it('"Adult content, all ages admitted but not recommended" -> unknown, adult phrase, conflict', () => {
+    const r = c('Comedy Night', {}, 'Adult content, all ages admitted but not recommended');
+    expect(r.age).toBe('unknown');
+    expect(r.reasons).toEqual(expect.arrayContaining(['age:adult_phrase', 'conflict:adult']));
+  });
+  it('controls', () => {
+    expect(c('Comedy Night', {}, 'All ages welcome!').age).toBe('all_ages');
+    expect(c('Comedy Night', {}, 'A family-friendly afternoon.').age).toBe('family');
+  });
+});
+
+describe('bar rule (AC-R4b-21)', () => {
+  it('no all-ages phrase: unknown, age:ambiguous, conflict:adult, no kids, no 21 claim', () => {
+    const r = c('Live Music Friday', { venueName: 'Example Grill' }, 'Live music from 8. 21+ to drink. Kids menu available.');
+    expect(r.age).toBe('unknown');
+    expect(r.reasons).toEqual(expect.arrayContaining(['age:ambiguous', 'conflict:adult']));
+    expect(r.reasons).not.toContain('age:21_admission');
+    expect(r.categories).not.toContain('kids');
+  });
+});
+
+describe('adult positives with a kids description (AC-R4b-23)', () => {
+  it('"Adults-only show, kids stay home" -> no kids', () => {
+    const r = c('Comedy Night', {}, 'Adults-only show, kids stay home. Kids welcome!');
+    expect(r.categories).not.toContain('kids');
+    expect(r.age).toBe('18_plus');
+  });
+});
+
+describe('line breaks are sentence breaks (AC-R4b-25)', () => {
+  it('newlines separate thoughts; the same text on one line is negated by "no"', () => {
+    const d = 'No outside food or drink\nKids craft table 2–4pm\nLive music 6pm';
+    const a = c('Fall Fair', {}, d);
+    expect(a.categories).toContain('kids');
+    expect(a.reasons).toContain('cat:desc_kids');
+    expect(c('Fall Fair', {}, d.replace(/\n/g, ' ')).categories).not.toContain('kids');
+  });
+});

@@ -91,3 +91,110 @@ describe('reason hygiene', () => {
       for (const c of a(t).reasons) expect(REASON_CODES).toContain(c);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// R4b-2 (AC-R4b-20, 21, 22, 23, 25)
+// ---------------------------------------------------------------------------------------------------------------------
+const d = (description: string, title = 'Comedy Night') => ageOf({ title, description });
+
+describe('negated all-ages / family-friendly (AC-R4b-20)', () => {
+  it.each(['This show is not suitable for all ages.', 'Not for all ages.', "This show isn't family-friendly.", 'This is not exactly family-friendly.'])('%s', (t) => {
+    const r = d(t);
+    expect(r.age).toBe('unknown');
+    expect(r.reasons).not.toContain('age:all_ages');
+    expect(r.reasons).not.toContain('age:family');
+  });
+  it('"Adult content, all ages admitted but not recommended" -> unknown + adult phrase', () => {
+    const r = d('Adult content, all ages admitted but not recommended');
+    expect(r.age).toBe('unknown');
+    expect(r.reasons).toContain('age:adult_phrase');
+  });
+  it('controls', () => {
+    expect(d('All ages welcome!').age).toBe('all_ages');
+    expect(d('A family-friendly afternoon.').age).toBe('family');
+  });
+});
+
+describe('bar rule (AC-R4b-21)', () => {
+  it.each(['all ages welcome, 21+ to drink', 'All ages. 21+ to purchase alcohol.'])('%s -> all_ages, no 21 admission, not ambiguous', (t) => {
+    const r = d(t);
+    expect(r.age).toBe('all_ages');
+    expect(r.reasons).toContain('age:all_ages');
+    expect(r.reasons).not.toContain('age:21_admission');
+    expect(r.reasons).not.toContain('age:ambiguous');
+    expect(r.adult).toBe(false);
+    expect(r.ambiguous).toBe(false);
+  });
+  it('an all-ages phrase in any text of the item neutralizes it (ageText)', () => {
+    const r = ageOf({ title: 'Comedy Night', ageText: 'All ages', description: '21+ to drink.' });
+    expect(r.age).toBe('all_ages');
+    expect(r.ambiguous).toBe(false);
+  });
+  it('no all-ages phrase: ambiguous, no 21 claim', () => {
+    const r = d('Live music from 8. 21+ to drink. Kids menu available.');
+    expect(r.age).toBe('unknown');
+    expect(r.ambiguous).toBe(true);
+    expect(r.adult).toBe(false);
+    expect(r.reasons).toContain('age:ambiguous');
+    expect(r.reasons).not.toContain('age:21_admission');
+  });
+  it('a negated all-ages phrase does not neutralize it', () => {
+    const r = d("This isn't an all-ages show. 21+ to drink.");
+    expect(r.ambiguous).toBe(true);
+    expect(r.age).toBe('unknown');
+  });
+  it('other bar-rule continuations', () => {
+    for (const t of ['21+ for alcohol', '21+ wristband required', '21+ beer garden', '21+ to buy drinks']) expect(d(`Open to everyone. ${t}`).adult, t).toBe(false);
+  });
+  it('controls: 21+ only, and 21+ local vendors', () => {
+    expect(d('21+ only').age).toBe('21_plus');
+    expect(d('21+ local vendors').ambiguous).toBe(true);
+  });
+});
+
+describe('ranges are not minimums (AC-R4b-22)', () => {
+  it.each(['Youth Night: ages 21 and under', 'Ages 18 to 24 meetup', 'Ages 18 and under swim', 'Ages 18 through 24', 'Ages 21 - 30', 'Ages 18 or younger'])('%s', (t) => {
+    const r = ageOf({ title: t });
+    expect(r.adult).toBe(false);
+    expect(r.ambiguous).toBe(false);
+    expect(r.age).toBe('unknown');
+    expect(r.reasons).not.toContain('age:21_admission');
+    expect(r.reasons).not.toContain('age:18_admission');
+  });
+  it('control: Ages 21 and up', () => { expect(ageOf({ title: 'Ages 21 and up' }).age).toBe('21_plus'); });
+});
+
+describe('new adult positives (AC-R4b-23)', () => {
+  it('Adults-only', () => {
+    const r = d('Adults-only wine walk');
+    expect([r.age, r.reasons.includes('age:adult_phrase')]).toEqual(['18_plus', true]);
+  });
+  it.each(['Must be 21 or over', '21 or over', '21 years and older', '21 yrs and up', '21 yrs+', '21 yrs+ only', '21 years or older', 'Must be over 21', 'Over 21 only', 'No one under 21 admitted'])('%s -> 21_plus', (t) => {
+    const r = d(t);
+    expect(r.age).toBe('21_plus');
+    expect(r.adult).toBe(true);
+  });
+  it.each(['Must be 21 or over', '21 or over', '21 years and older', '21 yrs and up', '21 yrs+'])('%s -> age:21_admission', (t) => { expect(d(t).reasons).toContain('age:21_admission'); });
+  it.each(['Nobody under 18'])('%s -> 18_plus', (t) => { expect(d(t).age).toBe('18_plus'); });
+  it.each(['over 21 vendors', '21 years+ of music'])('%s -> ambiguous', (t) => {
+    const r = d(t);
+    expect(r.ambiguous).toBe(true);
+    expect(r.age).toBe('unknown');
+  });
+  it.each(['An adult event', 'Rated R', 'Adults night', 'An adult show', 'For adults', 'Mature audiences', 'Adult humor', 'Adult themes'])('%s -> unknown + adult phrase', (t) => {
+    const r = d(t);
+    expect(r.age).toBe('unknown');
+    expect(r.reasons).toContain('age:adult_phrase');
+    expect(r.adult).toBe(true);
+  });
+  it('look-alikes still do not match', () => {
+    for (const t of ['Over 2100 attended', 'Rated Rad', 'Route 21 over there']) expect(d(t).adult, t).toBe(false);
+  });
+});
+
+describe('line breaks (AC-R4b-25)', () => {
+  it('"Not for everyone\\nAll ages welcome" -> all_ages', () => {
+    expect(d('Not for everyone\nAll ages welcome').age).toBe('all_ages');
+    expect(d('Not for everyone All ages welcome').age).toBe('unknown');
+  });
+});
