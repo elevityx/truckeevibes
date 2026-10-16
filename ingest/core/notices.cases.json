@@ -1,66 +1,132 @@
 [
   {
     "title": "Example Ale Works Closing at 4PM Today",
+    "sibling": "",
     "notice": true
   },
   {
     "title": "NO Country Fridays Tonight",
+    "sibling": "Country Fridays",
     "notice": true
   },
   {
     "title": "Kitchen Closed for Maintenance",
+    "sibling": "",
     "notice": true
   },
   {
     "title": "Holiday Hours at Example Hall",
+    "sibling": "",
     "notice": true
   },
   {
     "title": "Closed Today for a Private Event",
+    "sibling": "",
     "notice": true
   },
   {
     "title": "Closing Early Tonight",
+    "sibling": "",
     "notice": true
   },
   {
     "title": "Special Hours This Week",
+    "sibling": "",
     "notice": true
   },
   {
     "title": "No Trivia Today",
+    "sibling": "Trivia",
     "notice": true
   },
   {
     "title": "Season Closing Party",
+    "sibling": "",
     "notice": false
   },
   {
     "title": "Closing Party with Example Band",
+    "sibling": "",
     "notice": false
   },
   {
     "title": "No Cover Fridays",
+    "sibling": "",
     "notice": false
   },
   {
     "title": "No Host Bar Mixer",
+    "sibling": "",
     "notice": false
   },
   {
     "title": "Country Fridays",
+    "sibling": "",
     "notice": false
   },
   {
     "title": "Closed Captioned Film Night",
+    "sibling": "",
     "notice": false
   },
   {
     "title": "Notice Board Workshop",
+    "sibling": "",
     "notice": false
   },
   {
     "title": "Nothing But Bluegrass",
+    "sibling": "",
+    "notice": false
+  },
+  {
+    "title": "NO Country Fridays Tonight",
+    "sibling": "",
+    "notice": false
+  },
+  {
+    "title": "Rocky Horror: Closing Tonight",
+    "sibling": "",
+    "notice": false
+  },
+  {
+    "title": "Closing Tonight: Our Town",
+    "sibling": "",
+    "notice": false
+  },
+  {
+    "title": "Truckee Thursdays (closing at 9pm)",
+    "sibling": "",
+    "notice": false
+  },
+  {
+    "title": "Farmers Market, closing at 1pm",
+    "sibling": "",
+    "notice": false
+  },
+  {
+    "title": "Closed-Course Criterium for Kids",
+    "sibling": "",
+    "notice": false
+  },
+  {
+    "title": "Closed Captioned Film for Seniors",
+    "sibling": "",
+    "notice": false
+  },
+  {
+    "title": "No Shame Theatre Tonight",
+    "sibling": "",
+    "notice": false
+  },
+  {
+    "title": "No Limits Comedy Tonight",
+    "sibling": "",
+    "notice": false
+  },
+  {
+    "title": "No Doubt Tribute Today",
+    "sibling": "",
     "notice": false
   }
 ]

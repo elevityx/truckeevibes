@@ -204,24 +204,48 @@ select pg_temp.mk_admin();
 -- Fixtures -----------------------------------------------------------------------------------------------------------
 select pg_temp.mk_source('r4a-src', 'organizer', 'review');
 select pg_temp.mk_source('r4a-auto', 'organizer', 'auto');
-create temp table notice_cases (title text, expect boolean);
-insert into notice_cases (title, expect) values
-  ('Example Ale Works Closing at 4PM Today', true),
-  ('NO Country Fridays Tonight', true),
-  ('Kitchen Closed for Maintenance', true),
-  ('Holiday Hours at Example Hall', true),
-  ('Closed Today for a Private Event', true),
-  ('Closing Early Tonight', true),
-  ('Special Hours This Week', true),
-  ('No Trivia Today', true),
-  ('Season Closing Party', false),
-  ('Closing Party with Example Band', false),
-  ('No Cover Fridays', false),
-  ('No Host Bar Mixer', false),
-  ('Country Fridays', false),
-  ('Closed Captioned Film Night', false),
-  ('Notice Board Workshop', false),
-  ('Nothing But Bluegrass', false);
+create temp table notice_cases (title text, sibling text, expect boolean);
+insert into notice_cases (title, sibling, expect) values
+  ('Example Ale Works Closing at 4PM Today', '', true),
+  ('NO Country Fridays Tonight', 'Country Fridays', true),
+  ('Kitchen Closed for Maintenance', '', true),
+  ('Holiday Hours at Example Hall', '', true),
+  ('Closed Today for a Private Event', '', true),
+  ('Closing Early Tonight', '', true),
+  ('Special Hours This Week', '', true),
+  ('No Trivia Today', 'Trivia', true),
+  ('Season Closing Party', '', false),
+  ('Closing Party with Example Band', '', false),
+  ('No Cover Fridays', '', false),
+  ('No Host Bar Mixer', '', false),
+  ('Country Fridays', '', false),
+  ('Closed Captioned Film Night', '', false),
+  ('Notice Board Workshop', '', false),
+  ('Nothing But Bluegrass', '', false),
+  ('NO Country Fridays Tonight', '', false),
+  ('Rocky Horror: Closing Tonight', '', false),
+  ('Closing Tonight: Our Town', '', false),
+  ('Truckee Thursdays (closing at 9pm)', '', false),
+  ('Farmers Market, closing at 1pm', '', false),
+  ('Closed-Course Criterium for Kids', '', false),
+  ('Closed Captioned Film for Seniors', '', false),
+  ('No Shame Theatre Tonight', '', false),
+  ('No Limits Comedy Tonight', '', false),
+  ('No Doubt Tribute Today', '', false);
+-- one probe source per case; a sibling is a same-source, same-Pacific-day event with that title
+create function pg_temp.probe(p_title text, p_sibling text) returns boolean language plpgsql as $$
+declare v_slug text := 'np-' || substr(md5(p_title || '|' || p_sibling), 1, 12); v_src uuid; v_ev uuid; v_day date := (now() at time zone 'America/Los_Angeles')::date + 20;
+begin
+  v_src := pg_temp.mk_source(v_slug, 'organizer', 'review');
+  if p_sibling <> '' then
+    insert into public.events (region_id, title, summary, starts_at, time_known, status, published_at)
+      values (private.region_id(), p_sibling, 'Fixture sibling for the notice rule.', (v_day + time '19:00') at time zone 'America/Los_Angeles', true, 'published', now())
+      returning id into v_ev;
+    insert into public.source_events (source_id, external_key, facts, content_hash, title, normalized_title, starts_at, all_day, time_known, start_day, cluster_id)
+      values (v_src, 'sib', '{}', 'x', p_sibling, '', (v_day + time '19:00') at time zone 'America/Los_Angeles', false, true, v_day, v_ev);
+  end if;
+  return private.is_notice_title(p_title, private.notice_sibling_exists(p_title, v_src, v_day));
+end $$;
 create function pg_temp.clean(p_item jsonb) returns jsonb language plpgsql as $$
 begin return private.clean_source_item((select s from public.sources s where s.slug = 'r4a-src'), p_item);
 exception when others then return jsonb_build_object('error', sqlstate || ':' || sqlerrm); end $$;
@@ -241,14 +265,29 @@ select pg_temp.ing('k1', 'r4a-auto', jsonb_build_array(pg_temp.item('k-a', 'R4a 
 select pg_temp.eq($$(select categories::text from public.list_events(120) where title = 'R4a Kids Craft Hour')$$, '{family,kids,arts}', 'AC-R4a-01 list_events orders {family, kids, arts} as family, kids, arts');
 
 -- AC-R4a-02 ----------------------------------------------------------------------------------------------------------
-select pg_temp.eq($$(select count(*) from notice_cases)$$, '16', 'AC-R4a-02 the parity table has 16 rows');
-select pg_temp.eq($$(select count(*) from notice_cases where private.is_notice_title(title) is distinct from expect)$$, '0', 'AC-R4a-02 is_notice_title returns the table value for all 16 rows');
-select pg_temp.eq($$(select count(*) from notice_cases where private.is_notice_title(title) = expect and expect)$$, '8', 'AC-R4a-02 ... 8 notices');
+select pg_temp.eq($$(select count(*) from notice_cases)$$, '26', 'AC-R4a-11 the parity table has 26 rows');
+create temp table probed as select title, sibling, expect, pg_temp.probe(title, sibling) as got from notice_cases;
+select pg_temp.eq($$(select count(*) from probed where got is distinct from expect)$$, '0', 'AC-R4a-02/11 the matcher returns the table value for every row, siblings included');
+select pg_temp.eq($$(select count(*) from probed where got = expect and expect)$$, '8', 'AC-R4a-02 ... 8 notices');
+select pg_temp.eq($$(select count(*) from probed where got and sibling = '')$$, '6', 'AC-R4a-11 ... 6 of them need no sibling (rules a and b)');
+select pg_temp.eq($$(select count(*) from probed where title in ('Rocky Horror: Closing Tonight','Closing Tonight: Our Town','Truckee Thursdays (closing at 9pm)','Farmers Market, closing at 1pm','Closed-Course Criterium for Kids','Closed Captioned Film for Seniors','No Shame Theatre Tonight','No Limits Comedy Tonight','No Doubt Tribute Today') and not expect and not got)$$, '9', 'AC-R4a-11 the 9 probe titles are false');
 select pg_temp.eq($$private.is_notice_title(null)$$, 'false', 'AC-R4a-02 is_notice_title(null) is false');
 select pg_temp.eq($$private.is_notice_title(null) is null$$, 'false', 'AC-R4a-02 ... and not null');
 
 -- AC-R4a-03 ----------------------------------------------------------------------------------------------------------
-select is(pg_temp.clean(pg_temp.item('n1', 'NO Country Fridays Tonight', 5)) -> 'reject', '"notice"'::jsonb, 'AC-R4a-03 clean_source_item rejects ''NO Country Fridays Tonight'' with reject notice');
+select is(pg_temp.clean(pg_temp.item('n0', 'Alibi Closing at 4PM Today', 5)) -> 'reject', '"notice"'::jsonb, 'AC-R4a-03 clean_source_item rejects a closing-at title (rule a) with reject notice');
+select is(pg_temp.clean(pg_temp.item('n1', 'NO Country Fridays Tonight', 5)) ? 'reject', false, 'AC-R4a-03 ... ''NO Country Fridays Tonight'' with no sibling is not a reject');
+create function pg_temp.sib_item() returns jsonb language plpgsql as $$
+declare v_src uuid := (select id from public.sources where slug = 'r4a-src'); v_ev uuid; v_day date := (now() at time zone 'America/Los_Angeles')::date + 5;
+begin
+  insert into public.events (region_id, title, summary, starts_at, time_known, status, published_at)
+    values (private.region_id(), 'Country Fridays', 'Fixture sibling for the notice rule.', (v_day + time '19:00') at time zone 'America/Los_Angeles', true, 'published', now()) returning id into v_ev;
+  insert into public.source_events (source_id, external_key, facts, content_hash, title, normalized_title, starts_at, all_day, time_known, start_day, cluster_id)
+    values (v_src, 'sib-cf', '{}', 'x', 'Country Fridays', '', (v_day + time '19:00') at time zone 'America/Los_Angeles', false, true, v_day, v_ev);
+  return jsonb_build_object('ok', true);
+end $$;
+select pg_temp.q($$pg_temp.sib_item()$$);
+select is(pg_temp.clean(pg_temp.item('n1b', 'NO Country Fridays Tonight', 5, 19)) -> 'reject', '"notice"'::jsonb, 'AC-R4a-03 ''NO Country Fridays Tonight'' with the same-source same-day sibling -> reject notice');
 select is(pg_temp.clean(pg_temp.item('n2', 'Country Fridays', 5)) ? 'reject', false, 'AC-R4a-03 ''Country Fridays'' is not a reject');
 select is(pg_temp.clean(pg_temp.item('n3', 'Country Fridays', 5)) ? 'tag_reasons', true, 'AC-R4a-03 ... and returns a tag_reasons key');
 
@@ -265,13 +304,32 @@ select pg_temp.mk_pub('Fx Closing Early Tonight');
 select pg_temp.mk_pub('Fx Locked Closed Today for a Private Event', 'ingest', array['title']);
 select pg_temp.mk_pub('Fx Admin Kitchen Closed for Maintenance', 'admin');
 select pg_temp.mk_pub('Fx Country Fridays');
-select pg_temp.eq($$private.hide_notice_events()$$, '1', 'AC-R4a-04 the hide statement reports exactly one event hidden');
+-- rule (c): published events linked to a source through source_events; the day is Pacific
+create function pg_temp.mk_pub_src(p_title text, p_slug text, p_key text) returns uuid language plpgsql as $$
+declare v_id uuid; v_src uuid := (select id from public.sources where slug = p_slug); v_day date := (now() at time zone 'America/Los_Angeles')::date + 30;
+begin
+  insert into public.events (region_id, title, summary, starts_at, time_known, status, published_at)
+    values (private.region_id(), p_title, 'Fixture for the sibling notice rule.', (v_day + time '19:00') at time zone 'America/Los_Angeles', true, 'published', now())
+    returning id into v_id;
+  insert into public.source_events (source_id, external_key, facts, content_hash, title, normalized_title, starts_at, all_day, time_known, start_day, cluster_id)
+    values (v_src, p_key, '{}', 'x', p_title, '', (v_day + time '19:00') at time zone 'America/Los_Angeles', false, true, v_day, v_id);
+  return v_id;
+end $$;
+select pg_temp.mk_source('r4a-other', 'organizer', 'review');
+select pg_temp.mk_pub_src('Fx Trivia', 'r4a-src', 'c1');
+select pg_temp.mk_pub_src('NO fx  trivia Today', 'r4a-src', 'c2');
+select pg_temp.mk_pub_src('No Fx Lonely Today', 'r4a-src', 'c3');
+select pg_temp.mk_pub_src('Fx Karaoke', 'r4a-other', 'c4');
+select pg_temp.mk_pub_src('No Fx Karaoke Tonight', 'r4a-src', 'c5');
+select pg_temp.eq($$private.hide_notice_events()$$, '2', 'AC-R4a-04 the hide statement reports exactly two events hidden (rule a and rule c)');
+select pg_temp.eq($$(select string_agg(title || '=' || status::text, ',' order by title collate "C") from public.events where title ilike '%fx%trivia%' or title ilike 'No Fx %' or title = 'Fx Karaoke')$$,
+  'Fx Karaoke=published,Fx Trivia=published,NO fx  trivia Today=hidden,No Fx Karaoke Tonight=published,No Fx Lonely Today=published', 'AC-R4a-04 rule c hides only the notice that has a same-source same-day sibling');
 select pg_temp.eq($$(select status || '|' || status_by_admin || '|' || reject_reason from public.events where title = 'Fx Closing Early Tonight')$$, 'hidden|true|notice', 'AC-R4a-04 published ingest notice -> hidden, status_by_admin, reject_reason notice');
 select pg_temp.eq($$(select count(*) from public.event_changes c join public.events e on e.id = c.event_id where e.title = 'Fx Closing Early Tonight' and c.decided_by = 'rule:notice' and c.field = 'status' and c.old_value = '"published"' and c.new_value = '"hidden"')$$, '1', 'AC-R4a-04 ... with one event_changes row rule:notice');
 select pg_temp.eq($$(select status::text from public.events where title = 'Fx Locked Closed Today for a Private Event')$$, 'published', 'AC-R4a-04 locked title -> unchanged');
 select pg_temp.eq($$(select status::text from public.events where title = 'Fx Admin Kitchen Closed for Maintenance')$$, 'published', 'AC-R4a-04 admin-origin notice -> unchanged');
 select pg_temp.eq($$(select status::text from public.events where title = 'Fx Country Fridays')$$, 'published', 'AC-R4a-04 published Country Fridays -> unchanged');
-select pg_temp.eq($$(select count(*) from public.event_changes where decided_by = 'rule:notice')$$, '1', 'AC-R4a-04 exactly one rule:notice journal row overall');
+select pg_temp.eq($$(select count(*) from public.event_changes where decided_by = 'rule:notice')$$, '2', 'AC-R4a-04 exactly two rule:notice journal rows overall');
 select pg_temp.eq($$private.hide_notice_events()$$, '0', 'AC-R4a-04 running it again hides nothing');
 
 -- AC-R4a-05 ----------------------------------------------------------------------------------------------------------
@@ -327,6 +385,14 @@ select is(pg_temp.x('admin', format($$select public.admin_decide_card(%L, 'accep
   (select id from public.review_cards where kind = 'held_run' and held_run_id = (select (res ->> 'run_id')::uuid from tres where label = 'h1')))), 'OK', 'AC-R4a-07 admin_decide_card(accept) succeeds');
 select pg_temp.eq($$(select count(*) from public.source_events where source_id = (select id from public.sources where slug = 'r4a-held') and tag_reasons = '{cat:title_kw,age:family}')$$, '6', 'AC-R4a-07 ... and stores the reasons on the 6 source_events');
 select pg_temp.eq($$(select count(*) from public.source_event_versions v join public.source_events se on se.id = v.source_event_id where se.source_id = (select id from public.sources where slug = 'r4a-held') and v.tag_reasons = '{cat:title_kw,age:family}')$$, '6', 'AC-R4a-07 ... and on 6 new version rows');
+
+-- AC-R4a-12 ----------------------------------------------------------------------------------------------------------
+select is(pg_temp.clean(pg_temp.item('d1', 'R4a Adult Kids Show', 9, 20, '{"categoriesHint":["kids","family","music"],"age":"21_plus"}')) -> 'facts' -> 'categories', '["music"]'::jsonb, 'AC-R4a-12 age 21_plus strips kids and family');
+select is(pg_temp.clean(pg_temp.item('d2', 'R4a Adult Kids Show', 9, 20, '{"categoriesHint":["kids","family","music"],"age":"18_plus"}')) -> 'facts' -> 'categories', '["music"]'::jsonb, 'AC-R4a-12 age 18_plus strips kids and family');
+select is(pg_temp.clean(pg_temp.item('d3', 'R4a Adult Kids Show', 9, 20, '{"categoriesHint":["kids","family","music"],"tagReasons":["conflict:adult"]}')) -> 'facts' -> 'categories', '["music"]'::jsonb, 'AC-R4a-12 a conflict:adult reason with age unknown strips kids and family');
+select is(pg_temp.clean(pg_temp.item('d4', 'R4a Adult Kids Show', 9, 20, '{"categoriesHint":["kids","family","music"],"tagReasons":["age:21_admission"]}')) -> 'facts' -> 'categories', '["music"]'::jsonb, 'AC-R4a-12 an age:21 reason strips kids and family');
+select is(pg_temp.clean(pg_temp.item('d5', 'R4a Adult Kids Show', 9, 20, '{"categoriesHint":["kids","family","music"],"tagReasons":["age:family","cat:title_kw"]}')) -> 'facts' -> 'categories', '["family","kids","music"]'::jsonb, 'AC-R4a-12 a benign reason set keeps kids and family');
+select is(pg_temp.clean(pg_temp.item('d6', 'R4a Adult Kids Show', 9, 20, '{"categoriesHint":["kids","family","music"],"age":"all_ages"}')) -> 'facts' -> 'categories', '["family","kids","music"]'::jsonb, 'AC-R4a-12 age all_ages keeps kids and family');
 
 select * from finish();
 rollback;

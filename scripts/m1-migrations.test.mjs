@@ -686,7 +686,7 @@ describe('tags_notices keeps the canonical block and the unchanged 24-grant allo
   it('no helper or hide function is granted', () => {
     const sql = stripComments(read('tags_notices'));
     expect(sql).not.toMatch(/grant execute on function private\./i);
-    for (const fn of ['is_notice_title', 'valid_reason_code', 'hide_notice_events']) {
+    for (const fn of ['notice_rest', 'notice_sibling_exists', 'is_notice_title', 'valid_reason_code', 'hide_notice_events']) {
       expect(sql).toMatch(new RegExp(`create function private\\.${fn}\\(`));
     }
   });
@@ -704,7 +704,9 @@ describe('tags_notices keeps the canonical block and the unchanged 24-grant allo
     expect(cur.match(/-- R4a begin/g).length).toBe(cur.match(/-- R4a end/g).length);
     expect(cur).toContain("return jsonb_build_object('reject', 'notice')");
     expect(cur).toContain("'tag_reasons', to_jsonb(v_reasons)");
-    expect(cur.indexOf("reject', 'notice'")).toBeLessThan(cur.indexOf("'reject', 'dates'"));
+    expect(cur.indexOf("reject', 'notice'")).toBeGreaterThan(cur.indexOf("'reject', 'window'"));
+    expect(cur.indexOf("reject', 'notice'")).toBeLessThan(cur.indexOf("'reject', 'url'"));
+    expect(cur).toContain("array_remove(array_remove(v_cats, 'kids'), 'family')");   // DR12 mirror (R4a-1)
     expect(cur.indexOf('private.valid_reason_code')).toBeLessThan(cur.indexOf('from public.suppressions'));
   });
   it('replaces private.apply_items as a verbatim copy of the ingest_rpcs version plus marked R4a lines', () => {
