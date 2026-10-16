@@ -1,7 +1,9 @@
+import Link from 'next/link';
+
 /** The TruckeeVibes lock-up: simple badge plus the two-tone wordmark. Server component, no client JS. */
 export default function Lockup() {
   return (
-    <a className="lock" href="/" aria-label="TruckeeVibes home">
+    <Link className="lock" href="/" aria-label="TruckeeVibes home">
       <svg className="lock-badge" viewBox="0 0 170 170" aria-hidden="true" focusable="false">
         <circle cx="85" cy="85" r="80" fill="var(--surface)" stroke="var(--ink)" strokeWidth="10" />
         <polyline points="30,108 58,72 80,92 104,58 140,108" fill="none" stroke="var(--river)" strokeWidth="14" strokeLinejoin="round" strokeLinecap="round" />
@@ -10,6 +12,6 @@ export default function Lockup() {
       <span className="wm">
         Truckee<b>Vibes</b>
       </span>
-    </a>
+    </Link>
   );
 }
