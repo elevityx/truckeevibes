@@ -336,9 +336,9 @@ select pg_temp.mk_ev('R2a Loser Hidden', 'hidden', true, interval '20 days');
 select pg_temp.mk_ev('R2a Loser Published Once', 'published', true, interval '20 days');
 select pg_temp.x('postgres', $e$select private.admin_set_status(id, 'hidden', 'r', 'e1500000-0000-4000-a000-000000000001') from public.events where title = 'R2a Loser Published Once'$e$);
 -- pgTAP runs in one transaction, so every journal row shares one `at`; the hide happened in an earlier transaction in real life
-set local session_replication_role = replica;      -- the journal is append-only; this fixture edit skips its guard trigger
+select set_config('tv.retention', 'on', true);      -- the journal is append-only; the sanctioned transaction-local switch lets this fixture edit through
 update public.event_changes set at = at - interval '1 hour' where event_id = (select id from public.events where title = 'R2a Loser Published Once');
-set local session_replication_role = origin;
+select set_config('tv.retention', 'off', true);
 select pg_temp.mk_ev('R2a Loser Published', 'published', true, interval '20 days');
 select pg_temp.mk_ev('R2a Loser Cancelled', 'cancelled', true, interval '20 days');
 select is(pg_temp.merge('R2a Survivor A', 'R2a Loser Pending'), 'OK', 'fixture: merge pending loser');
@@ -440,6 +440,36 @@ select pg_temp.eq($$(select (o ->> 'title') || '|' || (o ->> 'venue') || '|' || 
 select is(pg_temp.pstate('R2a NM Ended 30m'), 'upcoming', 'AC-R2a-08 one that ended 30 minutes ago -> upcoming (the list_events grace hour)');
 select is(pg_temp.pstate('R2a NM Ended 90m'), 'ended', 'AC-R2a-08 one that ended 90 minutes ago -> ended');
 select is(pg_temp.pstate('R2a NM Open Cancelled'), 'cancelled', 'AC-R2a-08 a published-once cancelled event -> cancelled');
+
+-- ---------------------------------------------------------------------------------------------------------------------
+-- AC-R2a-22 (Amendment R2a-db-1): a redirect resolves the whole merged_into chain to the final winner
+-- ---------------------------------------------------------------------------------------------------------------------
+select pg_temp.mk_ev('R2a Chain C', 'published', true, interval '26 days', null, null, interval '-3 days');
+select pg_temp.mk_ev('R2a Chain A', 'published', true, interval '26 days', null, null, interval '-2 days');
+select pg_temp.mk_ev('R2a Chain B', 'published', true, interval '26 days');
+select is(pg_temp.merge('R2a Chain A', 'R2a Chain B'), 'OK', 'fixture: B merged into A');
+select is(pg_temp.merge('R2a Chain C', 'R2a Chain A'), 'OK', 'fixture: A merged into C');
+select is(pg_temp.rd_of('R2a Chain B'), pg_temp.slug_of('R2a Chain C'), 'AC-R2a-22 B -> A -> C: B redirects to the final winner C');
+select is(pg_temp.rd_of('R2a Chain A'), pg_temp.slug_of('R2a Chain C'), 'AC-R2a-22 A redirects to C');
+select is(pg_temp.pstate('R2a Chain B') || '/' || pg_temp.pstate('R2a Chain A'), 'absent/absent', 'AC-R2a-22 neither loser has a page');
+select pg_temp.mk_ev('R2a Chain2 C', 'published', true, interval '26 days', null, null, interval '-3 days');
+select pg_temp.mk_ev('R2a Chain2 A', 'published', true, interval '26 days', null, null, interval '-2 days');
+select pg_temp.mk_ev('R2a Chain2 B', 'published', true, interval '26 days');
+select pg_temp.merge('R2a Chain2 A', 'R2a Chain2 B');
+select pg_temp.merge('R2a Chain2 C', 'R2a Chain2 A');
+select pg_temp.x('postgres', $e$select private.admin_set_status(id, 'hidden', 'r', 'e1500000-0000-4000-a000-000000000001') from public.events where title = 'R2a Chain2 C'$e$);
+select is(pg_temp.rd_of('R2a Chain2 B') || '/' || pg_temp.rd_of('R2a Chain2 A'), 'absent/absent', 'AC-R2a-22 with the final winner C hidden, neither B nor A redirects');
+-- a 2-cycle (impossible through the RPCs, forced here): no redirect and no error
+select pg_temp.mk_ev('R2a Cycle X', 'published', true, interval '26 days');
+select pg_temp.mk_ev('R2a Cycle Y', 'published', true, interval '26 days');
+update public.events set merged_into = case title when 'R2a Cycle X' then pg_temp.eid('R2a Cycle Y') else pg_temp.eid('R2a Cycle X') end, status = 'hidden'
+ where title in ('R2a Cycle X', 'R2a Cycle Y');
+insert into public.event_changes (event_id, field, old_value, new_value, decided_by)
+  select e.id, 'status', '"published"'::jsonb, '"hidden"'::jsonb, 'admin:e1500000-0000-4000-a000-000000000001' from public.events e where e.title in ('R2a Cycle X', 'R2a Cycle Y');
+insert into public.event_changes (event_id, field, old_value, new_value, decided_by)
+  select e.id, 'merged_into', null, to_jsonb(e.merged_into), 'admin:e1500000-0000-4000-a000-000000000001' from public.events e where e.title in ('R2a Cycle X', 'R2a Cycle Y');
+select ok(pg_temp.mf() is not null, 'AC-R2a-22 a 2-cycle does not raise');
+select is(pg_temp.rd_of('R2a Cycle X') || '/' || pg_temp.rd_of('R2a Cycle Y'), 'absent/absent', 'AC-R2a-22 a 2-cycle yields no redirect');
 
 -- ---------------------------------------------------------------------------------------------------------------------
 -- AC-R2a-09 (case 11): the envelope
