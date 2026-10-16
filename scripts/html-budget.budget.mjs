@@ -14,8 +14,11 @@ test('AC-R1b-10 gzip(out/index.html) <= 102,400 bytes', () => {
 });
 
 test('AC-R1b-10 the embedded rows are <= 300', () => {
-  const rows = (html.match(/class="drow"/g) ?? []).length;
-  console.log(`rendered rows: ${rows}`);
-  assert.ok(rows > 0, 'no rows rendered: was the 700-event fixture used?');
-  assert.ok(rows <= 300, `${rows} rows rendered`);
+  // Each embedded event row carries one "startsAt" key in the page's flight data.
+  const embedded = (html.match(/startsAt/g) ?? []).length;
+  const rendered = (html.match(/class="drow"/g) ?? []).length;
+  console.log(`embedded rows: ${embedded}, rendered rows: ${rendered}`);
+  assert.ok(embedded > 0, 'no rows embedded: was the 700-event fixture used?');
+  assert.ok(embedded <= 300, `${embedded} rows embedded`);
+  assert.ok(rendered <= 300, `${rendered} rows rendered`);
 });

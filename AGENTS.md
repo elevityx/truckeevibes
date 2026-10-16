@@ -25,14 +25,16 @@ npm run db:start   # local Supabase stack (sets local-only auth env; don't run b
 npm run db:reset
 npm run db:test    # pgTAP
 npm run db:test:rest # PostgREST-level manifest test (needs the running local stack; env from `supabase status -o env`)
-npm run test:visual # fixture build + Playwright visual checks (phone and desktop, light and dark); needs `npx playwright install chromium`
+npm run test:visual # fixture build + Playwright visual checks (phone and desktop, light and dark; also builds the empty and error state variants into out-empty/ and out-error/); needs `npx playwright install chromium`
+npm run test:lhci  # Lighthouse (mobile, median of 3) on test:visual's out/; needs Chrome (set CHROME_PATH locally)
+npm run test:budget # 700-event fixture build: gzipped home HTML <= 100 KiB, <= 300 embedded rows; rebuilds out/
 npm run check:repo # secret scan, workflow rules, fixture size, no raw HTML, tokens up to date
 npm run ingest     # ingest entry point
 ```
 Local env: copy `.env.example` to `.env.local`. It holds the `NEXT_PUBLIC_*` values (Supabase URL and publishable key, Turnstile site key, site URL), all public. The local stack also reads `SUPABASE_AUTH_SITE_URL` and `SUPABASE_AUTH_CAPTCHA_SECRET` through `supabase/config.toml`; `supabase/start-local.sh` (via `npm run db:start`) defaults them to local-only values. Never put a real captcha secret in the repo.
 
 ## Layout
-- `src/app` (pages: `/`, `/sources/`, `/bot/`, `/about/`, and noindex `/admin/`), `src/components` (`layout/` Header and Footer, server-only), `src/config/public-env.ts`, `src/config/features.ts`
+- `src/app` (pages: `/`, `/sources/`, `/bot/`, `/about/`, and noindex `/admin/`), `src/components` (`layout/` Header and Footer, server-only; `home/` Hero and Tiles; `list/` ListApp, Rail, DayGroup, EventRow, states), `src/lib/lists.ts` (the lists SSOT), `src/lib/data/firstPaint.ts` (build counts and the first-paint rows), `src/config/public-env.ts`, `src/config/features.ts`
 - `src/lib/data` (the **only** Supabase caller: `admin.ts` auth, `sources.ts` RPC wrappers, `errors.ts`)
 - `supabase/migrations` (schema; never edited after merge), `supabase/tests` (pgTAP), `supabase/functions` (Edge Functions and `_shared/`), `supabase/seed.sql` (fake local data only)
 - `scripts` (repo checks and their tests), `ingest` (ingest code and synthetic `fixtures/`)
@@ -56,7 +58,7 @@ Local env: copy `.env.example` to `.env.local`. It holds the `NEXT_PUBLIC_*` val
 Conventions: every function sets `search_path = ''` and uses fully qualified names. `service_role` has no table access. Each migration ends with the exact EXECUTE allowlist, and `supabase/tests/01_acl.test.sql` asserts it.
 
 ## CI
-`.github/workflows/ci.yml`: job `web` (install, lint, typecheck, build, test, Deno tests, audit, repo checks), job `db` (start the local stack, reset, pgTAP) and job `visual` (Playwright visual checks on a fixture build; uploads screenshots as an artifact). It uses no secrets and no `pull_request_target`; every action is pinned to a commit SHA.
+`.github/workflows/ci.yml`: job `web` (install, lint, typecheck, build, test, Deno tests, audit, repo checks), job `db` (start the local stack, reset, pgTAP) and job `visual` (Playwright visual checks on a fixture build, then Lighthouse and the HTML budget; uploads screenshots as an artifact). It uses no secrets and no `pull_request_target`; every action is pinned to a commit SHA.
 `.github/workflows/rebuild.yml`: a daily (13:00 UTC) and manual call of the Cloudflare Pages deploy hook so the static site rebuilds from fresh data. One `curl` step, `permissions: {}`, no checkout, no `uses:`, no package manager; its only secret is `PAGES_DEPLOY_HOOK_URL`. `scripts/check-workflows.mjs` enforces this.
 
 ## Workflow

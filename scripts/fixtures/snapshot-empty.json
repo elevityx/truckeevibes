@@ -1,0 +1,76 @@
+{
+ "builtAt": "2026-10-15T13:04:00Z",
+ "events": [],
+ "sources": [
+  {
+   "name": "Example Source A",
+   "homepageUrl": "https://www.example.org/calendars/1/",
+   "status": "active"
+  },
+  {
+   "name": "Example Source B",
+   "homepageUrl": "https://www.example.org/calendars/2/",
+   "status": "active"
+  },
+  {
+   "name": "Example Source C",
+   "homepageUrl": "https://www.example.org/calendars/3/",
+   "status": "active"
+  },
+  {
+   "name": "Example Source D",
+   "homepageUrl": "https://www.example.org/calendars/4/",
+   "status": "active"
+  },
+  {
+   "name": "Example Source E",
+   "homepageUrl": "https://www.example.org/calendars/5/",
+   "status": "paused"
+  },
+  {
+   "name": "Example Source F",
+   "homepageUrl": "https://www.example.org/calendars/6/",
+   "status": "paused"
+  },
+  {
+   "name": "Example Source G",
+   "homepageUrl": "https://www.example.org/calendars/7/",
+   "status": "link_only"
+  },
+  {
+   "name": "Example Source H",
+   "homepageUrl": "https://www.example.org/calendars/8/",
+   "status": "link_only"
+  },
+  {
+   "name": "Example Source I",
+   "homepageUrl": "https://www.example.org/calendars/9/",
+   "status": "link_only"
+  },
+  {
+   "name": "Example Source J",
+   "homepageUrl": "https://www.example.org/calendars/10/",
+   "status": "link_only"
+  },
+  {
+   "name": "Example Source K",
+   "homepageUrl": "https://www.example.org/calendars/11/",
+   "status": "link_only"
+  },
+  {
+   "name": "Example Source L",
+   "homepageUrl": "https://www.example.org/calendars/12/",
+   "status": "link_only"
+  },
+  {
+   "name": "Example Source M",
+   "homepageUrl": "https://www.example.org/calendars/13/",
+   "status": "link_only"
+  },
+  {
+   "name": "Example Source N",
+   "homepageUrl": "https://www.example.org/calendars/14/",
+   "status": "link_only"
+  }
+ ]
+}

@@ -1,21 +1,19 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import FilterButton from '@/components/filters/FilterButton';
-import FilterSheet from '@/components/filters/FilterSheet';
 import WhenRow from '@/components/filters/WhenRow';
 import Hero from '@/components/home/Hero';
 import Tiles from '@/components/home/Tiles';
 import { supabaseConfigured } from '@/config/public-env';
 import { areaCounts, heroCounts, kindCounts, type BuildCounts } from '@/lib/data/firstPaint';
-import { listEventsWithMeta } from '@/lib/data/public';
 import { applyFilters, REGION_TZ, withSpan } from '@/lib/filters/predicates';
 import { EMPTY_FILTERS, activeFilterCount, filtersUrl, parseFilters, type FilterState } from '@/lib/filters/state';
 import { LISTS, countLists, listBySlug, type ListSlug } from '@/lib/lists';
 import { formatDay, formatTimes, localDate } from '@/lib/time/pacific';
 import { CLOCK_TICK_MS, useClock } from '@/lib/time/useClock';
 import DayGroup from './DayGroup';
-import EventSheet from './EventSheet';
 import { initialLoad, liveFailedLoad, liveLoaded, retryLoad, showLoading } from './listLoad';
 import { EmptyState, ErrorState, LoadingState, NoResultsState } from './ListStates';
 import Rail from './Rail';
@@ -23,6 +21,9 @@ import type { Snapshot } from './snapshot';
 import './list.css';
 
 const TZ = REGION_TZ;
+// The sheets open on interaction only: keep them out of the first-paint bundle.
+const FilterSheet = dynamic(() => import('@/components/filters/FilterSheet'));
+const EventSheet = dynamic(() => import('./EventSheet'));
 
 interface Props {
   list: ListSlug;
@@ -68,7 +69,9 @@ export default function ListApp({ list, initialSnapshot, counts }: Props) {
   useEffect(() => {
     if (!supabaseConfigured() && attempt === 0) return;
     let alive = true;
-    listEventsWithMeta()
+    // Loaded on demand: the data layer (and the Supabase client) stays out of the first-paint bundle.
+    import('@/lib/data/public')
+      .then((m) => m.listEventsWithMeta())
       .then((r) => alive && setLoad((c) => liveLoaded(c, r)))
       .catch(() => alive && setLoad(liveFailedLoad));
     return () => {

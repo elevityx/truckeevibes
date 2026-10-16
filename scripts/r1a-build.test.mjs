@@ -33,7 +33,7 @@ describe('AC-R1a-04 fonts [build-time]', () => {
     expect(extra.length).toBeGreaterThanOrEqual(1);
     expect(cssOf('admin/index.html').join('\n')).toMatch(/font-family:\s*"?Fraunces/);
   });
-  it('the woff2 files the index css loads total <= 124 KiB (126,976 bytes; R1b-CO3 allows the wordmark's OFL notice)', () => {
+  it('the woff2 files the index css loads total <= 124 KiB (126,976 bytes; R1b-CO3 allows the OFL notice in the wordmark)', () => {
     const files = new Set();
     for (const css of cssOf('index.html')) for (const m of css.matchAll(/url\(\.\.\/media\/([^)]*\.woff2)\)/g)) files.add(m[1]);
     expect(files.size).toBeGreaterThan(0);

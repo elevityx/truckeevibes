@@ -69,11 +69,10 @@ export default function DayGroup({ events, tz, now, fillEmpty, onOpen }: Props) 
   const [all, setAll] = useState(false);
   const plan = planDays(events, { now, tz, fillEmpty });
   const today = localDate(now, tz);
-  let budget = all ? Infinity : LATER_ROWS;
-  const later = plan.later.groups.map((g) => {
-    const rows = g.events.slice(0, Math.max(0, budget));
-    budget -= rows.length;
-    return { ...g, rows };
+  const limit = all ? Infinity : LATER_ROWS;
+  const later = plan.later.groups.map((g, i) => {
+    const before = plan.later.groups.slice(0, i).reduce((n, x) => n + x.events.length, 0);
+    return { ...g, rows: g.events.slice(0, Math.max(0, limit - before)) };
   });
   const rest = plan.later.total - later.reduce((n, g) => n + g.rows.length, 0);
   return (

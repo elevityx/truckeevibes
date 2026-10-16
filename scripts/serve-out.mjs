@@ -4,6 +4,7 @@
 // comma-joined, `! Name` detaches a header set by an earlier rule. _redirects: `from to 301` exact-match lines.
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { gzipSync } from 'node:zlib';
 import { extname, join, normalize, resolve } from 'node:path';
 
 const MIME = {
@@ -64,6 +65,8 @@ function resolveFile(root, urlPath) {
   return tries.find((f) => existsSync(f) && statSync(f).isFile()) ?? null;
 }
 
+const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.json', '.svg', '.txt', '.xml', '.webmanifest', '.ics']);
+
 export function createOutServer(root) {
   const hdrPath = join(root, '_headers');
   const redPath = join(root, '_redirects');
@@ -93,8 +96,17 @@ export function createOutServer(root) {
       res.writeHead(404, { 'content-type': 'text/plain', ...h });
       return res.end('not found');
     }
-    res.writeHead(status, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream', ...h });
-    res.end(readFileSync(file));
+    const type = MIME[extname(file)] ?? 'application/octet-stream';
+    let body = readFileSync(file);
+    const out = { 'content-type': type, ...h };
+    // Pages compresses text responses; do the same so Lighthouse and the budget see what a visitor's browser gets.
+    if (COMPRESSIBLE.has(extname(file)) && /\bgzip\b/.test(String(req.headers['accept-encoding'] ?? ''))) {
+      body = gzipSync(body);
+      out['content-encoding'] = 'gzip';
+      out.vary = 'Accept-Encoding';
+    }
+    res.writeHead(status, out);
+    res.end(body);
   });
 }
 

@@ -67,7 +67,7 @@ a{color:var(--river); text-decoration:underline; text-underline-offset:3px}
 .foot{border-top:1px solid var(--line); margin-top:var(--space-12); padding:var(--space-6) 0 var(--space-12); display:grid; gap:var(--space-3)}
 .foot p{margin:0}
 .foot-top{display:flex; gap:var(--space-4); flex-wrap:wrap; align-items:center; justify-content:space-between}
-.foot nav a{display:inline-flex; align-items:center; min-height:44px; padding:0 var(--space-2)}
+.foot nav a{display:inline-flex; align-items:center; min-height:44px}
 
 /* Content pages (About, Sources, Bot): the text block is 760 px wide, left-aligned inside the 1120 px .wrap. */
 .pg{padding-top:28px; max-width:760px}
