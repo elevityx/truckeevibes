@@ -54,7 +54,7 @@ export const SOURCE_EVENT_KEYS = new Set([
   'externalKey', 'title', 'startsAt', 'endsAt', 'allDay', 'startDate', 'endDate', 'timeKnown', 'tz', 'venueName', 'address',
   'town', 'lat', 'lng', 'url', 'ticketUrl', 'priceText', 'ageText', 'categoriesHint', 'cancelled', 'rawSummaryLength', 'seriesUid',
   // classification output added next to the facts (S1.2 clean_source_item reads these)
-  'priceKind', 'priceMin', 'priceMax', 'age',
+  'priceKind', 'priceMin', 'priceMax', 'age', 'tagReasons',
 ]);
 
 export interface PolitCall { url: string; kind: string; conditional?: boolean }

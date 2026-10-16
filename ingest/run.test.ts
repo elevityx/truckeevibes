@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { main } from './run';
 import { adapter as chamberAdapter } from './adapters/icsChambermaster';
+import { adapter as tribeAdapter } from './adapters/tribe';
 import { FetchError } from './core/politeFetch';
 import type { AdapterResult, GrantOut } from './types';
 import { fakeNet, fixture, makeClock, source, text, T0 } from './testing/fakes';
@@ -280,7 +281,7 @@ describe('logs (AC-M1-46)', () => {
       b: fake('b', async () => okResult(1, { filtered: 3 })),
     } });
     await h.run();
-    expect(h.logs).toContain('source=a status=ok found=2 new=2 changed=0 invalid=0');
+    expect(h.logs).toContain('source=a status=ok found=2 new=2 changed=0 invalid=0 tags=none age_ambiguous=0 conflicts=0 notices=0/0');
     const b = h.logs.find((l) => l.startsWith('source=b '))!;
     expect(b).toMatch(/^source=b status=ok found=1 new=1 changed=0 invalid=0\b/);
     expect(b).toMatch(/\bfiltered=3\b/);
@@ -367,5 +368,104 @@ describe('ChamberMaster partial fetch is never submitted as ok (AC-M1-74 e, A6-4
     expect(await h.run()).toBe(0);
     expect(h.submits()[0].body.run).toMatchObject({ status: 'http_error', error_code: 'timeout' });
     expect(h.submits()[0].body.items).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// R4b: classifier v2 and notices in the runner (AC-R4b-09, 13, 16; DR12)
+// ---------------------------------------------------------------------------------------------------------------------
+const at = (title: string, key: string, extra: Record<string, unknown> = {}) => ({ ...ev(1), externalKey: key, title, startsAt: '2026-10-31T02:00:00Z', ...extra });
+
+describe('notices and tags in the runner (AC-R4b-09, AC-R4b-16)', () => {
+  const sentinelTitle = 'NO Sentinel Fx Tonight';
+  const items = () => [at(sentinelTitle, 'n'), at('Sentinel Fx', 's', { tagReasons: ['age:ambiguous', 'conflict:adult'], categoriesHint: ['music'], priceKind: 'free' }), at('Other Night', 'o', { categoriesHint: ['music', 'kids'] })];
+  it('parser_version is <adapter.version>-c2 (tribe.1-c2)', async () => {
+    const h = harness({ grants: [grant('tribe')], adapters: { tribe: { family: 'tribe', version: 'tribe.1', fetch: async () => okResult(1) } } });
+    await h.run();
+    expect(h.submits()[0].body.run.parser_version).toBe('tribe.1-c2');
+    expect(h.submits()[0].body.run.parser_version).toMatch(/^[a-z0-9._-]{1,40}$/);
+  });
+  it('a notice is never submitted; its same-day first-ever sibling goes out cancelled; the log line ends with the counts and has no title', async () => {
+    const h = harness({ grants: [grant('a')], adapters: { a: fake('a', async () => ({ items: [at('NO Fx Tonight', 'n'), at('Fx', 's')], status: 'ok' as const })) } });
+    expect(await h.run()).toBe(0);
+    const sent = h.submits()[0].body.items;
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ title: 'Fx', cancelled: true });
+    expect(sent[0].tagReasons).toContain('notice:cancel_sibling');
+    const line = h.logs.find((l) => l.startsWith('source=a '))!;
+    expect(line).toMatch(/ found=1 /);
+    expect(line.endsWith(' notices=1/1')).toBe(true);
+  });
+  it('log line: tags by slug plus free, age_ambiguous, conflicts; no title, URL or reason text', async () => {
+    const h = harness({ grants: [grant('a')], adapters: { a: fake('a', async () => ({ items: items(), status: 'ok' as const })) } });
+    await h.run();
+    const line = h.logs.find((l) => l.startsWith('source=a '))!;
+    expect(line).toMatch(/ tags=kids:1,music:2,free:1 age_ambiguous=1 conflicts=1 notices=1\/1$/);
+    expect(line).not.toContain('Sentinel');
+    expect(line).not.toContain('http');
+    expect(line).not.toContain('conflict:adult');
+    expect(h.submits()[0].body.items.map((i: { title: string }) => i.title)).toEqual(['Sentinel Fx', 'Other Night']);
+  });
+  it('non-ok runs log zero counts', async () => {
+    const h = harness({ grants: [grant('a')], adapters: { a: fake('a', async () => ({ items: [], status: 'http_error' as const, httpStatus: 503 })) } });
+    await h.run();
+    expect(h.logs.find((l) => l.startsWith('source=a '))).toMatch(/ tags=none age_ambiguous=0 conflicts=0 notices=0\/0$/);
+  });
+  it('invalid tagReasons are dropped from the item, never the item', async () => {
+    const h = harness({ grants: [grant('a')], adapters: { a: fake('a', async () => ({ items: [at('Ok', 'k', { tagReasons: ['age:made_up'] }), at('Fine', 'k2', { tagReasons: ['age:ambiguous'] })], status: 'ok' as const })) } });
+    await h.run();
+    const sent = h.submits()[0].body.items;
+    expect(sent).toHaveLength(2);
+    expect('tagReasons' in sent[0]).toBe(false);
+    expect(sent[1].tagReasons).toEqual(['age:ambiguous']);
+  });
+});
+
+describe('source defaults (DR12)', () => {
+  const run = async (config: Record<string, unknown>, item: Record<string, unknown>) => {
+    const h = harness({ grants: [grant('a', { config })], adapters: { a: fake('a', async () => ({ items: [at('Sample', 'k', item)], status: 'ok' as const })) } });
+    await h.run();
+    return h.submits()[0].body.items[0];
+  };
+  it('empty hints + defaultCategories -> known slugs, cat:default added', async () => {
+    const it = await run({ defaultCategories: ['community', 'bogus', 'kids'] }, {});
+    expect(it.categoriesHint).toEqual(['community', 'kids']);
+    expect(it.tagReasons).toContain('cat:default');
+  });
+  it.each(['age:21_admission', 'age:18_admission', 'age:adult_phrase', 'age:ambiguous', 'conflict:adult', 'conflict:adult_signal'])('kids/family are stripped when tagReasons has %s', async (code) => {
+    const it = await run({ defaultCategories: ['community', 'kids', 'family'] }, { tagReasons: [code] });
+    expect(it.categoriesHint).toEqual(['community']);
+  });
+  it('existing hints are never replaced; a non-array config is ignored', async () => {
+    expect((await run({ defaultCategories: ['community'] }, { categoriesHint: ['music'] })).categoriesHint).toEqual(['music']);
+    const none = await run({ defaultCategories: 'community' }, {});
+    expect(none.categoriesHint).toEqual([]);
+    expect(none.tagReasons ?? []).not.toContain('cat:default');
+  });
+  it('defaults that leave nothing add nothing', async () => {
+    const it = await run({ defaultCategories: ['kids'] }, { tagReasons: ['conflict:adult'] });
+    expect(it.categoriesHint).toEqual([]);
+    expect(it.tagReasons).not.toContain('cat:default');
+  });
+});
+
+describe('the Tribe fixture yields a real free event (AC-R4b-13, plan RG2)', () => {
+  it('item 103 (organizer cost "Free") is free with price:text_free, and the runner submits it', async () => {
+    const h = harness({
+      grants: [grant('tribe', { family: 'tribe', config: { base: 'https://events.example.test', tz: 'America/Los_Angeles' }, allowed_hosts: ['events.example.test'], allowed_methods: ['api'], page_cap: 10 })],
+      adapters: { tribe: tribeAdapter },
+      other: (u) => {
+        if (u.pathname === '/robots.txt') return text('nf', 404);
+        if (u.pathname.startsWith('/wp-json/tribe/events/v1/events')) return new Response(fixture(u.searchParams.get('page') === '2' ? 'tribe/events_p2.json' : 'tribe/events_p1.json'), { status: 200, headers: { 'content-type': 'application/json' } });
+        return text('', 404);
+      },
+    });
+    expect(await h.run()).toBe(0);
+    const sent = h.submits()[0].body.items as { externalKey: string; priceKind: string; tagReasons: string[] }[];
+    const free = sent.find((i) => i.externalKey === '103')!;
+    expect(free.priceKind).toBe('free');
+    expect(free.tagReasons).toContain('price:text_free');
+    expect(sent.filter((i) => i.priceKind === 'free').length).toBeGreaterThanOrEqual(1);
+    expect(h.submits()[0].body.run.parser_version).toBe('tribe.1-c2');
   });
 });
