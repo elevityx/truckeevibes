@@ -55,7 +55,7 @@ Local env: copy `.env.example` to `.env.local`. It holds the `NEXT_PUBLIC_*` val
 - V11 Logs carry counts and codes, never payloads, headers or keys.
 - V12 Schema changes only through migrations; migrations never edited after merge.
 
-Conventions: every function sets `search_path = ''` and uses fully qualified names. `service_role` has no table access. Each migration ends with the exact EXECUTE allowlist, and `supabase/tests/01_acl.test.sql` asserts it.
+Conventions: every function sets `search_path = ''` and uses fully qualified names. `service_role` has no table access. Each migration ends with the exact EXECUTE allowlist, and `supabase/tests/01_acl.test.sql` asserts it. `source_events.tag_reasons` and `source_event_versions.tag_reasons` hold classifier reason codes (closed list in `private.valid_reason_code`); they are a sibling of `facts`, never part of the facts hash. Notice titles (`private.is_notice_title`, cases in `ingest/core/notices.cases.json`) are rejected at ingest.
 
 ## CI
 `.github/workflows/ci.yml`: job `web` (install, lint, typecheck, build, test, Deno tests, audit, repo checks), job `db` (start the local stack, reset, pgTAP) and job `visual` (Playwright visual checks on a fixture build, then Lighthouse and the HTML budget; uploads screenshots as an artifact). It uses no secrets and no `pull_request_target`; every action is pinned to a commit SHA.
