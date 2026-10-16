@@ -560,10 +560,11 @@ describe('tdrpd_auto keeps the canonical block and the unchanged allowlist', () 
 
 describe('vlt_strict_auto keeps the canonical block and the unchanged allowlist', () => {
   const G = (n) => canonicalGrants(read(n));
-  it('exists, sorts last, and its allowlist is the 23 of tdrpd_auto', () => {
+  it('exists, sorts directly after tdrpd_auto, and its allowlist is the 23 of tdrpd_auto', () => {
     const f = fileFor('vlt_strict_auto');
     expect(f, 'no migration named *_vlt_strict_auto.sql').toBeTruthy();
-    expect(files.filter((x) => x.endsWith('.sql')).pop()).toBe(f);
+    const sqlFiles = files.filter((x) => x.endsWith('.sql'));
+    expect(sqlFiles[sqlFiles.indexOf(f) - 1]).toBe(fileFor('tdrpd_auto'));
     expect(f.slice(0, 14) > fileFor('tdrpd_auto').slice(0, 14)).toBe(true);
     const cur = G('vlt_strict_auto');
     expect(cur.size).toBe(23);
@@ -578,5 +579,84 @@ describe('vlt_strict_auto keeps the canonical block and the unchanged allowlist'
     expect(upd).not.toMatch(/\btrust\b|\benabled\b/i);
     expect(sql).toMatch(/Amendment 2/);
     expect(sql).toMatch(/D13/);
+  });
+});
+
+// AC-R2a-12 (Amendment 10, R2a-db): the manifest RPC migration adds exactly one grant and one public function.
+describe('event_pages_read keeps the canonical block and adds exactly list_event_pages()', () => {
+  const G = (n) => canonicalGrants(read(n));
+  const sqlFiles = () => files.filter((x) => x.endsWith('.sql'));
+  it('exists and sorts directly after vlt_strict_auto', () => {
+    const f = fileFor('event_pages_read');
+    expect(f, 'no migration named *_event_pages_read.sql').toBeTruthy();
+    expect(f.slice(0, 14) > fileFor('vlt_strict_auto').slice(0, 14)).toBe(true);
+    expect(sqlFiles()[sqlFiles().indexOf(f) - 1]).toBe(fileFor('vlt_strict_auto'));
+  });
+  it('ends with the canonical block; its grants are the predecessor set plus list_event_pages()->anon,authenticated (24)', () => {
+    const prev = G('vlt_strict_auto');
+    const cur = G('event_pages_read');
+    expect(prev.size).toBe(23);
+    expect(cur.size).toBe(24);
+    expect([...cur].filter((x) => !prev.has(x))).toEqual(['public.list_event_pages()->anon,authenticated']);
+    expect([...prev].filter((x) => !cur.has(x))).toEqual([]);
+    expect(createdFns(read('event_pages_read'))).toEqual(new Set(['list_event_pages']));
+    expect(cumulativeProblems(prev, cur, createdFns(read('event_pages_read')))).toEqual([]);
+  });
+  it('the newest migration in the tree grants exactly 24 functions', () => {
+    const newest = sqlFiles().pop();
+    expect(canonicalGrants(readFileSync(join(DIR, newest), 'utf8')).size).toBe(24);
+  });
+  it('replaces private.events_before_write as a verbatim copy plus one marked R2a block', () => {
+    const fnBody = (sql) => {
+      const m = /create (?:or replace )?function private\.events_before_write\(\)[\s\S]*?\nend \$\$;/.exec(sql);
+      if (!m) throw new Error('events_before_write not found');
+      return m[0];
+    };
+    const base = norm(fnBody(readFileSync(join(DIR, fileFor('ingest_tables')), 'utf8'))).replace('create function', 'create or replace function');
+    const sql = read('event_pages_read');
+    expect(sql).toMatch(/-- R2a begin/);
+    expect(sql).toMatch(/-- R2a end/);
+    const cur = fnBody(sql);
+    const stripped = norm(cur.replace(/-- R2a begin[\s\S]*?-- R2a end/, ''));
+    expect(stripped).toBe(base);
+    expect(cur).toContain("raise exception 'published_at_immutable' using errcode = '22023', detail = 'published_at'");
+    expect(cur.indexOf('-- R2a end')).toBeLessThan(cur.indexOf('return new;'));
+  });
+  it('the suppression helper has no grant and the RPC pins search_path', () => {
+    const sql = stripComments(read('event_pages_read'));
+    expect(sql).toMatch(/create function private\.event_matches_suppression\(e public\.events\)/);
+    expect(sql).not.toMatch(/grant execute on function private\./i);
+    expect(sql).toMatch(/create function public\.list_event_pages\(\)\s+returns jsonb\s+language sql stable security definer set search_path = ''/i);
+  });
+});
+
+// AC-R2a-20 wiring: the REST-level test is a script, a CI step after the concurrency run, and kept out of vitest.
+describe('db:test:rest wiring (R2a-db)', () => {
+  it('package.json pins db:test:rest by string equality', () => {
+    const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'));
+    expect(pkg.scripts['db:test:rest']).toBe('node --test scripts/manifest-rest.dbtest.mjs');
+  });
+  it('ci.yml db job exports the local API URL and keys, then runs db:test:rest after db:test:concurrency', () => {
+    const ci = parseYaml(readFileSync(join(REPO_ROOT, '.github', 'workflows', 'ci.yml'), 'utf8'));
+    const steps = ci.jobs.db.steps;
+    const at = (re) => steps.findIndex((st) => typeof st.run === 'string' && re.test(st.run));
+    const keys = at(/supabase status -o env \| grep -E '\^\(API_URL\|ANON_KEY\|PUBLISHABLE_KEY\)='/);
+    const conc = at(/npm run db:test:concurrency/);
+    const rest = at(/npm run db:test:rest/);
+    const dbUrl = at(/supabase status -o env \| grep '\^DB_URL='/);
+    expect(keys, 'no API_URL/ANON_KEY/PUBLISHABLE_KEY export step').toBeGreaterThan(-1);
+    expect(steps[keys].run).toContain("tr -d '\"'");
+    expect(steps[keys].run).toContain('>> "$GITHUB_ENV"');
+    expect(keys).toBeGreaterThan(dbUrl);
+    expect(keys).toBeLessThan(rest);
+    expect(rest).toBeGreaterThan(conc);
+    expect(JSON.stringify(steps)).not.toMatch(/secrets\./);
+  });
+  it('the REST test file exists, is a .dbtest.mjs (outside vitest), and reads max_rows from config.toml', () => {
+    const f = join(REPO_ROOT, 'scripts', 'manifest-rest.dbtest.mjs');
+    const src = readFileSync(f, 'utf8');
+    expect(src).toContain('max_rows');
+    expect(src).toContain('/rest/v1/rpc/list_event_pages');
+    expect(src).toMatch(/PUBLISHABLE_KEY \?\? [A-Za-z_.]*ANON_KEY|PUBLISHABLE_KEY \|\| /);
   });
 });

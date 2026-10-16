@@ -116,14 +116,14 @@ create function pg_temp.fn_list(p_role text, p_schema text) returns text[] langu
    where n.nspname = p_schema and has_function_privilege(p_role, p.oid, 'EXECUTE')
      and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e') order by 1)
 $$;
-select is(pg_temp.fn_list('anon', 'public'), array['list_events(integer)', 'list_sources_public()'], 'anon EXECUTE is exactly list_events(integer) + list_sources_public()');
+select is(pg_temp.fn_list('anon', 'public'), array['list_event_pages()', 'list_events(integer)', 'list_sources_public()'], 'anon EXECUTE is exactly list_event_pages() + list_events(integer) + list_sources_public()');
 select is(pg_temp.fn_list('authenticated', 'public'),
   (select array_agg(x order by x) from unnest(array[
      'admin_add_suppression(text, text, text)', 'admin_card_open(uuid)', 'admin_decide_card(uuid, text, text, integer)', 'admin_list_sources()',
      'admin_log_activity(text, integer)', 'admin_merge_events(uuid, uuid)', 'admin_owner_minutes_7d()', 'admin_queue(text, integer)', 'admin_set_event_status(uuid, text, text)',
      'admin_set_source_enabled(text, boolean)', 'admin_set_source_trust(text, text)', 'admin_source_health()', 'admin_unlock_field(uuid, text)',
-     'admin_update_event(uuid, jsonb)', 'admin_whoami()', 'list_events(integer)', 'list_sources_public()']) x),
-  'authenticated EXECUTE is the two public reads + the M0 and M1 admin RPCs (exact)');
+     'admin_update_event(uuid, jsonb)', 'admin_whoami()', 'list_event_pages()', 'list_events(integer)', 'list_sources_public()']) x),
+  'authenticated EXECUTE is the three public reads + the M0 and M1 admin RPCs (exact)');
 select is(pg_temp.fn_list('service_role', 'public'),
   (select array_agg(x order by x) from unnest(array[
      'svc_cluster_and_publish(integer)', 'svc_ingest_batch(text, jsonb, jsonb)', 'svc_ingest_nonce(text)', 'svc_issue_run_grants()',
