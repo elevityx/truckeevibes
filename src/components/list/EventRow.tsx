@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { VibeEvent } from '@/lib/data/types';
 import EventGlyph from './EventGlyph';
 import { ChevIcon } from './icons';
@@ -21,7 +22,7 @@ export function shortVenue(v: string | null | undefined): string {
  * One day-list row (canvas .drow). A button in R1b (the sheet opens in place); an anchor from R2a. Every string is data and renders as
  * React text. Desktop: time | title + "venue · town" + tags | glyph. Phone: "time · town" above the title, venue as meta, chevron.
  */
-export function EventRow({ e, tz, onOpen }: RowProps) {
+export const EventRow = memo(function EventRow({ e, tz, onOpen }: RowProps) {
   const town = e.town ?? (e.address ? townOf(e.address) : '');
   const venue = shortVenue(e.venue);
   const free = e.priceKind === 'free';
@@ -70,4 +71,4 @@ export function EventRow({ e, tz, onOpen }: RowProps) {
       </span>
     </button>
   );
-}
+});

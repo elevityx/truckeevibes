@@ -110,12 +110,17 @@ export default function ListApp({ list, initialSnapshot, counts }: Props) {
     },
     [eventId, writeUrl],
   );
+  // Stable, so the memoized rows do not re-render on every filter change.
+  const filtersRef = useRef(filters);
+  useEffect(() => {
+    filtersRef.current = filters;
+  }, [filters]);
   const open = useCallback(
     (id: string | null) => {
       setEventId(id);
-      writeUrl(filters, id);
+      writeUrl(filtersRef.current, id);
     },
-    [filters, writeUrl],
+    [writeUrl],
   );
 
   const def = listBySlug(active) ?? LISTS[0];
