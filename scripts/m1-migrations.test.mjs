@@ -660,3 +660,68 @@ describe('db:test:rest wiring (R2a-db)', () => {
     expect(src).toMatch(/PUBLISHABLE_KEY \?\? [A-Za-z_.]*ANON_KEY|PUBLISHABLE_KEY \|\| /);
   });
 });
+
+// AC-R4a-09 (Amendment 10, R4a): the tags/notices migration keeps the predecessor's 24 grants and creates no public function.
+describe('tags_notices keeps the canonical block and the unchanged 24-grant allowlist', () => {
+  const G = (n) => canonicalGrants(read(n));
+  const sqlFiles = () => files.filter((x) => x.endsWith('.sql'));
+  it('exists and sorts directly after event_pages_read', () => {
+    const f = fileFor('tags_notices');
+    expect(f, 'no migration named *_tags_notices.sql').toBeTruthy();
+    expect(f.slice(0, 14) > fileFor('event_pages_read').slice(0, 14)).toBe(true);
+    expect(sqlFiles()[sqlFiles().indexOf(f) - 1]).toBe(fileFor('event_pages_read'));
+  });
+  it('its grants equal event_pages_read (24) and it creates no public function', () => {
+    const prev = G('event_pages_read');
+    const cur = G('tags_notices');
+    expect(prev.size).toBe(24);
+    expect(cur.size).toBe(24);
+    expect([...cur].sort()).toEqual([...prev].sort());
+    expect(createdFns(read('tags_notices')).size).toBe(0);
+    expect(cumulativeProblems(prev, cur, createdFns(read('tags_notices')))).toEqual([]);
+  });
+  it('the newest migration in the tree grants exactly 24 functions', () => {
+    expect(canonicalGrants(readFileSync(join(DIR, sqlFiles().pop()), 'utf8')).size).toBe(24);
+  });
+  it('no helper or hide function is granted', () => {
+    const sql = stripComments(read('tags_notices'));
+    expect(sql).not.toMatch(/grant execute on function private\./i);
+    for (const fn of ['is_notice_title', 'valid_reason_code', 'hide_notice_events']) {
+      expect(sql).toMatch(new RegExp(`create function private\\.${fn}\\(`));
+    }
+  });
+  const body = (sql, name, re) => {
+    const m = re.exec(sql);
+    if (!m) throw new Error(`${name} not found`);
+    return m[0];
+  };
+  it('replaces private.clean_source_item as a verbatim copy of the alibi version plus marked R4a blocks', () => {
+    const re = /create (?:or replace )?function private\.clean_source_item[\s\S]*?\nend \$\$;/;
+    const base = norm(body(read('alibi_venue_fixup'), 'base', re));
+    const cur = body(read('tags_notices'), 'cur', re);
+    const stripped = norm(cur.replace(/-- R4a begin[\s\S]*?-- R4a end/g, ''));
+    expect(stripped).toBe(base);
+    expect(cur.match(/-- R4a begin/g).length).toBe(cur.match(/-- R4a end/g).length);
+    expect(cur).toContain("return jsonb_build_object('reject', 'notice')");
+    expect(cur).toContain("'tag_reasons', to_jsonb(v_reasons)");
+    expect(cur.indexOf("reject', 'notice'")).toBeLessThan(cur.indexOf("'reject', 'dates'"));
+    expect(cur.indexOf('private.valid_reason_code')).toBeLessThan(cur.indexOf('from public.suppressions'));
+  });
+  it('replaces private.apply_items as a verbatim copy of the ingest_rpcs version plus marked R4a lines', () => {
+    const re = /create (?:or replace )?function private\.apply_items[\s\S]*?\nend \$\$;/;
+    const base = norm(body(read('ingest_rpcs'), 'base', re)).replace('create function', 'create or replace function');
+    const cur = body(read('tags_notices'), 'cur', re);
+    // lines that exist only for R4a, then the inline R4a additions are undone
+    const undone = cur
+      .replace(/-- R4a begin[\s\S]*?-- R4a end/g, '')
+      .replace(/\n\s*tag_reasons = v_reasons,\s+-- R4a\n/, '\n')
+      .replace(/, tag_reasons\)\s+-- R4a\n/, ')\n')
+      .replace(/, v_reasons\)\s+-- R4a\n/, ')\n')
+      .replace(/, tag_reasons = v_reasons\s+-- R4a\n/, '\n')
+      .replace(/, parser_version, tag_reasons\)\s+-- R4a\n/, ', parser_version)\n')
+      .replace(/v_parser, v_reasons\);\s+-- R4a/, 'v_parser);');
+    expect(norm(undone)).toBe(base);
+    expect((cur.match(/-- R4a/g) ?? []).length).toBeGreaterThanOrEqual(8);
+    expect(cur).toContain("v_reasons := array(select jsonb_array_elements_text(coalesce(rec -> 'tag_reasons', '[]'::jsonb)));");
+  });
+});
