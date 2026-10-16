@@ -21,6 +21,45 @@ const SIGNER_REPOS = new Set(['actions/checkout', 'actions/setup-node']);
 const PKG_RE = /\b(npm|npx|pnpm|yarn|bun|corepack)\b/;
 const PROBE_SECRET = "${{ secrets.FEED_SIGNING_KEY != '' }}";
 
+/** The one legal shape of rebuild.yml (spec Amendment R0-1). */
+const REBUILD_RUN = `test -n "$HOOK" && curl -fsS -X POST --max-time 20 "$HOOK" -o /dev/null -w 'status=%{http_code}\\n'`;
+const REBUILD_EXPECTED = {
+  name: 'Daily rebuild',
+  on: { schedule: [{ cron: '0 13 * * *' }], workflow_dispatch: {} },
+  permissions: {},
+  jobs: {
+    rebuild: {
+      'runs-on': 'ubuntu-latest',
+      'timeout-minutes': 2,
+      steps: [{ name: 'Call the Pages deploy hook', env: { HOOK: '${{ secrets.PAGES_DEPLOY_HOOK_URL }}' }, run: REBUILD_RUN }],
+    },
+  },
+};
+
+/** Path of the first difference between two parsed values, or null when deep-equal. */
+function firstDiff(want, have, path = '') {
+  const at = path || '(root)';
+  if (Array.isArray(want)) {
+    if (!Array.isArray(have) || have.length !== want.length) return at;
+    for (let i = 0; i < want.length; i++) {
+      const d = firstDiff(want[i], have[i], `${path}[${i}]`);
+      if (d) return d;
+    }
+    return null;
+  }
+  if (want !== null && typeof want === 'object') {
+    if (have === null || typeof have !== 'object' || Array.isArray(have)) return at;
+    for (const k of new Set([...Object.keys(want), ...Object.keys(have)])) {
+      const p = path ? `${path}.${k}` : k;
+      if (!(k in want) || !(k in have)) return p;
+      const d = firstDiff(want[k], have[k], p);
+      if (d) return d;
+    }
+    return null;
+  }
+  return Object.is(want, have) ? null : at;
+}
+
 const isMap = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const sameArr = (a, b) => Array.isArray(a) && a.length === b.length && a.every((x, i) => x === b[i]);
 
@@ -149,6 +188,8 @@ export function checkWorkflow(name, text) {
   }
 
   if (name === 'rebuild.yml') {
+    const diff = firstDiff(REBUILD_EXPECTED, wf);
+    if (diff) add('rebuild_shape', diff);
     let anyUses = false;
     walk(wf, (_p, _n, key) => { if (key === 'uses') anyUses = true; });
     if (anyUses || /(^|[\s{,-])uses\s*:/m.test(text)) add('rebuild_uses', 'uses is not allowed');
