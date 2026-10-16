@@ -1,0 +1,1190 @@
+{
+ "builtAt": "2026-10-15T13:04:00Z",
+ "events": [
+  {
+   "id": "00000000-0000-4000-8000-000000000001",
+   "slug": "example-event-01",
+   "title": "Example Event 1",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-10-16T00:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 1",
+   "address": "1 Example St, Incline Village, CA 96161",
+   "town": "Incline Village",
+   "area": "incline",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "arts",
+    "nightlife"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/1",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source A"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000002",
+   "slug": "example-event-02",
+   "title": "Example Event 2",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-10-18T01:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 2",
+   "address": "2 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "music",
+    "food-drink"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/2",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source B"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000003",
+   "slug": "example-event-03",
+   "title": "Example Event 3",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-10-18T02:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 3",
+   "address": "3 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "food-drink",
+    "nightlife"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/3",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source C"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000005",
+   "slug": "example-event-05",
+   "title": "Example Event 5",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-10-19T00:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 5",
+   "address": "5 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "outdoors",
+    "nightlife",
+    "food-drink"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/5",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source E"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000006",
+   "slug": "example-event-06",
+   "title": "Example Sunday Market",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-10-19T01:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Plaza",
+   "address": "6 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "learning"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/6",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source F"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000004",
+   "slug": "example-event-04",
+   "title": "Example Event 4",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-10-19T03:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 4",
+   "address": "4 Example St, Incline Village, CA 96161",
+   "town": "Incline Village",
+   "area": "incline",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "nightlife"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "21_plus",
+   "featured": false,
+   "url": "https://example.org/events/4",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source D"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000007",
+   "slug": "example-event-07",
+   "title": "Example Event 7",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-10-20T02:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 1",
+   "address": "7 Example St, Incline Village, CA 96161",
+   "town": "Incline Village",
+   "area": "incline",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "halloween-fall",
+    "nightlife"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/7",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source G"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000008",
+   "slug": "example-event-08",
+   "title": "Example Event 8",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-10-21T03:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 2",
+   "address": "8 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "sports",
+    "food-drink"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/8",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source H"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000009",
+   "slug": "example-event-09",
+   "title": "Example Event 9",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-10-22T00:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 3",
+   "address": "9 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "markets",
+    "nightlife"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/9",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source I"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000010",
+   "slug": "example-event-10",
+   "title": "Example Event 10",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-10-23T01:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 4",
+   "address": "10 Example St, Incline Village, CA 96161",
+   "town": "Incline Village",
+   "area": "incline",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "arts"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "18_plus",
+   "featured": false,
+   "url": "https://example.org/events/10",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source J"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000011",
+   "slug": "example-event-11",
+   "title": "Example Event 11",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-10-24T02:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 5",
+   "address": "11 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "music",
+    "nightlife",
+    "food-drink"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/11",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source K"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000013",
+   "slug": "example-event-13",
+   "title": "Example Harvest Supper with Live Music, Dancing and a Silent Auction!!",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-10-25T00:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 1",
+   "address": "13 Example St, Incline Village, CA 96161",
+   "town": "Incline Village",
+   "area": "incline",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "nightlife"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/13",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source M"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000012",
+   "slug": "example-event-12",
+   "title": "Example Event 12",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-10-25T03:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 6",
+   "address": "12 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "food-drink"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/12",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source L"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000014",
+   "slug": "example-event-14",
+   "title": "Example Event 14",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-10-26T01:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 2",
+   "address": "14 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "outdoors",
+    "food-drink"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/14",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source N"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000015",
+   "slug": "example-event-15",
+   "title": "Example Event 15",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-10-26T02:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 3",
+   "address": "15 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "learning",
+    "nightlife"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/15",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source A"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000016",
+   "slug": "example-event-16",
+   "title": "Example Sunday Market",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-10-26T03:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Plaza",
+   "address": "16 Example St, Incline Village, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "halloween-fall"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/16",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source B"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000017",
+   "slug": "example-event-17",
+   "title": "Example Event 17",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-10-28T00:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 5",
+   "address": "17 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "sports",
+    "nightlife",
+    "food-drink"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/17",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source C"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000018",
+   "slug": "example-event-18",
+   "title": "Example Event 18",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-10-29T01:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 6",
+   "address": "18 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "markets"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/18",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source D"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000019",
+   "slug": "example-event-19",
+   "title": "Example Event 19",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-10-30T02:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 1",
+   "address": "19 Example St, Incline Village, CA 96161",
+   "town": "Incline Village",
+   "area": "incline",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "arts",
+    "nightlife"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/19",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source E"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000020",
+   "slug": "example-event-20",
+   "title": "Example Event 20",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-10-31T03:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 2",
+   "address": "20 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "music",
+    "food-drink"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/20",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source F"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000021",
+   "slug": "example-event-21",
+   "title": "Example Event 21",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-11-01T00:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 3",
+   "address": "21 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "food-drink",
+    "nightlife"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "21_plus",
+   "featured": false,
+   "url": "https://example.org/events/21",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source G"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000022",
+   "slug": "example-event-22",
+   "title": "Example Event 22",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-11-01T01:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 4",
+   "address": "22 Example St, Incline Village, CA 96161",
+   "town": "Incline Village",
+   "area": "incline",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "nightlife"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/22",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source H"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000023",
+   "slug": "example-event-23",
+   "title": "Example Sunday Market",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-11-02T02:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Plaza",
+   "address": "23 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "outdoors",
+    "nightlife",
+    "food-drink"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/23",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source I"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000024",
+   "slug": "example-event-24",
+   "title": "Example Event 24",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-11-04T03:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 6",
+   "address": "24 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "learning"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/24",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source J"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000025",
+   "slug": "example-event-25",
+   "title": "Example Event 25",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-11-05T00:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 1",
+   "address": "25 Example St, Incline Village, CA 96161",
+   "town": "Incline Village",
+   "area": "incline",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "halloween-fall",
+    "nightlife"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/25",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source K"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000026",
+   "slug": "example-event-26",
+   "title": "Example Event 26",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-11-06T01:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 2",
+   "address": "26 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "sports",
+    "food-drink"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/26",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source L"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000027",
+   "slug": "example-event-27",
+   "title": "Example Event 27",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-11-07T02:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 3",
+   "address": "27 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "markets",
+    "nightlife"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/27",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source M"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000029",
+   "slug": "example-event-29",
+   "title": "Example Event 29",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-11-08T00:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 5",
+   "address": "29 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "music",
+    "nightlife",
+    "food-drink"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/29",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source A"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000028",
+   "slug": "example-event-28",
+   "title": "Example Event 28",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-11-08T03:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 4",
+   "address": "28 Example St, Incline Village, CA 96161",
+   "town": "Incline Village",
+   "area": "incline",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "arts"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/28",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source N"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000030",
+   "slug": "example-event-30",
+   "title": "Example Event 30",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-11-09T01:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 6",
+   "address": "30 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "food-drink"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/30",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source B"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000031",
+   "slug": "example-event-31",
+   "title": "Example Sunday Market",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-11-09T02:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Plaza",
+   "address": "31 Example St, Incline Village, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "nightlife"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/31",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source C"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000032",
+   "slug": "example-event-32",
+   "title": "Example Event 32",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-11-10T03:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 2",
+   "address": "32 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "outdoors",
+    "food-drink"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/32",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source D"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000033",
+   "slug": "example-event-33",
+   "title": "Example Event 33",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-11-11T00:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 3",
+   "address": "33 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "learning",
+    "nightlife"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/33",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source E"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000034",
+   "slug": "example-event-34",
+   "title": "Example Event 34",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-11-12T01:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 4",
+   "address": "34 Example St, Incline Village, CA 96161",
+   "town": "Incline Village",
+   "area": "incline",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "halloween-fall"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/34",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source F"
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000035",
+   "slug": "example-event-35",
+   "title": "Example Event 35",
+   "summary": "Synthetic fixture row.",
+   "startsAt": "2026-11-12T02:00:00.000Z",
+   "endsAt": null,
+   "allDay": false,
+   "startDate": null,
+   "endDate": null,
+   "timeKnown": true,
+   "venue": "Example Venue 5",
+   "address": "35 Example St, Truckee, CA 96161",
+   "town": "Truckee",
+   "area": "truckee",
+   "lat": null,
+   "lng": null,
+   "categories": [
+    "sports",
+    "nightlife",
+    "food-drink"
+   ],
+   "priceKind": "unknown",
+   "priceMin": null,
+   "priceMax": null,
+   "age": "all_ages",
+   "featured": false,
+   "url": "https://example.org/events/35",
+   "ticketUrl": null,
+   "sources": [
+    "Example Source G"
+   ]
+  }
+ ],
+ "sources": [
+  {
+   "name": "Example Source A",
+   "homepageUrl": "https://www.example.org/calendars/1/",
+   "status": "active"
+  },
+  {
+   "name": "Example Source B",
+   "homepageUrl": "https://www.example.org/calendars/2/",
+   "status": "active"
+  },
+  {
+   "name": "Example Source C",
+   "homepageUrl": "https://www.example.org/calendars/3/",
+   "status": "active"
+  },
+  {
+   "name": "Example Source D",
+   "homepageUrl": "https://www.example.org/calendars/4/",
+   "status": "active"
+  },
+  {
+   "name": "Example Source E",
+   "homepageUrl": "https://www.example.org/calendars/5/",
+   "status": "paused"
+  },
+  {
+   "name": "Example Source F",
+   "homepageUrl": "https://www.example.org/calendars/6/",
+   "status": "paused"
+  },
+  {
+   "name": "Example Source G",
+   "homepageUrl": "https://www.example.org/calendars/7/",
+   "status": "link_only"
+  },
+  {
+   "name": "Example Source H",
+   "homepageUrl": "https://www.example.org/calendars/8/",
+   "status": "link_only"
+  },
+  {
+   "name": "Example Source I",
+   "homepageUrl": "https://www.example.org/calendars/9/",
+   "status": "link_only"
+  },
+  {
+   "name": "Example Source J",
+   "homepageUrl": "https://www.example.org/calendars/10/",
+   "status": "link_only"
+  },
+  {
+   "name": "Example Source K",
+   "homepageUrl": "https://www.example.org/calendars/11/",
+   "status": "link_only"
+  },
+  {
+   "name": "Example Source L",
+   "homepageUrl": "https://www.example.org/calendars/12/",
+   "status": "link_only"
+  },
+  {
+   "name": "Example Source M",
+   "homepageUrl": "https://www.example.org/calendars/13/",
+   "status": "link_only"
+  },
+  {
+   "name": "Example Source N",
+   "homepageUrl": "https://www.example.org/calendars/14/",
+   "status": "link_only"
+  }
+ ]
+}

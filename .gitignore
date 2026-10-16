@@ -12,3 +12,7 @@ next-env.d.ts
 .DS_Store
 .vercel
 public/data/events.json
+.build/
+e2e-artifacts/
+test-results/
+playwright-report/
