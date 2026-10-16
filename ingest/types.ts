@@ -1,5 +1,6 @@
 // Shared ingest types (spec S1.8). The adapters turn bytes into `SourceEvent`s; the runner submits them under a grant.
 import type { PoliteFetch } from './core/politeFetch';
+import type { ReasonCode } from './core/reasonCodes';
 
 export type RunStatus = 'ok' | 'not_modified' | 'robots_blocked' | 'http_error' | 'parse_error' | 'skipped';
 export type PriceKind = 'free' | 'paid' | 'donation' | 'unknown';
@@ -33,6 +34,8 @@ export interface SourceEvent {
   priceMin?: number;
   priceMax?: number;
   age?: AgeKind;
+  /** Classifier reason codes (closed list, <= 16). Stored by the database next to the facts; never part of the facts hash. */
+  tagReasons?: ReasonCode[];
 }
 
 /** One entry of `due_sources`: a single-use grant for one due source (mirrors supabase/functions/_shared/db.ts). */

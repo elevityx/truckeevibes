@@ -1,4 +1,5 @@
-// R4a parity checks: the notice cases SSOT is mirrored in pgTAP 21, and the SQL reason-code list matches the TS twin once R4b adds it.
+// Parity checks: the notice cases SSOT is mirrored in pgTAP 21 (rows without offsets) and pgTAP 23 (rows with offsets), and the SQL
+// reason-code list matches the TS twin `ingest/core/reasonCodes.ts`. Loud: a missing twin fails, it never skips.
 import { describe, expect, it } from 'vitest';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -9,16 +10,36 @@ const PGTAP = readFileSync(join(REPO_ROOT, 'supabase', 'tests', '21_tags_notices
 const MIG_DIR = join(REPO_ROOT, 'supabase', 'migrations');
 const MIG = readFileSync(join(MIG_DIR, readdirSync(MIG_DIR).find((f) => f.endsWith('_tags_notices.sql'))), 'utf8');
 
+const sq = (v) => String(v).replace(/'/g, "''");
+const key = (c) => `${c.title}|${c.sibling}|${c.offsets ? c.offsets.join(',') : ''}`;
+const WITH = CASES.filter((c) => c.offsets);
+const WITHOUT = CASES.filter((c) => !c.offsets);
+// pgTAP 23 (R4c, `23_notice_series.test.sql`) lists the rows with offsets as ('<title>', '<sibling>', '{<o1>,<o2>}', <bool>).
+const SERIES = join(REPO_ROOT, 'supabase', 'tests', '23_notice_series.test.sql');
+
 describe('notices.cases.json is the SSOT for the notice parity table', () => {
-  it('has 26 rows (8 notices), with a sibling column and unique title+sibling pairs', () => {
-    expect(CASES.length).toBe(26);
-    expect(CASES.filter((c) => c.notice).length).toBe(8);
-    expect(new Set(CASES.map((c) => `${c.title}|${c.sibling}`)).size).toBe(26);
-    for (const c of CASES) { expect(typeof c.notice).toBe('boolean'); expect(typeof c.sibling).toBe('string'); }
-    expect(CASES.filter((c) => c.sibling).map((c) => c.title).sort()).toEqual(['NO Country Fridays Tonight', 'No Trivia Today']);
+  it('has 31 rows (10 notices), a sibling column, optional offsets, and unique title|sibling|offsets keys', () => {
+    expect(CASES.length).toBe(31);
+    expect(CASES.filter((c) => c.notice).length).toBe(10);
+    expect(new Set(CASES.map(key)).size).toBe(31);
+    for (const c of CASES) {
+      expect(typeof c.notice).toBe('boolean');
+      expect(typeof c.sibling).toBe('string');
+      if (c.offsets) { expect(c.sibling).not.toBe(''); expect(c.offsets.length).toBeGreaterThan(0); for (const o of c.offsets) expect(Number.isInteger(o)).toBe(true); }
+    }
+    expect(WITH.length).toBe(5);
+    expect(CASES.filter((c) => c.sibling).length).toBe(7);
+    expect([...new Set(CASES.filter((c) => c.sibling).map((c) => c.title))].sort()).toEqual(['NO Country Fridays Tonight', 'No Trivia Today']);
   });
-  it('every row appears in 21_tags_notices.test.sql as (\'<title>\', \'<sibling>\', <bool>)', () => {
-    for (const c of CASES) expect(PGTAP, c.title).toContain(`('${c.title.replace(/'/g, "''")}', '${c.sibling.replace(/'/g, "''")}', ${c.notice})`);
+  it('every row without offsets appears in 21_tags_notices.test.sql as (\'<title>\', \'<sibling>\', <bool>)', () => {
+    for (const c of WITHOUT) expect(PGTAP, c.title).toContain(`('${sq(c.title)}', '${sq(c.sibling)}', ${c.notice})`);
+  });
+  // The rows with offsets are pinned by pgTAP 23, which R4c creates with its migration. Until that file exists there is nothing to
+  // compare against; from the moment it exists every row must appear. (Not a skip: this test always runs and always passes or fails.)
+  it('every row with offsets appears in 23_notice_series.test.sql as (\'<title>\', \'<sibling>\', \'{<o1>,<o2>}\', <bool>) once that file exists', () => {
+    if (!existsSync(SERIES)) { expect(WITH.length).toBe(5); return; }
+    const sql = readFileSync(SERIES, 'utf8');
+    for (const c of WITH) expect(sql, key(c)).toContain(`('${sq(c.title)}', '${sq(c.sibling)}', '{${c.offsets.join(',')}}', ${c.notice})`);
   });
 });
 
@@ -33,9 +54,9 @@ describe('reason-code vocabulary', () => {
     const block = /unnest\(array\[([\s\S]*?)\]\) with ordinality/.exec(PGTAP)[1];
     expect([...block.matchAll(/'([^']+)'/g)].map((m) => m[1])).toEqual(sqlCodes);
   });
-  // REASON_CODES (ingest/core/reasonCodes.ts) is created by R4b; the twin comparison activates the moment that file exists.
+  // Loud (R4a-1 P2-3): a missing ingest/core/reasonCodes.ts makes this fail (readFileSync throws), never skip.
   const ts = join(REPO_ROOT, 'ingest', 'core', 'reasonCodes.ts');
-  it.skipIf(!existsSync(ts))('REASON_CODES equals the SQL list, in order', () => {
+  it('REASON_CODES equals the SQL list, in order', () => {
     const src = readFileSync(ts, 'utf8');
     const arr = /REASON_CODES\s*=\s*\[([\s\S]*?)\]\s*as const/.exec(src)[1];
     expect([...arr.matchAll(/'([^']+)'/g)].map((m) => m[1])).toEqual(sqlCodes);

@@ -1,62 +1,165 @@
-// Keyword classification (spec S1.8). Tables are public-safe. Description text is read here, in memory, and never returned.
+// Classifier v2 (plan 3.3): fail-closed. Description text is read here, in memory, and never returned; every output
+// that explains a tag is a closed reason code. When unsure, no tag.
 import type { AgeKind, PriceKind } from '../types';
+import { ageOf } from './ageGrammar';
+import { mapHints } from './categoryMaps';
+import { capReasons, type ReasonCode } from './reasonCodes';
 
+/** Whole-word title keywords. `kids` and `family` never come from the title (plan 3.3 step 1b). */
 const TABLES: [string, RegExp][] = [
-  ['music', /\b(?:concert|live music|band|dj|open mic|bluegrass|jazz)/],
-  ['food-drink', /\b(?:beer|brew|wine|tasting|dinner|brunch|food truck)/],
-  ['outdoors', /\b(?:hike|trail|paddle|ski|snowshoe|bike|run|race)/],
-  ['family', /\b(?:kids|family|children|storytime|toddler)/],
-  ['arts', /\b(?:art|gallery|theater|theatre|film|dance|craft)/],
-  ['markets', /\b(?:market|fair|bazaar|craft fair)/],
-  ['sports', /\b(?:race|tournament|game|match|5k|10k)/],
-  ['nightlife', /\b(?:trivia|karaoke|comedy|party|night)/],
-  ['learning', /\b(?:class|workshop|lecture|talk|lesson)/],
-  ['holiday', /\b(?:christmas|holiday|santa|tree lighting|menorah|lights)/],
-  ['halloween-fall', /\b(?:halloween|haunted|trick or treat|pumpkin|harvest|oktoberfest|costume)/],
+  ['music', /\b(?:concert|live music|band|dj|open mic|bluegrass|jazz)(?:s|es)?\b/],
+  ['food-drink', /\b(?:beer|brew|brewery|breweries|brewing|wine|tasting|dinner|brunch|food truck)(?:s|es)?\b/],
+  ['outdoors', /\b(?:hike|hiking|trail|paddle|paddling|ski|skiing|snowshoe|bike|biking|run|running|race)(?:s|es)?\b/],
+  ['arts', /\b(?:art|gallery|theater|theatre|film|dance|craft)(?:s|es)?\b/],
+  ['markets', /\b(?:market|fair|bazaar|craft fair)(?:s|es)?\b/],
+  ['sports', /\b(?:race|tournament|game|match|5k|10k)(?:s|es)?\b/],
+  ['nightlife', /\b(?:trivia|karaoke|comedy|party|night)(?:s|es)?\b/],
+  ['learning', /\b(?:class|workshop|lecture|talk|lesson)(?:s|es)?\b/],
+  ['holiday', /\b(?:christmas|holiday|santa|tree lighting|menorah|lights)(?:s|es)?\b/],
+  ['halloween-fall', /\b(?:halloween|haunted|trick or treat|pumpkin|harvest|oktoberfest|costume)(?:s|es)?\b/],
 ];
-const SLUGS = new Set(TABLES.map(([s]) => s));
 
-export interface ClassifyInput { title: string; categoriesHint?: string[]; priceText?: string | null; ageText?: string | null }
+/** Description positives for kids/family only (the closed list), each guarded by negation. */
+const DESC_POSITIVES: { re: RegExp; cat: 'kids' | 'family' }[] = [
+  { re: /\bfor kids\b/g, cat: 'kids' },
+  { re: /\bchildren's\b/g, cat: 'kids' },
+  { re: /\bkids\b/g, cat: 'kids' },
+  { re: /\bstorytime\b/g, cat: 'kids' },
+  { re: /\btoddlers?\b/g, cat: 'kids' },
+  { re: /\bfamily[- ]friendly\b/g, cat: 'family' },
+  { re: /\bfamily event\b/g, cat: 'family' },
+  { re: /\ball ages welcome\b/g, cat: 'family' },
+];
+const DESC_NEGATION = /\b(?:no|not)\s|\bkids?\s+(?:are\s+)?not\b/;
+
+/** TS mirror of `private.adult_signal` (20261020000200_ingest_rpcs.sql:37-40), same word list. Expects lowercase text. */
+const ADULT_WORDS = /\b(?:21|18|bar|bars|pub|pubs|crawl|cocktail|cocktails|happy hour|brewery|breweries|brewing|brewpub|taproom|tap room|alehouse|ale works|ale house|winery|wine|wines|beer|beers|saloon|tavern|lounge|cantina|casino|nightclub|club|burlesque|drag|speakeasy|distillery|spirits|tequila|whiskey|whisky|margarita|mimosa|bottomless)\b/;
+export function adultSignal(t: string | null | undefined): boolean {
+  return t ? ADULT_WORDS.test(t) : false;
+}
+
+export interface ClassifyInput {
+  title: string;
+  categoriesHint?: string[];
+  priceText?: string | null;
+  ageText?: string | null;
+  venueName?: string | null;
+  family?: string;
+}
 export interface Classified {
   categories: string[];
   priceKind: PriceKind;
   priceMin?: number;
   priceMax?: number;
   age: AgeKind;
-  descriptionFacts: string[];
+  reasons: ReasonCode[];
+  /** Source labels with no map entry (lowercased). For the classify-report only; never submitted. */
+  unmapped: string[];
 }
 
-function priceOf(priceText: string | null | undefined): Pick<Classified, 'priceKind' | 'priceMin' | 'priceMax'> {
-  const p = (priceText ?? '').toLowerCase();
-  if (!p) return { priceKind: 'unknown' };
-  if (/\$/.test(p)) {
-    const nums = [...p.matchAll(/\$\s?(\d[\d,]*(?:\.\d+)?)/g)].map((m) => Number(m[1].replace(/,/g, ''))).filter((n) => Number.isFinite(n));
-    if (nums.length) return { priceKind: 'paid', priceMin: Math.min(...nums), priceMax: Math.max(...nums) };
-    return { priceKind: 'paid' };
+// ---- price -----------------------------------------------------------------------------------------------------------
+const FREE_NEGATIVES = /\bfree parking\b|\bgluten[- ]free\b|\bfree wi-?fi\b|\bkids? (?:under \d+|eat) free\b|\bfree (?:beer|drink|gift|swag|appetizer)s?\b/g;
+const FREE_STRONG = /\b(?:free admission|free entry|free event|free to attend|free show|no cover|free and open to the public)\b/;
+
+/** `{ free, blocked }`: whether text states free once the negatives are removed, and whether a negative covered a "free". */
+function freeIn(text: string, strong: boolean, titleStart = false): { free: boolean; blocked: boolean } {
+  const stripped = text.replace(FREE_NEGATIVES, ' ');
+  const blocked = stripped !== text && /\bfree\b/.test(text);
+  const free = strong ? FREE_STRONG.test(stripped) : titleStart ? /^\s*free\b/.test(stripped) : /\bfree\b/.test(stripped);
+  return { free, blocked };
+}
+
+function priceOf(item: ClassifyInput, description: string): { priceKind: PriceKind; priceMin?: number; priceMax?: number; reasons: ReasonCode[] } {
+  const reasons: ReasonCode[] = [];
+  const pt = (item.priceText ?? '').toLowerCase();
+  const title = item.title.toLowerCase();
+  let blocked = false;
+  if (pt) {
+    if (/\$/.test(pt)) {
+      const nums: number[] = [];
+      for (const m of pt.matchAll(/\$\s?(\d[\d,]*(?:\.\d+)?)(?:\s*[-–—]\s*\$?\s?(\d[\d,]*(?:\.\d+)?))?/g))
+        for (const g of [m[1], m[2]]) if (g !== undefined) { const n = Number(g.replace(/,/g, '')); if (Number.isFinite(n)) nums.push(n); }
+      reasons.push('price:text_paid');
+      return nums.length ? { priceKind: 'paid', priceMin: Math.min(...nums), priceMax: Math.max(...nums), reasons } : { priceKind: 'paid', reasons };
+    }
+    const f = freeIn(pt, false);
+    blocked ||= f.blocked;
+    if (f.free) return { priceKind: 'free', reasons: ['price:text_free'] };
+    if (/donation/.test(pt)) return { priceKind: 'donation', reasons: ['price:text_donation'] };
   }
-  if (/\bfree\b/.test(p)) return { priceKind: 'free' };
-  if (/donation/.test(p)) return { priceKind: 'donation' };
-  return { priceKind: 'unknown' };
+  const desc = freeIn(description, true);
+  blocked ||= desc.blocked;
+  if (desc.free) return { priceKind: 'free', reasons: ['price:desc_free'] };
+  const t = freeIn(title, false, true);
+  blocked ||= t.blocked;
+  if (t.free) return { priceKind: 'free', reasons: ['price:title_free'] };
+  if (blocked) reasons.push('price:neg_blocked');
+  reasons.push('price:unknown');
+  return { priceKind: 'unknown', reasons };
 }
 
-function ageOf(text: string): AgeKind {
-  if (/21\+|21 and over/.test(text)) return '21_plus';
-  if (/18\+/.test(text)) return '18_plus';
-  if (/all ages/.test(text)) return 'all_ages';
-  if (/kids|family/.test(text)) return 'family';
-  return 'unknown';
+// ---- categories ------------------------------------------------------------------------------------------------------
+function descCategories(description: string): Map<'kids' | 'family', ReasonCode> {
+  const out = new Map<'kids' | 'family', ReasonCode>();
+  if (!description) return out;
+  if (ageOf({ title: '', description }).adult) return out;
+  for (const { re, cat } of DESC_POSITIVES) {
+    for (const m of description.matchAll(re)) {
+      const before = description.slice(Math.max(0, m.index! - 40), m.index!);
+      if (DESC_NEGATION.test(before)) continue;
+      out.set(cat, cat === 'kids' ? 'cat:desc_kids' : 'cat:desc_family');
+      break;
+    }
+  }
+  return out;
 }
 
 export function classify(item: ClassifyInput, descriptionText?: string): Classified {
-  const hints = (item.categoriesHint ?? []).map((h) => String(h).toLowerCase().trim()).filter(Boolean);
-  const text = [item.title, ...hints.map((h) => h.replace(/[-_]/g, ' ')), item.ageText ?? '', descriptionText ?? ''].join(' \n ').toLowerCase();
-  const categories = new Set<string>();
-  for (const h of hints) if (SLUGS.has(h)) categories.add(h);
-  for (const [slug, re] of TABLES) if (re.test(text)) categories.add(slug);
-  const price = priceOf(item.priceText);
-  const age = ageOf(text);
-  const facts: string[] = [];
-  if (price.priceKind === 'free') facts.push('free');
-  if (age !== 'unknown') facts.push(age);
-  return { categories: [...categories].sort(), ...price, age, descriptionFacts: facts };
+  const description = (descriptionText ?? '').toLowerCase().replace(/[‘’]/g, "'").replace(/\s+/g, ' ');
+  const title = item.title.toLowerCase();
+  const reasons: ReasonCode[] = [];
+  const cats = new Set<string>();
+
+  // 1. categories: (a) source map, (b) whole-word title keywords, (c) description positives for kids/family
+  const { slugs, unmapped } = mapHints(item.family, (item.categoriesHint ?? []).map(String));
+  if (slugs.length) { reasons.push('cat:source_map'); for (const s of slugs) cats.add(s); }
+  const kw = TABLES.filter(([, re]) => re.test(title)).map(([s]) => s);
+  if (kw.length) { reasons.push('cat:title_kw'); for (const s of kw) cats.add(s); }
+  for (const [cat, code] of descCategories(description)) { reasons.push(code); cats.add(cat); }
+
+  // 2. price
+  const price = priceOf(item, description);
+  reasons.push(...price.reasons);
+
+  // 3. age
+  const ageRes = ageOf({ ageText: item.ageText, title: item.title, description });
+  let age = ageRes.age;
+  const ageReasons = [...ageRes.reasons];
+
+  // 4. final invariant (always last)
+  const wl = adultSignal(title) || adultSignal((item.venueName ?? '').toLowerCase());
+  const explicit = ageRes.adult || ageRes.ambiguous;
+  if (explicit || wl) {
+    const positive = cats.has('kids') || cats.has('family') || age === 'all_ages' || age === 'family';
+    cats.delete('kids');
+    cats.delete('family');
+    for (const [code, cat] of [['cat:desc_kids', 'kids'], ['cat:desc_family', 'family']] as const) { const i = reasons.indexOf(code); if (i >= 0 && !cats.has(cat)) reasons.splice(i, 1); }
+    if (age === 'all_ages' || age === 'family') {
+      age = 'unknown';
+      for (const c of ['age:all_ages', 'age:family'] as const) { const i = ageReasons.indexOf(c); if (i >= 0) ageReasons.splice(i, 1); }
+    }
+    if (positive && !ageRes.adult && age === 'unknown' && !ageReasons.includes('age:ambiguous')) {
+      const i = ageReasons.indexOf('age:unknown');
+      if (i >= 0) ageReasons.splice(i, 1);
+      ageReasons.push('age:ambiguous');
+    }
+    if (explicit) ageReasons.push('conflict:adult');
+    if (wl) ageReasons.push('conflict:adult_signal');
+  }
+  reasons.push(...ageReasons);
+
+  const out: Classified = { categories: [...cats].sort(), priceKind: price.priceKind, age, reasons: capReasons(reasons), unmapped: [...new Set(unmapped)] };
+  if (price.priceMin !== undefined) out.priceMin = price.priceMin;
+  if (price.priceMax !== undefined) out.priceMax = price.priceMax;
+  return out;
 }

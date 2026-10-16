@@ -7,6 +7,9 @@ import { callIngest, IngestHttpError } from './core/hmacClient';
 import { createPoliteFetch, FetchError } from './core/politeFetch';
 import { createSpacer } from './core/rateLimit';
 import { validateSourceEvent } from './core/normalize';
+import { applyNotices } from './core/notices';
+import { OUR_SLUGS } from './core/categoryMaps';
+import { capReasons } from './core/reasonCodes';
 import type { Adapter, AdapterResult, GrantOut, RunMeta, RunStatus, SourceEvent } from './types';
 
 export interface RunDeps {
@@ -26,7 +29,38 @@ const SKEW_ALLOWANCE_MS = 2000; // the database refuses a started_at in its futu
 const safeCode = (v: unknown) => (typeof v === 'string' && /^[a-z0-9_]{1,40}$/.test(v) ? v : 'unknown');
 const classNameOf = (e: unknown) => { const n = e instanceof Error ? e.constructor.name : ''; return /^[A-Za-z0-9_]{1,60}$/.test(n) ? n : 'Error'; };
 
-interface Outcome { status: RunStatus; items: SourceEvent[]; result: Partial<AdapterResult>; errorCode?: string; errorDetail?: string; invalid: number }
+interface Outcome { status: RunStatus; items: SourceEvent[]; result: Partial<AdapterResult>; errorCode?: string; errorDetail?: string; invalid: number; dropped?: number; cancelled?: number }
+
+const KNOWN_SLUGS: ReadonlySet<string> = new Set(OUR_SLUGS);
+const ADULT_REASON = /^(?:age:21_admission|age:18_admission|age:adult_phrase|age:ambiguous|conflict:.*)$/;
+
+/** DR12: `config.defaultCategories` fills an item with no category, never adding kids/family to an adult or ambiguous item. */
+export function applySourceDefaults(item: SourceEvent, config: Record<string, unknown>): SourceEvent {
+  const d = config.defaultCategories;
+  if (item.categoriesHint.length > 0 || !Array.isArray(d)) return item;
+  const adult = (item.tagReasons ?? []).some((c) => ADULT_REASON.test(c));
+  const slugs = [...new Set(d.filter((x): x is string => typeof x === 'string' && KNOWN_SLUGS.has(x)))].filter((x) => !(adult && (x === 'kids' || x === 'family')));
+  if (slugs.length === 0) return item;
+  return { ...item, categoriesHint: slugs, tagReasons: capReasons([...(item.tagReasons ?? []), 'cat:default']) };
+}
+
+/** ` tags=<slug>:<n>,… free:<n> age_ambiguous=<n> conflicts=<n> notices=<dropped>/<cancelled>`: counts only (V11). */
+function tagStats(o: Pick<Outcome, 'items' | 'dropped' | 'cancelled'>): string {
+  const by: Record<string, number> = {};
+  let free = 0;
+  let ambiguous = 0;
+  let conflicts = 0;
+  for (const i of o.items) {
+    for (const c of new Set(i.categoriesHint)) by[c] = (by[c] ?? 0) + 1;
+    if (i.priceKind === 'free') free++;
+    const r = i.tagReasons ?? [];
+    if (r.includes('age:ambiguous')) ambiguous++;
+    if (r.some((c) => c.startsWith('conflict:'))) conflicts++;
+  }
+  const parts = Object.keys(by).sort().map((k) => `${k}:${by[k]}`);
+  if (free > 0) parts.push(`free:${free}`);
+  return `tags=${parts.length ? parts.join(',') : 'none'} age_ambiguous=${ambiguous} conflicts=${conflicts} notices=${o.dropped ?? 0}/${o.cancelled ?? 0}`;
+}
 
 export async function main(deps: RunDeps): Promise<number> {
   const log = deps.log ?? ((l: string) => console.log(l));
@@ -69,7 +103,7 @@ export async function main(deps: RunDeps): Promise<number> {
     if (r.lastModified) run.last_modified = r.lastModified;
     if (r.contentHash) run.content_hash = r.contentHash;
     const adapter = registry[g.source.family];
-    if (adapter) run.parser_version = adapter.version;
+    if (adapter) run.parser_version = `${adapter.version}-c2`;
     const code = o.errorCode ?? r.errorCode;
     if (code) run.error_code = code;
     if (o.errorDetail) run.error_detail = o.errorDetail;
@@ -89,11 +123,11 @@ export async function main(deps: RunDeps): Promise<number> {
       const out = await callIngest<{ new?: number; changed?: number }>('submit_batch', { grant: g.grant, run, items }, client);
       line += `new=${Number(out.new ?? 0)} changed=${Number(out.changed ?? 0)} invalid=${o.invalid}`;
       if (r.filtered !== undefined) line += ` filtered=${r.filtered}`;
-      log(line);
+      log(`${line} ${tagStats({ items, dropped: o.dropped, cancelled: o.cancelled })}`);
     } catch (e) {
       const status = e instanceof IngestHttpError ? e.status : 0;
       const c = e instanceof IngestHttpError ? safeCode(e.code) : 'unknown';
-      log(`${line}new=0 changed=0 invalid=${o.invalid} submit_failed status=${status} code=${c}`);
+      log(`${line}new=0 changed=0 invalid=${o.invalid} ${tagStats({ items, dropped: o.dropped, cancelled: o.cancelled })} submit_failed status=${status} code=${c}`);
       if (status === 401) fatal = true; // HMAC rejected: infrastructure, not this source
     }
   }
@@ -119,14 +153,16 @@ export async function main(deps: RunDeps): Promise<number> {
     const base: Partial<AdapterResult> = { ...result, robots, items: [] };
     if (result.status !== 'ok') return { status: result.status, items: [], result: base, invalid: 0 };
     if (result.items.length > MAX_ITEMS) return { status: 'parse_error', items: [], result: base, errorCode: 'too_many_items', invalid: 0 };
-    const items: SourceEvent[] = [];
+    const valid: SourceEvent[] = [];
     let invalid = 0;
     for (const it of result.items) {
       const v = validateSourceEvent(it);
       if ('invalid' in v) invalid++;
-      else items.push(v);
+      else valid.push(v);
     }
-    return { status: 'ok', items, result: base, invalid };
+    const noticed = applyNotices(valid);
+    const items = noticed.items.map((i) => applySourceDefaults(i, g.source.config));
+    return { status: 'ok', items, result: base, invalid, dropped: noticed.dropped, cancelled: noticed.cancelled };
   }
 
   // 3 sources at a time, never two on the same host

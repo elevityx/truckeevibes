@@ -39,7 +39,7 @@ function when(s: string, tz: string): { kind: 'instant'; iso: string } | { kind:
   return r === 'dst_gap' ? null : { kind: 'instant', iso: r };
 }
 
-export function parseJsonLdEvents(html: string, pageUrl: string, opts: { tz?: string } = {}): SourceEvent[] {
+export function parseJsonLdEvents(html: string, pageUrl: string, opts: { tz?: string; family?: string } = {}): SourceEvent[] {
   const tz = opts.tz ?? DEFAULT_TZ;
   const $ = cheerio.load(html);
   const out: SourceEvent[] = [];
@@ -71,7 +71,7 @@ export function parseJsonLdEvents(html: string, pageUrl: string, opts: { tz?: st
         venueName: place ? str(place.name) : typeof loc === 'string' ? loc : undefined,
         address: place ? address(place.address) : undefined,
         lat: geo ? Number(geo.latitude) : undefined, lng: geo ? Number(geo.longitude) : undefined,
-        cancelled: /Cancel/i.test(status),
+        cancelled: /Cancel/i.test(status), family: opts.family,
       };
       if (start.kind === 'date') {
         const mid = toUtcFromLocal(start.date, '00:00', tz);
