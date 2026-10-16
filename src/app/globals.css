@@ -73,3 +73,18 @@ a{color:var(--river)}
 .pg .h2{margin-top:var(--space-4)}
 .pg .btn{align-self:flex-start}
 .aside{display:flex; flex-direction:column; gap:var(--space-2); padding:var(--space-4); border-radius:var(--radius-lg); background:var(--surface); border:1px solid var(--line)}
+
+/* Sources: grouped status rows. */
+.proof{margin:0; font-size:var(--fs-body); color:var(--ink)}
+.sgroup{display:flex; flex-direction:column; gap:var(--space-2); margin-top:var(--space-4)}
+.sgroup .count{margin-left:var(--space-1); color:var(--ink-muted); font-weight:400}
+.srows{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:var(--space-2)}
+.srow{display:flex; flex-wrap:wrap; gap:var(--space-1) var(--space-3); align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4);
+  border-radius:var(--radius-lg); background:var(--surface); border:1px solid var(--line)}
+.srow-main{display:flex; flex-direction:column; gap:2px; min-width:0}
+.srow-main a,.srow-name{font-weight:var(--fw-row-title); overflow-wrap:anywhere}
+.srow-url{font-size:var(--fs-meta); line-height:var(--lh-meta); color:var(--ink-muted); overflow-wrap:anywhere}
+.srow-status{font-size:var(--fs-small); font-weight:var(--fw-control)}
+.st-pine{color:var(--pine)}
+.st-glow{color:var(--alpenglow-ink)}
+.st-muted{color:var(--ink-muted)}

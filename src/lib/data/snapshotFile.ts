@@ -22,8 +22,8 @@ function pickVibeEvent(e: VibeEvent): VibeEvent {
 export function readBuildSnapshot(path: string = join(process.cwd(), SNAPSHOT_PATH)): Snapshot {
   try {
     const s = parseSnapshot(JSON.parse(readFileSync(path, 'utf8')));
-    return { builtAt: s.builtAt, events: s.events.map(pickVibeEvent) };
+    return { builtAt: s.builtAt, events: s.events.map(pickVibeEvent), sources: s.sources };
   } catch {
-    return { builtAt: null, events: [] };
+    return { builtAt: null, events: [], sources: [] };
   }
 }

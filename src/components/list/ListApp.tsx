@@ -21,7 +21,7 @@ import './list.css';
 const TZ = REGION_TZ;
 
 /** The public list: first paint from the build snapshot, then the live read. Filters and the open event live in the URL. */
-export default function ListApp({ initialSnapshot }: { initialSnapshot: Snapshot }) {
+export default function ListApp({ initialSnapshot }: { initialSnapshot: Pick<Snapshot, 'builtAt' | 'events'> }) {
   // The first render uses the build time as "now" so server and hydration agree; the real clock takes over right after mount.
   const builtMs = initialSnapshot.builtAt ? Date.parse(initialSnapshot.builtAt) : 0;
   const now = useClock(CLOCK_TICK_MS, builtMs);
