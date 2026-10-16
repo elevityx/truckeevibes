@@ -58,3 +58,23 @@ describe('validateSourceEvent', () => {
     expect(typeof (r as { invalid: string }).invalid).toBe('string');
   });
 });
+
+describe('validateSourceEvent keeps valid tagReasons (R4b)', () => {
+  const base = { externalKey: 'k', title: 'T', startsAt: '2026-10-20T19:00:00Z', allDay: false, timeKnown: true, tz: 'America/Los_Angeles', categoriesHint: [], rawSummaryLength: 0 };
+  it('keeps a list of known codes', () => {
+    const r = validateSourceEvent({ ...base, tagReasons: ['age:ambiguous', 'price:unknown'] } as never);
+    expect('invalid' in r).toBe(false);
+    expect((r as { tagReasons?: string[] }).tagReasons).toEqual(['age:ambiguous', 'price:unknown']);
+  });
+  it('drops the field (not the item) for an unknown code, a non-array, a non-string, or more than 16', () => {
+    for (const bad of [['age:made_up'], 'age:ambiguous', [1], Array.from({ length: 17 }, () => 'age:unknown')]) {
+      const r = validateSourceEvent({ ...base, tagReasons: bad } as never);
+      expect('invalid' in r).toBe(false);
+      expect('tagReasons' in r).toBe(false);
+    }
+  });
+  it('an item without tagReasons is returned as is', () => {
+    const r = validateSourceEvent(base as never);
+    expect('tagReasons' in r).toBe(false);
+  });
+});

@@ -62,6 +62,18 @@ describe('tribe: two-page fixture (AC-M1-13)', () => {
     const d = r.items.find((i) => i.externalKey === '102')!;
     expect(d.priceText ?? null).toBeNull();
   });
+  it('classifies the organizer cost "Free" as free with price:text_free (AC-R4b-13)', async () => {
+    const r = await adapter.fetch(ctx(twoPages(), cfg()));
+    const t = r.items.find((i) => i.externalKey === '103')!;
+    expect(t.priceKind).toBe('free');
+    expect(t.tagReasons).toContain('price:text_free');
+  });
+  it('maps the Tribe category slug through the family map and records cat:source_map', async () => {
+    const r = await adapter.fetch(ctx(twoPages(), cfg()));
+    const a = r.items.find((i) => i.externalKey === '101')!;
+    expect(a.categoriesHint).toContain('music');
+    expect(a.tagReasons).toContain('cat:source_map');
+  });
   it('item keys are a subset of the SourceEvent key set and no description text leaves the adapter', async () => {
     const r = await adapter.fetch(ctx(twoPages(), cfg()));
     for (const i of r.items) for (const k of Object.keys(i)) expect(SOURCE_EVENT_KEYS.has(k), k).toBe(true);
