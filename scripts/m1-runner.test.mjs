@@ -19,10 +19,10 @@ describe('.github/workflows/ingest.yml (S1.10, A4-1)', () => {
     expect(r.status).toBe(0);
     expect(r.out).toMatch(/ok \(3 files\)/); // ci.yml + ingest.yml + rebuild.yml
   });
-  it('triggers: only schedule (4 runs a day) and workflow_dispatch', () => {
+  it('triggers: only schedule (every 3 hours, A10) and workflow_dispatch', () => {
     const on = wf().on;
     expect(Object.keys(on).sort()).toEqual(['schedule', 'workflow_dispatch']);
-    expect(on.schedule).toEqual([{ cron: '10 4,13,18,23 * * *' }]);
+    expect(on.schedule).toEqual([{ cron: '10 */3 * * *' }]);
   });
   it('permissions contents: read; concurrency group ingest without cancelling a running ingest', () => {
     expect(wf().permissions).toEqual({ contents: 'read' });
