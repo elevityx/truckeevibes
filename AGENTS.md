@@ -60,6 +60,7 @@ Conventions: every function sets `search_path = ''` and uses fully qualified nam
 
 ## CI
 `.github/workflows/ci.yml`: job `web` (install, lint, typecheck, build, test, Deno tests, audit, repo checks), job `db` (start the local stack, reset, pgTAP) and job `visual` (Playwright visual checks on a fixture build, then Lighthouse and the HTML budget; uploads screenshots as an artifact). It uses no secrets and no `pull_request_target`; every action is pinned to a commit SHA.
+`.github/workflows/ingest.yml`: runs the ingest every 3 hours (cron `10 */3 * * *`, A10 real-time publishing; trusted `auto` sources apply new/edit surges, `found_drop`/`found_zero` still hold every source).
 `.github/workflows/rebuild.yml`: a daily (13:00 UTC) and manual call of the Cloudflare Pages deploy hook so the static site rebuilds from fresh data. One `curl` step, `permissions: {}`, no checkout, no `uses:`, no package manager; its only secret is `PAGES_DEPLOY_HOOK_URL`. `scripts/check-workflows.mjs` enforces this.
 
 ## Workflow
