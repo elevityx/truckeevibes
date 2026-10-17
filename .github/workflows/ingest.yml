@@ -1,6 +1,6 @@
 name: Ingest
 on:
-  schedule: [{ cron: '10 4,13,18,23 * * *' }]   # 06:10/11:10/16:10/21:10 PDT (an hour earlier in PST)
+  schedule: [{ cron: '10 */3 * * *' }]   # every 3 hours at minute 10 UTC
   workflow_dispatch: {}
 permissions: { contents: read }
 concurrency: { group: ingest, cancel-in-progress: false }
