@@ -366,7 +366,8 @@ create function pg_temp.setup_held(p_slug text) returns void language plpgsql as
 begin
   perform pg_temp.mk_source(p_slug, 'organizer', 'auto');
   perform pg_temp.ing('base-' || p_slug, p_slug, jsonb_build_array(pg_temp.item(p_slug || '-a', 'Held Base Alpha ' || p_slug, 5), pg_temp.item(p_slug || '-b', 'Held Base Bravo ' || p_slug, 6)));
-  perform pg_temp.seed_runs(p_slug, 6, 2, 2);
+  -- A10: auto sources apply new/edit surges, so the hold comes from found_drop (median found 60, the anomaly batches carry 25-26)
+  perform pg_temp.seed_runs(p_slug, 6, 60, 2);
 end $$;
 create function pg_temp.held_card(p_label text) returns uuid language plpgsql as $$
 declare r uuid;
