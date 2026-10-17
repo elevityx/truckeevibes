@@ -218,12 +218,12 @@ select pg_temp.eq($$(select count(*) from (values ('diamond-peak'), ('ivgid'), (
   'AC-M1-61 admin_set_source_enabled on each gated source -> source_not_permitted');
 select pg_temp.eq($$(select class::text || '|' || (trust <> 'auto') || '|' || max_cards_7d from public.sources where slug = 'visit-lake-tahoe')$$, 'aggregator|true|3',
   'AC-M1-61 visit-lake-tahoe: class aggregator, trust <> auto, max_cards_7d = 3');
-select pg_temp.eq($$(select cadence from public.sources where slug = 'truckee-chamber')$$, '72h', 'AC-M1-61 truckee-chamber cadence is 72h');
--- a grant for the chamber sets next_due_at = now + 72 h (enabled here with a fresh, fixture-only recheck so the test cannot expire)
+select pg_temp.eq($$(select cadence from public.sources where slug = 'truckee-chamber')$$, '24h', 'AC-M1-61 (A10) truckee-chamber cadence is 24h');
+-- a grant for the chamber sets next_due_at = now + 24 h (A10: was 72 h) (enabled here with a fresh, fixture-only recheck so the test cannot expire)
 select pg_temp.x('postgres', $$update public.sources set terms_reviewed_at = now(), terms_recheck_at = now() + interval '30 days', enabled = true, next_due_at = now() where slug = 'truckee-chamber'$$);
 select pg_temp.x('postgres', $$update public.sources set next_due_at = now() + interval '1 day' where slug <> 'truckee-chamber' and next_due_at <= now()$$);
 select pg_temp.t($$(select count(*) = 1 from jsonb_array_elements(public.svc_issue_run_grants() -> 'grants') g where g #>> '{source,slug}' = 'truckee-chamber')$$, 'AC-M1-61 the chamber is issued a grant');
-select pg_temp.t($$(select next_due_at = now() + interval '72 hours' from public.sources where slug = 'truckee-chamber')$$, 'AC-M1-61 ... and its next_due_at is now + 72 h');
+select pg_temp.t($$(select next_due_at = now() + interval '24 hours' from public.sources where slug = 'truckee-chamber')$$, 'AC-M1-61 (A10) ... and its next_due_at is now + 24 h');
 select pg_temp.eq($$(select count(*) from public.sources where family = 'squarespace')$$, '0', 'AC-M1-61 no source has family squarespace');
 select pg_temp.eq($$(select count(*) from expect e join public.sources s using (slug) where s.terms_hash ~ '^[0-9a-f]{64}$' and s.robots_hash ~ '^[0-9a-f]{64}$' and s.robots_checked_at is not null)$$, '9',
   'AC-M1-61 every terms_hash and robots_hash of the 9 matches ^[0-9a-f]{64}$ and robots was checked');

@@ -1,4 +1,4 @@
--- S1.13 step 3 rollout state after all migrations: Alibi Ale Works and TDRPD are enabled at trust 'auto' (first runs reviewed); Truckee Chamber is enabled at trust 'review';
+-- S1.13 step 3 rollout state after all migrations: Alibi Ale Works and TDRPD are enabled at trust 'auto' (first runs reviewed); Truckee Chamber is enabled at trust 'auto' (A10);
 -- Visit Lake Tahoe (aggregator) stays at trust 'review' with the owner-approved strict_auto rule (Amendment 2, D13).
 -- The source gate is still the only way in: it keeps refusing a source whose disposition is permission_required.
 begin;
@@ -22,7 +22,7 @@ select is((select trust::text from public.sources where slug = 'alibi-truckee'),
 select is((select strict_auto from public.sources where slug = 'alibi-truckee'), false, 'alibi-truckee has no strict auto rule yet');
 select is((select ingest_disposition::text from public.sources where slug = 'alibi-truckee'), 'permitted', 'alibi-truckee is still permitted');
 select is((select enabled from public.sources where slug = 'truckee-chamber'), true, 'truckee-chamber is enabled');
-select is((select trust::text from public.sources where slug = 'truckee-chamber'), 'review', 'truckee-chamber trust stays review');
+select is((select trust::text from public.sources where slug = 'truckee-chamber'), 'auto', 'truckee-chamber trust is auto (A10)');
 select is((select strict_auto from public.sources where slug = 'truckee-chamber'), false, 'truckee-chamber has no strict auto rule');
 select is((select ingest_disposition::text from public.sources where slug = 'truckee-chamber'), 'permitted', 'truckee-chamber is permitted');
 select is((select enabled from public.sources where slug = 'visit-lake-tahoe'), true, 'visit-lake-tahoe is enabled');
@@ -38,8 +38,8 @@ select is((select ingest_disposition::text from public.sources where slug = 'tdr
 select is((select count(*) from public.sources where enabled), 4::bigint, 'exactly four sources are enabled');
 select is((select string_agg(slug, ',' order by slug) from public.sources where enabled), 'alibi-truckee,tdrpd,truckee-chamber,visit-lake-tahoe', 'the enabled sources are alibi-truckee, tdrpd, truckee-chamber and visit-lake-tahoe');
 select is((select count(*) from public.sources where enabled and slug not in ('alibi-truckee','tdrpd','truckee-chamber','visit-lake-tahoe')), 0::bigint, 'every other source is still disabled');
-select is((select string_agg(slug, ',' order by slug) from public.sources where trust::text = 'auto'), 'alibi-truckee,tdrpd', 'alibi-truckee and tdrpd are the only sources at trust auto');
-select is((select count(*) from public.sources where trust::text = 'auto'), 2::bigint, 'exactly two sources are at trust auto');
+select is((select string_agg(slug, ',' order by slug) from public.sources where trust::text = 'auto'), 'alibi-truckee,tdrpd,truckee-chamber', 'alibi-truckee, tdrpd and truckee-chamber are the only sources at trust auto (A10)');
+select is((select count(*) from public.sources where trust::text = 'auto'), 3::bigint, 'exactly three sources are at trust auto (A10)');
 select is((select string_agg(slug, ',' order by slug) from public.sources where strict_auto), 'visit-lake-tahoe', 'visit-lake-tahoe is the only source with strict_auto');
 select is((select count(*) from public.sources where trust::text = 'auto' and class = 'aggregator'), 0::bigint, 'no aggregator is at trust auto');
 
