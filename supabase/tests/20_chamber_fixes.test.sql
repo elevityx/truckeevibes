@@ -202,11 +202,11 @@ select pg_temp.mk_admin();
 -- ---------------------------------------------------------------------------------------------------------------------
 -- AC-M1-90 (a): the fresh-reset state (reset succeeding proves a9_state passed)
 -- ---------------------------------------------------------------------------------------------------------------------
-select pg_temp.t($$(select enabled and trust = 'review' and not strict_auto and page_cap = 200
+select pg_temp.t($$(select enabled and trust = 'auto' and not strict_auto and page_cap = 200
                            and config ->> 'listUrl' = 'https://chamber.truckee.com/events' and (config ->> 'windowDays')::int = 45
                            and config ->> 'geocodeHint' = 'Truckee, CA' and next_due_at <= now()
                            and 'chamber.truckee.com' = any (allowed_hosts)
-                      from public.sources where slug = 'truckee-chamber')$$, 'AC-M1-90a truckee-chamber: A9-5 config, page_cap 200, review trust, due now');
+                      from public.sources where slug = 'truckee-chamber')$$, 'AC-M1-90a truckee-chamber: A9-5 config, page_cap 200, auto trust (A10), due now');
 select pg_temp.eq($$private.scrub_held_non_place()$$, '0', 'AC-M1-92f after reset the scrub function exists and returns 0');
 select pg_temp.eq($$(select count(*) from public.venues where private.is_non_place(name))$$, '0', 'AC-M1-90a fresh reset: no non-place venue');
 

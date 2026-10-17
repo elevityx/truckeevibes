@@ -205,13 +205,13 @@ create function pg_temp.tabs() returns text language sql as $$
       || pg_temp.snap('public.event_changes') || pg_temp.snap('public.venues') $$;
 
 -- AC-M1-19 ---------------------------------------------------------------------------------------------------------
-select pg_temp.mk_source('s-new', 'organizer', 'auto');
+select pg_temp.mk_source('s-new', 'organizer', 'review');
 select pg_temp.ing('n0', 's-new', jsonb_build_array(pg_temp.item('a', 'Alpha Harvest Dinner', 30), pg_temp.item('b', 'Bravo Harvest Dinner', 31)));
 select pg_temp.seed_runs('s-new', 6, 2, 2);
 create temp table s19 as select pg_temp.tabs() as t, pg_temp.n('public.held_runs') h, pg_temp.n('public.review_cards') c;
 select pg_temp.rb('n1', 's-new', jsonb_build_array(pg_temp.item('a', 'Alpha Harvest Dinner', 30))
   || (select jsonb_agg(pg_temp.item('z' || n, 'Zulu ' || substr(md5('z' || n), 1, 10), 2 + n % 40, 9 + n % 10)) from generate_series(1, 25) n));
-select is(pg_temp.r('n1', 'status'), 'anomaly', 'AC-M1-19 trust=auto, 7 prior ok runs (median new 2), 25 new -> run status anomaly');
+select is(pg_temp.r('n1', 'status'), 'anomaly', 'AC-M1-19 trust=review, 7 prior ok runs (median new 2), 25 new -> run status anomaly');
 select pg_temp.t($$(select res -> 'reasons' ? 'new_surge' from tres where label = 'n1')$$, 'AC-M1-19 ... with reason new_surge');
 select pg_temp.eq($$(select count(*) from public.held_runs h where h.source_id = (select id from public.sources where slug = 's-new') and h.status = 'pending')$$, '1', 'AC-M1-19 one held_runs row');
 select pg_temp.eq($$(select jsonb_array_length(items) from public.held_runs where run_id = (select (res ->> 'run_id')::uuid from tres where label = 'n1'))$$, '26', 'AC-M1-19 ... holding the cleaned items');
@@ -229,20 +229,19 @@ select pg_temp.cluster_all();
 select pg_temp.eq($$(select count(distinct e.id) from public.events e join public.source_events se on se.cluster_id = e.id where se.source_id = (select id from public.sources where slug = 's-500') and e.status = 'published')$$, '500', 'fixture (A5-9): 500 distinct published events from s-500 after promotion');
 select pg_temp.eq($$(select count(distinct se.cluster_id) from public.events e join public.source_events se on se.cluster_id = e.id where se.source_id = (select id from public.sources where slug = 's-500') and e.status = 'published')$$, '500', 'fixture (A5-9): 500 distinct clusters among the s-500 occurrences');
 select pg_temp.eq($$(select count(*) from public.events e join public.source_events se on se.cluster_id = e.id where se.source_id = (select id from public.sources where slug = 's-500') and e.status = 'published')$$, '500', 'fixture (A5-9): 500 s-500 occurrences join published events');
-create temp table s20 as select pg_temp.tabs() as t;
-create temp table s20e as select e.id, e.status, e.organizer_url from public.events e join public.source_events se on se.cluster_id = e.id where se.source_id = (select id from public.sources where slug = 's-500');
+-- A10: an auto source applies a new/edit surge (the run is ok, nothing is held); a review source below still holds it.
 select pg_temp.rb('f1', 's-500', pg_temp.bulk(500, 'b', 0, 'https://example.test/moved/'));
-select is(pg_temp.r('f1', 'status'), 'anomaly', 'AC-M1-20 a batch changing the URL path of all 500 -> anomaly');
-select pg_temp.t($$(select res -> 'reasons' ? 'edit_surge' from tres where label = 'f1')$$, 'AC-M1-20 ... with reason edit_surge');
+select is(pg_temp.r('f1', 'status') || '/' || pg_temp.r('f1', 'changed'), 'ok/500', 'AC-M1-20 (A10) trust=auto: a batch changing the URL path of all 500 -> ok, 500 changed (applied)');
+select pg_temp.eq($$(select count(*) from public.held_runs where source_id = (select id from public.sources where slug = 's-500'))$$, '0', 'AC-M1-20 (A10) ... and no held_runs row');
+select pg_temp.eq($$(select count(*) from public.source_events where source_id = (select id from public.sources where slug = 's-500') and url like 'https://example.test/moved/%')$$, '500', 'AC-M1-20 (A10) ... all 500 occurrences carry the new URL');
+select pg_temp.mk_source('s-500r', 'organizer', 'review');
+select pg_temp.rb('g0', 's-500r', pg_temp.bulk(500, 'g'));
+select is(pg_temp.r('g0', 'status') || '/' || pg_temp.r('g0', 'new'), 'ok/500', 'fixture: 500 occurrences stored for the review source');
+create temp table s20 as select pg_temp.tabs() as t;
+select pg_temp.rb('g1', 's-500r', pg_temp.bulk(500, 'g', 0, 'https://example.test/moved/'));
+select is(pg_temp.r('g1', 'status'), 'anomaly', 'AC-M1-20 trust=review: a batch changing the URL path of all 500 -> anomaly');
+select pg_temp.t($$(select res -> 'reasons' ? 'edit_surge' from tres where label = 'g1')$$, 'AC-M1-20 ... with reason edit_surge');
 select pg_temp.t($$(select pg_temp.tabs() = t from s20)$$, 'AC-M1-20 nothing was applied');
-select pg_temp.eq($$(select count(distinct e.id) from public.events e join public.source_events se on se.cluster_id = e.id where se.source_id = (select id from public.sources where slug = 's-500') and e.status = 'published' and e.organizer_url like 'https://example.test/e/%')$$, '500', 'AC-M1-20 (A5-9) all 500 distinct published events of s-500 keep their URL and status');
-select pg_temp.eq($$(select count(distinct se.cluster_id) from public.events e join public.source_events se on se.cluster_id = e.id where se.source_id = (select id from public.sources where slug = 's-500') and e.status = 'published' and e.organizer_url like 'https://example.test/e/%')$$, '500', 'AC-M1-20 (A5-9) ... over 500 distinct clusters');
-select pg_temp.eq($$(select count(*) from public.events e join public.source_events se on se.cluster_id = e.id where se.source_id = (select id from public.sources where slug = 's-500') and e.status = 'published' and e.organizer_url like 'https://example.test/e/%')$$, '500', 'AC-M1-20 (A5-9) ... and 500 occurrence rows');
-select pg_temp.eq($$(select count(*) from (select e.id, e.status, e.organizer_url from public.events e join public.source_events se on se.cluster_id = e.id where se.source_id = (select id from public.sources where slug = 's-500')
-                       except select id, status, organizer_url from s20e) d)$$, '0', 'AC-M1-20 (A5-9) the s-500 (id, status, organizer_url) set after the batch has no row that was not there before');
-select pg_temp.eq($$(select count(*) from (select id, status, organizer_url from s20e
-                       except select e.id, e.status, e.organizer_url from public.events e join public.source_events se on se.cluster_id = e.id where se.source_id = (select id from public.sources where slug = 's-500')) d)$$, '0',
-  'AC-M1-20 (A5-9) ... and no before row is missing or changed (identity before/after)');
 
 -- AC-M1-21 ---------------------------------------------------------------------------------------------------------
 select pg_temp.mk_source('s-100', 'organizer', 'review');
@@ -263,8 +262,7 @@ select pg_temp.x('postgres', $$update public.sources set strict_auto = true wher
 select pg_temp.rb('r755', 's-r755', pg_temp.bulk(755, 'r'));
 select is(pg_temp.r('r755', 'status'), 'ok', 'AC-M1-22 no prior ok run, trust=review, 755 items -> ok');
 select pg_temp.rb('a755', 's-a755', pg_temp.bulk(755, 'a'));
-select is(pg_temp.r('a755', 'status'), 'anomaly', 'AC-M1-22 no prior ok run, trust=auto, 755 items -> anomaly');
-select pg_temp.t($$(select res -> 'reasons' ? 'new_surge' from tres where label = 'a755')$$, 'AC-M1-22 ... new_surge');
+select is(pg_temp.r('a755', 'status'), 'ok', 'AC-M1-22 (A10) no prior ok run, trust=auto, 755 items -> ok (auto sources apply a new surge)');
 select pg_temp.rb('s755', 's-s755', pg_temp.bulk(755, 's'));
 select is(pg_temp.r('s755', 'status'), 'anomaly', 'AC-M1-22 (A2) trust=review + strict_auto, 755 items -> anomaly (no exemption)');
 select pg_temp.t($$(select res -> 'reasons' ? 'new_surge' from tres where label = 's755')$$, 'AC-M1-22 ... new_surge');
