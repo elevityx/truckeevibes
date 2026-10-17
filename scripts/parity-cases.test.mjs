@@ -1,7 +1,7 @@
 // Parity checks: the notice cases SSOT is mirrored in pgTAP 21 (rows without offsets) and pgTAP 23 (rows with offsets), and the SQL
 // reason-code list matches the TS twin `ingest/core/reasonCodes.ts`. Loud: a missing twin fails, it never skips.
 import { describe, expect, it } from 'vitest';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { REPO_ROOT } from './_testlib.mjs';
 
@@ -34,10 +34,9 @@ describe('notices.cases.json is the SSOT for the notice parity table', () => {
   it('every row without offsets appears in 21_tags_notices.test.sql as (\'<title>\', \'<sibling>\', <bool>)', () => {
     for (const c of WITHOUT) expect(PGTAP, c.title).toContain(`('${sq(c.title)}', '${sq(c.sibling)}', ${c.notice})`);
   });
-  // The rows with offsets are pinned by pgTAP 23, which R4c creates with its migration. Until that file exists there is nothing to
-  // compare against; from the moment it exists every row must appear. (Not a skip: this test always runs and always passes or fails.)
-  it('every row with offsets appears in 23_notice_series.test.sql as (\'<title>\', \'<sibling>\', \'{<o1>,<o2>}\', <bool>) once that file exists', () => {
-    if (!existsSync(SERIES)) { expect(WITH.length).toBe(5); return; }
+  // Unconditional (R4b-2 addendum to AC-R4c-08): a missing 23_notice_series.test.sql makes readFileSync throw, so this fails, never skips.
+  it('every row with offsets appears in 23_notice_series.test.sql as (\'<title>\', \'<sibling>\', \'{<o1>,<o2>}\', <bool>)', () => {
+    expect(WITH.length).toBe(5);
     const sql = readFileSync(SERIES, 'utf8');
     for (const c of WITH) expect(sql, key(c)).toContain(`('${sq(c.title)}', '${sq(c.sibling)}', '{${c.offsets.join(',')}}', ${c.notice})`);
   });

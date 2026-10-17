@@ -727,3 +727,62 @@ describe('tags_notices keeps the canonical block and the unchanged 24-grant allo
     expect(cur).toContain("v_reasons := array(select jsonb_array_elements_text(coalesce(rec -> 'tag_reasons', '[]'::jsonb)));");
   });
 });
+
+// AC-R4c-01 (Amendment R4b-1 r2): the re-tag activation migration.
+describe('retag_activate: series rule, hide re-run, sources reset, unchanged 24 grants', () => {
+  const G = (n) => canonicalGrants(read(n));
+  const sqlFiles = () => files.filter((x) => x.endsWith('.sql'));
+  const re = /create (?:or replace )?function private\.notice_sibling_exists[\s\S]*?\n\$\$;/;
+  const fnBody = (sql) => {
+    const m = re.exec(sql);
+    if (!m) throw new Error('notice_sibling_exists not found');
+    return m[0];
+  };
+  it('exists, sorts after tags_notices, and no two files share a version', () => {
+    const f = fileFor('retag_activate');
+    expect(f, 'no migration named *_retag_activate.sql').toBeTruthy();
+    expect(f.slice(0, 14) > fileFor('tags_notices').slice(0, 14)).toBe(true);
+    expect(sqlFiles()[sqlFiles().indexOf(f) - 1]).toBe(fileFor('tags_notices'));
+    const versions = sqlFiles().map((x) => x.slice(0, 14));
+    expect(new Set(versions).size).toBe(versions.length);
+  });
+  it('replaces private.notice_sibling_exists as a verbatim copy plus one R4c block and one R4c line', () => {
+    const base = norm(fnBody(read('tags_notices'))).replace('create function', 'create or replace function');
+    const sql = read('retag_activate');
+    const cur = fnBody(sql);
+    expect((cur.match(/-- R4c begin/g) ?? []).length).toBe(1);
+    expect((cur.match(/-- R4c end/g) ?? []).length).toBe(1);
+    const block = /-- R4c begin[\s\S]*?-- R4c end/.exec(cur)[0];
+    expect(block).toContain('>= 2');
+    expect(block).toContain('p_day - 14 and p_day + 14');
+    expect(block).toContain('lower(se.title)');
+    const lines = cur.split('\n').filter((l) => /-- R4c\s*$/.test(l));
+    expect(lines.length).toBe(1);
+    expect(lines[0]).toContain('lower(se.title)');
+    const undone = cur.replace(/-- R4c begin[\s\S]*?-- R4c end\n?/, '').replace(/lower\(se\.title\)([^\n]*?)\s*-- R4c/, 'lower(e.title)$1');
+    expect(norm(undone)).toBe(base);
+    expect(cur.indexOf('-- R4c begin')).toBeGreaterThan(cur.indexOf('private.notice_rest(p_title))'));
+    expect(cur.indexOf('-- R4c end')).toBeLessThan(cur.lastIndexOf('$$;'));
+  });
+  it('re-runs the hide once and resets the sources cache columns only', () => {
+    const sql = stripComments(read('retag_activate'));
+    expect((sql.match(/select private\.hide_notice_events\(\);/g) ?? []).length).toBe(1);
+    expect(sql).not.toMatch(/create (or replace )?function private\.hide_notice_events/);
+    const ups = [...sql.matchAll(/update public\.sources\s+set([\s\S]*?);/gi)].map((m) => m[1]);
+    expect(ups.length).toBe(1);
+    expect(norm(ups[0])).toBe('etag = null, last_modified = null, content_hash = null, next_due_at = now() where enabled');
+  });
+  it('ends with the canonical block; grants equal tags_notices (24); no public function; no private grant', () => {
+    const prev = G('tags_notices');
+    const cur = G('retag_activate');
+    expect(prev.size).toBe(24);
+    expect(cur.size).toBe(24);
+    expect([...cur].sort()).toEqual([...prev].sort());
+    expect(createdFns(read('retag_activate')).size).toBe(0);
+    expect(cumulativeProblems(prev, cur, createdFns(read('retag_activate')))).toEqual([]);
+    expect(stripComments(read('retag_activate'))).not.toMatch(/grant execute on function private\./i);
+  });
+  it('the newest migration in the tree grants exactly 24 functions', () => {
+    expect(canonicalGrants(readFileSync(join(DIR, sqlFiles().pop()), 'utf8')).size).toBe(24);
+  });
+});
