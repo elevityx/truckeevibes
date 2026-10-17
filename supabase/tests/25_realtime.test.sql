@@ -269,5 +269,24 @@ select pg_temp.eq($$(select count(*) from public.review_cards c join public.sour
 select pg_temp.eq($$(select count(*) from public.review_cards c join public.source_events se on se.cluster_id = c.event_id where se.source_id = (select id from public.sources where slug = 'q-ch') and c.kind = 'event' and c.decision = 'auto_published')$$, '30', 'AC-M1-97 ... all 30 closed as auto_published');
 select pg_temp.eq($$(select count(*) from public.source_events where needs_cluster)$$, '0', 'AC-M1-97 ... the outbox is empty');
 
+-- AC-M1-97 (P1 regression): a legacy pending notice must not stay public after the drain + hide_notice_events() ----------
+select pg_temp.mk_source('n-ch', 'organizer', 'review');
+select pg_temp.ing('nc0', 'n-ch', jsonb_build_array(pg_temp.item('legit', 'Legit Harvest Market', 20), pg_temp.item('note', 'Placeholder Notice Row', 21)));
+update public.source_events set title = 'Closing Early Tonight', normalized_title = 'closing early tonight' where external_key = 'note' and source_id = (select id from public.sources where slug = 'n-ch');
+update public.events set title = 'Closing Early Tonight' where id = (select cluster_id from public.source_events where external_key = 'note' and source_id = (select id from public.sources where slug = 'n-ch'));
+select pg_temp.eq($$(select count(*) from public.events e join public.source_events se on se.cluster_id = e.id where se.source_id = (select id from public.sources where slug = 'n-ch') and e.status = 'pending')$$, '2', 'AC-M1-97 fixture: a legit and a notice-titled event are pending');
+update public.sources set trust = 'auto' where slug = 'n-ch';
+do $$ declare i int; r jsonb; begin
+  for i in 1..20 loop
+    r := private.cluster_and_publish(500);
+    exit when (r ->> 'remaining')::int = 0;
+  end loop;
+  perform private.hide_notice_events();
+end $$;
+select is((select e.status::text from public.events e join public.source_events se on se.cluster_id = e.id where se.external_key = 'legit' and se.source_id = (select id from public.sources where slug = 'n-ch')), 'published', 'AC-M1-97 the legit pending event publishes');
+select pg_temp.eq($$(select count(*) from public.review_cards c join public.source_events se on se.cluster_id = c.event_id where se.external_key = 'legit' and se.source_id = (select id from public.sources where slug = 'n-ch') and c.kind = 'event' and c.status = 'open')$$, '0', 'AC-M1-97 ... and its card closes');
+select is((select e.status::text from public.events e join public.source_events se on se.cluster_id = e.id where se.external_key = 'note' and se.source_id = (select id from public.sources where slug = 'n-ch')), 'hidden', 'AC-M1-97 the notice ends hidden, not public');
+select pg_temp.eq($$(select count(*) from public.event_changes ec join public.source_events se on se.cluster_id = ec.event_id where se.external_key = 'note' and se.source_id = (select id from public.sources where slug = 'n-ch') and ec.decided_by = 'rule:notice')$$, '1', 'AC-M1-97 ... decided by rule:notice');
+
 select * from finish();
 rollback;

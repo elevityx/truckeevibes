@@ -237,11 +237,23 @@ select pg_temp.eq($$(select count(*) from public.source_events where source_id =
 select pg_temp.mk_source('s-500r', 'organizer', 'review');
 select pg_temp.rb('g0', 's-500r', pg_temp.bulk(500, 'g'));
 select is(pg_temp.r('g0', 'status') || '/' || pg_temp.r('g0', 'new'), 'ok/500', 'fixture: 500 occurrences stored for the review source');
+select pg_temp.x('postgres', $$update public.sources set trust = 'auto' where slug = 's-500r'$$);
+select pg_temp.cluster_all();
+select pg_temp.eq($$(select count(distinct e.id) from public.events e join public.source_events se on se.cluster_id = e.id where se.source_id = (select id from public.sources where slug = 's-500r') and e.status = 'published')$$, '500', 'fixture (A10): 500 distinct published events from s-500r (promoted)');
+-- back to review without a drain: the re-queued rows stay in the outbox, so the published events stay as they are
+select pg_temp.x('postgres', $$update public.sources set trust = 'review' where slug = 's-500r'$$);
 create temp table s20 as select pg_temp.tabs() as t;
+create temp table s20e as select e.id, e.status, e.organizer_url from public.events e join public.source_events se on se.cluster_id = e.id where se.source_id = (select id from public.sources where slug = 's-500r');
 select pg_temp.rb('g1', 's-500r', pg_temp.bulk(500, 'g', 0, 'https://example.test/moved/'));
 select is(pg_temp.r('g1', 'status'), 'anomaly', 'AC-M1-20 trust=review: a batch changing the URL path of all 500 -> anomaly');
 select pg_temp.t($$(select res -> 'reasons' ? 'edit_surge' from tres where label = 'g1')$$, 'AC-M1-20 ... with reason edit_surge');
 select pg_temp.t($$(select pg_temp.tabs() = t from s20)$$, 'AC-M1-20 nothing was applied');
+select pg_temp.eq($$(select count(distinct e.id) from public.events e join public.source_events se on se.cluster_id = e.id where se.source_id = (select id from public.sources where slug = 's-500r') and e.status = 'published' and e.organizer_url like 'https://example.test/e/%')$$, '500', 'AC-M1-20 all 500 distinct published events of s-500r keep their URL and status');
+select pg_temp.eq($$(select count(*) from (select e.id, e.status, e.organizer_url from public.events e join public.source_events se on se.cluster_id = e.id where se.source_id = (select id from public.sources where slug = 's-500r')
+                       except select id, status, organizer_url from s20e) d)$$, '0', 'AC-M1-20 the s-500r (id, status, organizer_url) set after the batch has no row that was not there before');
+select pg_temp.eq($$(select count(*) from (select id, status, organizer_url from s20e
+                       except select e.id, e.status, e.organizer_url from public.events e join public.source_events se on se.cluster_id = e.id where se.source_id = (select id from public.sources where slug = 's-500r')) d)$$, '0',
+  'AC-M1-20 ... and no before row is missing or changed (identity before/after)');
 
 -- AC-M1-21 ---------------------------------------------------------------------------------------------------------
 select pg_temp.mk_source('s-100', 'organizer', 'review');

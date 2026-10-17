@@ -203,6 +203,8 @@ do $$ declare i int; r jsonb; begin
     r := private.cluster_and_publish(500);
     exit when (r ->> 'remaining')::int = 0;
   end loop;
+  -- the drain can publish legacy pending notices; hide them again (existing reviewed rule, decided_by rule:notice)
+  perform private.hide_notice_events();
 end $$;
 
 -- Self-check (true on a fresh reset and on the hosted DB).
