@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://truckeevibes.com/api/v1/events.schema.json",
+  "title": "TruckeeVibes events API v1",
+  "description": "Response of GET https://truckeevibes.com/api/v1/events. Additive changes only within v1; a breaking change ships as /api/v2.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "scope", "season", "year", "dataAt", "stale", "pageComplete", "mirror", "region", "count", "nextCursor", "attribution", "events"],
+  "properties": {
+    "version": { "const": 1, "description": "API major version." },
+    "scope": { "enum": ["vibes", "lights"], "description": "vibes = the TruckeeVibes list; lights = the events shown on Truckee Lights / Truckee Frights for one season." },
+    "season": { "type": ["string", "null"], "enum": ["halloween", "christmas", null], "description": "The season (scope=lights), else null." },
+    "year": { "type": ["integer", "null"], "description": "The season's December year (scope=lights), else null." },
+    "dataAt": { "type": "string", "format": "date-time", "description": "When the database produced this page (UTC)." },
+    "stale": { "type": "boolean", "description": "true when the database was unreachable and this is the last good copy (at most 6 hours old)." },
+    "pageComplete": { "type": "boolean", "description": "true when this is the last page (nextCursor is null)." },
+    "mirror": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "confirmedAt", "heldSince", "heldCount"],
+      "description": "Freshness of the Truckee Lights mirror (scope=lights). Always state none for scope=vibes.",
+      "properties": {
+        "state": { "enum": ["none", "confirmed", "held"], "description": "confirmed = the last read matched; held = a large removal is waiting for review." },
+        "confirmedAt": { "type": ["string", "null"], "format": "date-time", "description": "Time of the last confirmed mirror read." },
+        "heldSince": { "type": ["string", "null"], "format": "date-time", "description": "When the held removal was first seen." },
+        "heldCount": { "type": "integer", "minimum": 0, "description": "Events in the held removal." }
+      }
+    },
+    "region": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tz", "localBox"],
+      "description": "The region the list covers.",
+      "properties": {
+        "tz": { "type": "string", "description": "IANA time zone for local dates." },
+        "localBox": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["minLat", "maxLat", "minLng", "maxLng"],
+          "description": "Bounding box of the local area.",
+          "properties": {
+            "minLat": { "type": "number" },
+            "maxLat": { "type": "number" },
+            "minLng": { "type": "number" },
+            "maxLng": { "type": "number" }
+          }
+        }
+      }
+    },
+    "count": { "type": "integer", "minimum": 0, "description": "Events on this page." },
+    "nextCursor": { "type": ["string", "null"], "description": "Pass as cursor= for the next page; null on the last page." },
+    "attribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "url"],
+      "description": "Credit line to show with the data.",
+      "properties": {
+        "name": { "const": "TruckeeVibes" },
+        "url": { "const": "https://truckeevibes.com/" }
+      }
+    },
+    "events": { "type": "array", "items": { "$ref": "#/$defs/event" }, "description": "Events ordered by start time, then id." }
+  },
+  "$defs": {
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "origin", "formerIds", "pageUrl", "title", "description", "summary", "startsAt", "endsAt", "allDay", "startDate", "endDate",
+                   "timeKnown", "venue", "address", "town", "lat", "lng", "categories", "age", "adultsOnly", "url", "ticketUrl"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid", "description": "Stable event id (a Truckee Lights id for origin=lights)." },
+        "origin": { "enum": ["lights", "vibes"], "description": "Where the event comes from." },
+        "formerIds": { "type": "array", "items": { "type": "string", "format": "uuid" }, "description": "Ids of events merged into this one (up to 5 hops)." },
+        "pageUrl": { "type": ["string", "null"], "description": "The event's TruckeeVibes page, when it has one." },
+        "title": { "type": "string" },
+        "description": { "type": ["string", "null"], "description": "Organizer text; only on origin=lights rows." },
+        "summary": { "type": ["string", "null"], "description": "Our one-line summary; only on origin=vibes rows." },
+        "startsAt": { "type": "string", "format": "date-time", "description": "Start (UTC)." },
+        "endsAt": { "type": ["string", "null"], "format": "date-time", "description": "End (UTC), when known. All-day events end at local midnight after the last day." },
+        "allDay": { "type": "boolean" },
+        "startDate": { "type": ["string", "null"], "format": "date", "description": "First local day of an all-day event." },
+        "endDate": { "type": ["string", "null"], "format": "date", "description": "Day after the last local day of an all-day event (exclusive)." },
+        "timeKnown": { "type": "boolean", "description": "false when the source gave a date but no time." },
+        "venue": { "type": ["string", "null"] },
+        "address": { "type": ["string", "null"] },
+        "town": { "type": ["string", "null"] },
+        "lat": { "type": ["number", "null"] },
+        "lng": { "type": ["number", "null"] },
+        "categories": { "type": "array", "items": { "type": "string" }, "description": "Category slugs." },
+        "age": { "enum": ["all_ages", "family", "18_plus", "21_plus", "unknown"] },
+        "adultsOnly": { "type": "boolean", "description": "21 and over." },
+        "url": { "type": ["string", "null"], "description": "The organizer's page for the event." },
+        "ticketUrl": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

@@ -255,10 +255,11 @@ insert into jobs_expected values
   ('tv-expire-queue', '15 10 * * *', 'private.expire_queue()'), ('tv-queue-budget', '25 10 * * *', 'private.queue_budget()'),
   ('tv-expire-held', '35 10 * * *', 'private.expire_held_runs()'), ('tv-terms-recheck', '45 10 * * *', 'private.terms_recheck()'),
   ('tv-retention', '55 10 * * *', 'private.retention_sweep()'), ('tv-heartbeat', '5 * * * *', 'private.check_heartbeat()'),
-  ('tv-weekly-email', '7 14,15 * * 4', 'private.run_notify(''weekly'')');
-select is((select count(*)::int from jobs_expected e join cron.job j on j.jobname = e.jobname and j.schedule = e.schedule and j.command ilike '%' || e.fn || '%'), 7,
-  'S1.5 the seven tv-* pg_cron jobs exist with the specified schedules and functions');
-select is((select count(*)::int from cron.job where jobname like 'tv-%'), 7, 'S1.5 and there are no other tv-* jobs');
+  ('tv-weekly-email', '7 14,15 * * 4', 'private.run_notify(''weekly'')'),
+  ('tv-lights-pairs', '50 10 * * *', 'private.refresh_lights_pairs()');   -- W1 (20261024000100_api_events_v1.sql)
+select is((select count(*)::int from jobs_expected e join cron.job j on j.jobname = e.jobname and j.schedule = e.schedule and j.command ilike '%' || e.fn || '%'), 8,
+  'S1.5 the seven tv-* pg_cron jobs + W1 tv-lights-pairs exist with the specified schedules and functions');
+select is((select count(*)::int from cron.job where jobname like 'tv-%'), 8, 'S1.5 and there are no other tv-* jobs');
 
 -- AC-M1-41: weekly report (clean history) -----------------------------------------------------------------------------------------
 select pg_temp.mk_source('w-rev', 'organizer', 'review');
