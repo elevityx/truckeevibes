@@ -12,13 +12,35 @@ const MAX_CRAWL_DELAY_S = 30;
 
 export type FetchErrorCode =
   | 'terms_gate' | 'method_gate' | 'host_not_allowed' | 'robots_blocked' | 'page_cap' | 'crawl_delay'
-  | 'redirect_blocked' | 'timeout' | 'too_large' | 'network';
+  | 'redirect_blocked' | 'timeout' | 'too_large' | 'network' | 'path_not_allowed';
 
 export class FetchError extends Error {
   constructor(readonly code: FetchErrorCode) {
     super(code);
     this.name = 'FetchError';
   }
+}
+
+/**
+ * Host families with a shared spacing floor and a request path allowlist (A12). TTUSD's robots.txt asks for a 5 s crawl delay
+ * and disallows `/fs/` (where its ICS export lives): only the month pages and robots.txt itself may ever be requested.
+ */
+export const HOST_FAMILIES: Record<string, { floorMs: number; paths: RegExp }> = {
+  'ttusd.org': { floorMs: 5000, paths: /^\/(?:robots\.txt|calendar|parents-students\/calendars\/calendars2)$/ },
+};
+
+export function familyOf(host: string): string | undefined {
+  const h = host.toLowerCase();
+  return Object.keys(HOST_FAMILIES).find((f) => h === f || h.endsWith(`.${f}`));
+}
+export const spacingKey = (host: string): string => familyOf(host) ?? host.toLowerCase();
+
+/** True when `u` may be requested on a family host: allowed path, exact query, never under `/fs/`. Non-family hosts always pass. */
+function familyPathOk(u: URL): boolean {
+  const f = familyOf(u.hostname);
+  if (!f) return true;
+  if (u.pathname.startsWith('/fs/') || !HOST_FAMILIES[f].paths.test(u.pathname)) return false;
+  return u.pathname === '/robots.txt' ? u.search === '' : /^\?cal_date=\d{4}-\d{2}-01$/.test(u.search);
 }
 
 export interface FetchOut { status: number; headers: Headers; body: Uint8Array; notModified: boolean }
@@ -130,13 +152,22 @@ export function createPoliteFetch(source: PoliteSource, deps: PoliteDeps): Polit
     return out;
   }
 
+  /** Seeds the family floor before the first request on a family host (idempotent). */
+  function raiseFloor(host: string) {
+    const f = familyOf(host);
+    if (f) spacer.raise(f, HOST_FAMILIES[f].floorMs);
+  }
+
   async function loadRobots(host: string): Promise<RobotsEntry> {
     const base = `https://${host}`;
     let url = `${base}/robots.txt`;
     try {
       for (let hop = 0; hop <= MAX_HOPS; hop++) {
-        const h = new URL(url).hostname;
-        await spacer.acquire(h, Math.max(1000, (robots.get(h)?.delay ?? 0) * 1000));
+        const hu = new URL(url);
+        const h = hu.hostname;
+        if (!familyPathOk(hu)) return { blocked: true, delay: 0 }; // e.g. robots.txt redirecting into /fs/: fail closed
+        raiseFloor(h);
+        await spacer.acquire(spacingKey(h), Math.max(1000, (robots.get(h)?.delay ?? 0) * 1000));
         const res = await request(url, false);
         if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
           await res.body?.cancel().catch(() => undefined);
@@ -151,6 +182,7 @@ export function createPoliteFetch(source: PoliteSource, deps: PoliteDeps): Polit
         const text = new TextDecoder('utf-8').decode(bytes);
         const parser = robotsParser(`${base}/robots.txt`, text);
         const delay = crawlDelayOf(text, parser);
+        spacer.raise(spacingKey(host), delay * 1000);
         return {
           blocked: false, parser, delay,
           info: { hash: createHash('sha256').update(bytes).digest('hex'), aiBotsBlocked: computeAiBotsBlocked(text) },
@@ -177,13 +209,15 @@ export function createPoliteFetch(source: PoliteSource, deps: PoliteDeps): Polit
       try { u = new URL(url); } catch { throw new FetchError(blockedCode); }
       const host = u.hostname.toLowerCase();
       if (u.protocol !== 'https:' || !hostAllowed(host)) throw new FetchError(blockedCode);
+      raiseFloor(host);
+      if (!familyPathOk(u)) throw new FetchError('path_not_allowed');
       const r = await robotsFor(host);
       if (r.blocked) throw new FetchError('robots_blocked');
       if (r.parser && r.parser.isAllowed(u.href, ROBOTS_TOKEN) === false) throw new FetchError('robots_blocked');
       if (r.delay > MAX_CRAWL_DELAY_S) throw new FetchError('crawl_delay');
       if (pages >= source.page_cap) throw new FetchError('page_cap');
       pages++;
-      await spacer.acquire(host, Math.max(1000, r.delay * 1000));
+      await spacer.acquire(spacingKey(host), Math.max(1000, r.delay * 1000));
       const res = await request(u.href, !!opts.conditional);
       const loc = res.headers.get('location');
       if (res.status >= 300 && res.status < 400 && res.status !== 304 && loc) {

@@ -107,14 +107,14 @@ describe('AC-M1-112 district', () => {
 describe('AC-M1-113 layout and config fail closed', () => {
   const failing = async (page: string) => {
     const s = te({ pages: { '2026-10': page } });
-    return s.run().then(() => 'no-throw', (e: Error) => e.message);
+    return s.run().then((r) => (r.items.length === 0 ? `${r.status}:${r.errorCode}` : 'items'), (e: Error) => e.message);
   };
-  it('malformed occur id -> layout_changed', async () => expect(await failing(fixture('finalsite/malformed_occur.html'))).toBe('layout_changed'));
-  it('a data-occur-id outside any event-link anchor -> layout_changed', async () => expect(await failing(fixture('finalsite/mismatch_count.html'))).toBe('layout_changed'));
-  it('a page without fsCalendarDaybox -> layout_changed', async () => expect(await failing('<html><body><p>moved</p></body></html>')).toBe('layout_changed'));
+  it('malformed occur id -> layout_changed', async () => expect(await failing(fixture('finalsite/malformed_occur.html'))).toBe('parse_error:layout_changed'));
+  it('a data-occur-id outside any event-link anchor -> layout_changed', async () => expect(await failing(fixture('finalsite/mismatch_count.html'))).toBe('parse_error:layout_changed'));
+  it('a page without fsCalendarDaybox -> layout_changed', async () => expect(await failing('<html><body><p>moved</p></body></html>')).toBe('parse_error:layout_changed'));
   it('an anchor with an empty title -> layout_changed', async () => {
     const page = fixture('finalsite/single_quoted.html').replace("title='Fall Concert'", "title=''");
-    expect(await failing(page)).toBe('layout_changed');
+    expect(await failing(page)).toBe('parse_error:layout_changed');
   });
   it('single-quoted attributes parse normally (1 item)', async () => {
     const s = te({ pages: { '2026-10': fixture('finalsite/single_quoted.html') } });

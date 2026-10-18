@@ -1,7 +1,7 @@
 // Per-family maps from a source's own category label or slug to our slugs (plan 3.3 step 1a). Keys are lowercased.
 // Unmapped labels are dropped by `classify` and counted per source in the classify-report.
 export const OUR_SLUGS = [
-  'music', 'food-drink', 'outdoors', 'family', 'kids', 'arts', 'markets', 'sports', 'nightlife', 'learning', 'community', 'holiday', 'halloween-fall',
+  'music', 'food-drink', 'outdoors', 'family', 'kids', 'arts', 'markets', 'sports', 'nightlife', 'learning', 'community', 'holiday', 'halloween-fall', 'schools',
 ] as const;
 
 const GROUPS: Record<string, string[]> = {
@@ -34,6 +34,7 @@ export const CATEGORY_MAPS: Record<string, Record<string, string>> = {
   ics_chambermaster: { ...COMMON },
   ics_civicplus: { ...COMMON },
   ics_eventsmanager: { ...COMMON },
+  html_finalsite: { ...COMMON },
 };
 
 const slugForm = (l: string) => l.replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');

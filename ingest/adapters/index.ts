@@ -4,10 +4,12 @@ import { adapter as tribe } from './tribe';
 import { adapter as icsChambermaster } from './icsChambermaster';
 import { adapter as icsCivicplus } from './icsCivicplus';
 import { adapter as icsEventsmanager } from './icsEventsmanager';
+import { adapter as htmlFinalsite } from './htmlFinalsite';
 
 export const adapters: Record<string, Adapter> = {
   [tribe.family]: tribe,
   [icsChambermaster.family]: icsChambermaster,
   [icsCivicplus.family]: icsCivicplus,
   [icsEventsmanager.family]: icsEventsmanager,
+  [htmlFinalsite.family]: htmlFinalsite,
 };
