@@ -9,7 +9,7 @@ truckeevibes.com is a free, plain list of events in Truckee and North Lake Tahoe
 - Next.js 16 App Router, static export (`output: 'export'`, `trailingSlash: true`). Client pages load their data in effects only, because the build prerenders with empty env. There is no server runtime, so security comes **only** from Postgres RLS, constraints and RPC grants.
 - TypeScript, Tailwind 4; design tokens generated from `src/styles/tokens.json` into `src/styles/tokens.css` (`node scripts/build-tokens.mjs`), Daylight + After dark by `prefers-color-scheme`.
 - Supabase: Postgres + Auth (admin password + TOTP MFA: `private.is_admin()` needs a non-anonymous `aal2` JWT whose `amr` has both a `password` and a `totp` entry, plus a row in `public.admins`). Edge Functions (Deno) arrive with the ingest work.
-- Cloudflare Pages hosts the static site **and Pages Functions under `functions/`** (GET/HEAD/OPTIONS only, V13): `functions/api/v1/events.ts` serves the public events API (`/api/v1/events`, contract `functions/_lib/events.v1.schema.json`, docs at `/developers/`), with an edge cache and a 6-hour last-known-good copy in the Workers Cache API.
+- Cloudflare Pages hosts the static site **and Pages Functions under `functions/`** (GET/HEAD/OPTIONS only, V13): `functions/api/v1/events.ts` serves the public events API (`/api/v1/events`, contract `functions/_lib/events.v1.schema.json`, docs at `/developers/`), with an edge cache and a 6-hour last-known-good copy in the Workers Cache API. Cache writes are fenced by generation (the RPC's `dataAt`, microseconds): an entry is replaced only by a strictly newer one, a failed LKG write deletes the old LKG, and an LKG without a valid matching generation is never served (Amendment W1-1).
 
 ## Commands
 ```bash

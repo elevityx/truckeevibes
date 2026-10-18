@@ -1,6 +1,6 @@
 // GET /api/v1/events: the public, read-only events API (V13: GET/HEAD/OPTIONS only, no secret, counts-only logs).
 import { corsHeaders } from '../../_lib/cors';
-import { putFresh, putLkg, readFresh, readLkg } from '../../_lib/lkg';
+import { deleteLkg, GEN_RE, putFresh, putLkg, readFresh, readLkg, type CacheLike } from '../../_lib/lkg';
 import { parseQuery } from '../../_lib/query';
 import { RpcError, callApiEvents } from '../../_lib/rpc';
 import { shapeEnvelope } from '../../_lib/shape';
@@ -8,7 +8,7 @@ import type { Env, PagesCtx } from '../../_lib/types';
 
 export interface Deps {
   fetch: typeof fetch;
-  cache: Pick<Cache, 'match' | 'put'>;
+  cache: CacheLike;
   now: () => number;
   log: (line: string) => void;
   waitUntil: (p: Promise<unknown>) => void;
@@ -76,9 +76,19 @@ export async function handle(req: Request, env: Env, deps: Deps): Promise<Respon
   try {
     const raw = await callApiEvents(env, q, deps.fetch, deps.rpcTimeoutMs);
     const envelope = shapeEnvelope(raw, q);
-    if (!envelope) throw new RpcError(502, null);
+    // Amendment W1-1: the RPC's dataAt is the generation; without a valid one nothing is served or cached
+    if (!envelope || !GEN_RE.test(envelope.dataAt)) throw new RpcError(502, null);
     const body = JSON.stringify(envelope);
-    deps.waitUntil(Promise.all([putFresh(deps.cache, canonical, body), putLkg(deps.cache, canonical, body)]).catch(() => undefined));
+    const gen = envelope.dataAt;
+    deps.waitUntil((async () => {
+      await putFresh(deps.cache, canonical, body, gen).catch(() => undefined);
+      try {
+        await putLkg(deps.cache, canonical, body, gen);
+      } catch {
+        // fail closed: no older snapshot may outlive a newer observed one
+        await deleteLkg(deps.cache, canonical).catch(() => undefined);
+      }
+    })());
     log(200, q.scope, envelope.count, 'miss');
     return respond(req, 200, body, FRESH_CC, cors);
   } catch (e) {
@@ -87,11 +97,11 @@ export async function handle(req: Request, env: Env, deps: Deps): Promise<Respon
       return respond(req, 400, JSON.stringify({ error: 'bad_param', param: e.code }), 'no-store', cors);
     }
     const lkg = await readLkg(deps.cache, canonical).catch(() => null);
-    const at = lkg && typeof lkg.dataAt === 'string' ? Date.parse(lkg.dataAt) : NaN;
-    if (lkg && Number.isFinite(at) && deps.now() - at <= LKG_MAX_AGE_MS) {
-      const count = typeof lkg.count === 'number' ? lkg.count : 0;
-      log(200, q.scope, count, 'lkg');
-      return respond(req, 200, JSON.stringify({ ...lkg, stale: true }), 'no-store', cors, { 'x-tv-stale': '1' });
+    const valid = lkg ? shapeEnvelope(lkg.env, q) : null;                 // a stored copy must still be a whole, valid envelope
+    const at = lkg ? Date.parse(lkg.generation) : NaN;
+    if (valid && valid.dataAt === lkg?.generation && Number.isFinite(at) && deps.now() - at <= LKG_MAX_AGE_MS) {
+      log(200, q.scope, valid.count, 'lkg');
+      return respond(req, 200, JSON.stringify({ ...valid, stale: true }), 'no-store', cors, { 'x-tv-stale': '1' });
     }
     log(503, q.scope, 0, 'none');
     return respond(req, 503, '{"error":"unavailable"}', 'no-store', cors);
