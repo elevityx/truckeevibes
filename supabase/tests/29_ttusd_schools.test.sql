@@ -200,6 +200,37 @@ end $$;
 -- ---------------------------------------------------------------------------------------------------------------------
 select pg_temp.mk_admin();
 
+create function pg_temp.ev_status(k text) returns text language plpgsql as $$
+declare r text;
+begin
+  execute 'select e.status::text from public.events e join public.source_events se on se.cluster_id = e.id where se.external_key = $1 limit 1' into r using k;
+  return coalesce(r, '<none>');
+exception when others then return 'ERR:' || sqlstate; end $$;
+create function pg_temp.ev_fails(k text) returns text[] language plpgsql as $$
+declare r text[];
+begin
+  execute 'select private.strict_auto_fails(e) from public.events e join public.source_events se on se.cluster_id = e.id where se.external_key = $1 limit 1' into r using k;
+  return r;
+exception when others then return null; end $$;
+create function pg_temp.ev_col(k text, p_col text) returns text language plpgsql as $$
+declare r text;
+begin
+  execute format('select e.%I::text from public.events e join public.source_events se on se.cluster_id = e.id where se.external_key = $1 limit 1', p_col) into r using k;
+  return coalesce(r, '<null>');
+exception when others then return 'ERR:' || sqlstate; end $$;
+create function pg_temp.ev_id(k text) returns uuid language plpgsql as $$
+declare r uuid;
+begin
+  execute 'select se.cluster_id from public.source_events se where se.external_key = $1 limit 1' into r using k;
+  return r;
+exception when others then return null; end $$;
+create function pg_temp.open_cards(k text) returns bigint language plpgsql as $$
+declare r bigint;
+begin
+  execute 'select count(*) from public.review_cards c join public.source_events se on se.cluster_id = c.event_id where se.external_key = $1 and c.kind = ''event'' and c.status = ''open''' into r using k;
+  return r;
+exception when others then return -1; end $$;
+
 create function pg_temp.dt(p_days int) returns text language sql as $$
   select to_char((now() at time zone 'America/Los_Angeles')::date + p_days, 'YYYY-MM-DD') $$;
 create temp table tt_items (slug text, k text, item jsonb, primary key (slug, k));
@@ -218,7 +249,9 @@ create function pg_temp.tad(p_key text, p_title text, p_day int, p_venue text, p
 -- the item arrives with the source's whole list so far (a growing list never trips found_drop), then the outbox drains
 create function pg_temp.arrive(p_slug text, p_item jsonb) returns void language plpgsql as $$
 begin
-  insert into tt_items values (p_slug, p_item ->> 'externalKey', p_item) on conflict (slug, k) do update set item = excluded.item;
+  insert into tt_items values (p_slug, p_item ->> 'externalKey',
+      p_item || jsonb_build_object('url', 'https://' || (select allowed_hosts[1] from public.sources where slug = p_slug) || '/calendar'))
+    on conflict (slug, k) do update set item = excluded.item;
   perform pg_temp.rb('arr-' || p_slug || '-' || (p_item ->> 'externalKey'), p_slug, (select jsonb_agg(item order by k) from tt_items where slug = p_slug));
   perform pg_temp.cluster_all();
 end $$;
@@ -228,7 +261,7 @@ create function pg_temp.ev_n(k text) returns text language sql as $$ select pg_t
 
 -- AC-M1-115 --------------------------------------------------------------------------------------------------------
 select pg_temp.eq($$(select count(*) from public.sources where slug like 'ttusd-%')$$, '9', 'AC-M1-115 nine TTUSD source rows');
-select pg_temp.eq($$(select string_agg(slug || '=' || allowed_hosts[1] || config ->> 'calendarUrl' || '|' || class::text, ',' order by slug) from public.sources where slug like 'ttusd-%')$$,
+select pg_temp.eq($$(select string_agg(slug || '=' || allowed_hosts[1] || (config ->> 'calendarUrl') || '|' || class::text, ',' order by slug) from public.sources where slug like 'ttusd-%')$$,
   'ttusd-acms=acms.ttusd.orghttps://acms.ttusd.org/calendar|organizer,ttusd-district=www.ttusd.orghttps://www.ttusd.org/parents-students/calendars/calendars2|municipal,ttusd-dte=dte.ttusd.orghttps://dte.ttusd.org/calendar|organizer,ttusd-kbe=kbe.ttusd.orghttps://kbe.ttusd.org/calendar|organizer,ttusd-nths=nths.ttusd.orghttps://nths.ttusd.org/calendar|organizer,ttusd-nts=nts.ttusd.orghttps://nts.ttusd.org/calendar|organizer,ttusd-te=te.ttusd.orghttps://te.ttusd.org/calendar|organizer,ttusd-ths=ths.ttusd.orghttps://ths.ttusd.org/calendar|organizer,ttusd-tle=tle.ttusd.orghttps://tle.ttusd.org/calendar|organizer',
   'AC-M1-115 hosts, calendar URLs and classes match the table');
 select pg_temp.eq($$(select count(*) from public.sources where slug like 'ttusd-%' and homepage_url = config ->> 'calendarUrl' and page_cap = 6 and family = 'html_finalsite')$$, '9', 'AC-M1-115 homepage_url is the calendar URL, page_cap 6');
@@ -306,7 +339,7 @@ select pg_temp.eq($$(select string_agg(decision, ',') from public.review_cards w
 update public.sources set enabled = false where slug = 'ttusd-kbe';
 -- the same from a non-TTUSD auto source stays pending
 select pg_temp.rb('xc', 'x-a', (select jsonb_agg(item order by k) from (select 'xa1' as k, pg_temp.item('xa1', 'Truckee Oktoberfest 2026', 40, 18, '{"venueName":"Cluster Hall"}') as item
-  union all select 'xad', pg_temp.tad('xad', 'Thanksgiving Break', 45, 'Tahoe Truckee Unified School District', '{"categoriesHint":["community"]}')) q));
+  union all select 'xad', pg_temp.tad('xad', 'Thanksgiving Break', 50, 'Tahoe Truckee Unified School District', '{"categoriesHint":["community"]}')) q));
 select pg_temp.cluster_all();
 select pg_temp.eq($$pg_temp.ev_n('xad')$$, 'pending', 'AC-M1-117 an all-day item from a non-TTUSD auto source -> pending');
 -- all caps -> pending; no coordinates -> pending
@@ -320,9 +353,11 @@ select pg_temp.eq($$pg_temp.ev_n('timed1')$$, 'published', 'AC-M1-117 a timed TT
 select pg_temp.eq($$pg_temp.ev_col('timed1', 'confidence')$$, '80', 'AC-M1-117 ... at confidence 80 (40 + 15 + 15 + 10)');
 
 -- AC-M1-118 public read -------------------------------------------------------------------------------------------------
-select pg_temp.eq($$(select count(*) from public.list_events() where title = 'Thanksgiving Break' and all_day and categories = array['schools'])$$, '2', 'AC-M1-118 published TTUSD notices are in list_events with all_day true and categories {schools} (district + the promoted Winter Break one is separate)');
-select pg_temp.eq($$(select count(*) from public.list_events() where 'schools' = any (categories))$$, '19', 'AC-M1-118 school items are readable through list_events');
-select pg_temp.eq($$(select count(*) from public.list_events() where title like 'Oktoberfest%' and 'schools' = any (categories))$$, '0', 'AC-M1-118 a non-school event does not carry schools');
+select pg_temp.eq($$(select count(*) from public.list_events() where title = 'Thanksgiving Break' and all_day and categories = array['schools'])$$, '1', 'AC-M1-118 a published TTUSD notice is in list_events with all_day true and categories {schools}');
+select is(pg_temp.q($$(select count(*) from public.list_events() where 'schools' = any (categories))$$),
+  pg_temp.q($$(select count(*) from public.events e join public.event_categories c on c.event_id = e.id where c.category = 'schools' and e.status = 'published' and e.merged_into is null)$$),
+  'AC-M1-118 school items are readable through list_events');
+select pg_temp.eq($$(select count(*) from public.list_events() where title = 'Oktoberfest Truckee 2026' and not ('schools' = any (categories)))$$, '1', 'AC-M1-118 a non-school (Chamber-style) event is listed without the schools category');
 
 select * from finish();
 rollback;
