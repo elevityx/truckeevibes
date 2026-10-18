@@ -30,6 +30,7 @@ npm run test:lhci  # Lighthouse (mobile, median of 3) on test:visual's out/; nee
 npm run test:budget # 700-event fixture build: gzipped home HTML <= 100 KiB, <= 300 embedded rows; rebuilds out/
 npm run check:repo # secret scan, workflow rules, fixture size, no raw HTML, tokens up to date
 npm run ingest     # ingest entry point
+npm run mirror     # Lights mirror runner (W3): one exact Truckee Lights snapshot -> svc_lights_mirror_apply through the ingest function
 npm run classify-report -- --sources <file>  # I3 report: adapters + notices + classifier over live feeds for permitted sources only; submits nothing, output may carry titles so keep it out of CI logs
 ```
 Local env: copy `.env.example` to `.env.local`. It holds the `NEXT_PUBLIC_*` values (Supabase URL and publishable key, Turnstile site key, site URL), all public. The local stack also reads `SUPABASE_AUTH_SITE_URL` and `SUPABASE_AUTH_CAPTCHA_SECRET` through `supabase/config.toml`; `supabase/start-local.sh` (via `npm run db:start`) defaults them to local-only values. Never put a real captcha secret in the repo.
@@ -39,15 +40,15 @@ Local env: copy `.env.example` to `.env.local`. It holds the `NEXT_PUBLIC_*` val
 - `src/lib/data` (the **only** Supabase caller: `admin.ts` auth, `sources.ts` RPC wrappers, `errors.ts`)
 - `functions/` (Cloudflare Pages Functions: `api/v1/events.ts` and `_lib/` query parsing, RPC call, schema-driven shape, fresh cache, CORS; tests are `*.test.ts` next to them, run by `npm test`)
 - `supabase/migrations` (schema; never edited after merge), `supabase/tests` (pgTAP), `supabase/functions` (Edge Functions and `_shared/`), `supabase/seed.sql` (fake local data only)
-- `scripts` (repo checks and their tests), `ingest` (ingest code, `core/` classifier v2 (`classify`, `ageGrammar`, `negation`, `categoryMaps`, `reasonCodes`), `notices` and `ttusd` (the TTUSD school-calendar include grammar, SSOT; adapter family `html_finalsite` in `adapters/htmlFinalsite.ts`), `tools/classify-report.ts`, synthetic `fixtures/`)
+- `scripts` (repo checks and their tests), `ingest` (ingest code, `core/` classifier v2 (`classify`, `ageGrammar`, `negation`, `categoryMaps`, `reasonCodes`), `notices` and `ttusd` (the TTUSD school-calendar include grammar, SSOT; adapter family `html_finalsite` in `adapters/htmlFinalsite.ts`), `tools/classify-report.ts`, synthetic `fixtures/`; `mirror/` the Lights mirror runner: `lightsClient.ts` (narrow REST client sharing `checkLegal`), `truckeelights.ts` (snapshot), `run.ts`)
 - `public/robots.txt` and `public/sitemap.xml` are hand-written: add every new indexable page to the sitemap and keep `/admin/` out of it.
 - `.github/workflows/` (`ci.yml`, `ingest.yml`, `rebuild.yml`, signer workflows)
 
 ## Invariants (do not break)
 - V1 Every table in `public`/`private` has RLS enabled and forced; anon/authenticated have no table privileges at all. Public reads go only through `list_events`, `list_sources_public`, `list_event_pages` and `api_events_v1` (W1; one jsonb envelope, every bound in SQL). The API roles carry explicit statement timeouts (anon `3s`, authenticated `8s`, set in `20261024000100_api_events_v1.sql`).
 - V2 Every write goes through an RPC. `svc_*` = `service_role` only (Edge Functions). `admin_*` = `private.is_admin()` (non-anonymous, `aal2`, `amr` has `password` and `totp`).
-- V3 The service/secret key exists only in Supabase Edge Function env. The Actions ingest job holds only `INGEST_HMAC_KEY` + the Pages deploy-hook URL. Cloudflare Pages holds no secret.
-- V4 No source is fetched unless it is enabled with a `permitted`/`official_api_only` disposition whose `terms_recheck_at` is in the future, and the request kind is in `allowed_methods` (DB trigger + grant + batch + `politeFetch`). Robots/terms fetches are the only exception.
+- V3 The service/secret key exists only in Supabase Edge Function env. The Actions ingest job holds only `INGEST_HMAC_KEY` + the Pages deploy-hook URL, and the public Lights REST URL + publishable key as Actions variables (`LIGHTS_REST_URL`, `LIGHTS_PUBLISHABLE_KEY`, W3). Cloudflare Pages holds no secret.
+- V4 No source is fetched unless it is enabled with a `permitted`/`official_api_only` disposition whose `terms_recheck_at` is in the future, and the request kind is in `allowed_methods` (DB trigger + grant + batch + `politeFetch`). Robots/terms fetches are the only exception. The `truckee-lights` source (family `lights_mirror`, W3) gets only its own 10-minute grant (`svc_issue_mirror_grant`), never an ingest grant; its rows go only to `private.lights_mirror` through `svc_lights_mirror_apply`.
 - V5 The source id of an ingest batch comes from a single-use grant, never from the caller.
 - V6 No source description text and no source images are stored (one exception: `private.lights_mirror.description`, text from the owner's sister site Truckee Lights only, returned only in `api_events_v1` `scope=lights`). Summaries are ours (templates). Data is rendered as React text only; never `innerHTML`.
 - V7 Event ids are immutable; merge/split never re-key (survivor = exported, else oldest).
@@ -64,6 +65,8 @@ TTUSD school calendars (A12, `ttusd-*` sources, family `html_finalsite`): the ad
 
 ## CI
 `.github/workflows/ci.yml`: job `web` (install, lint, typecheck, build, test, Deno tests, audit, repo checks), job `db` (start the local stack, reset, pgTAP) and job `visual` (Playwright visual checks on a fixture build, then Lighthouse and the HTML budget; uploads screenshots as an artifact). It uses no secrets and no `pull_request_target`; every action is pinned to a commit SHA.
+`.github/workflows/lights-mirror.yml`: the Lights mirror every 15 minutes on main (`npm run mirror`; `INGEST_HMAC_KEY` + the two public `LIGHTS_*` variables). A snapshot that would remove more than `greatest(2, 0.30 x live)` rows (or an empty read) is held until 3 matching reads over >= 30 minutes, or an admin accepts the exact set in the Lights tab.
+`.github/workflows/lights-compare.yml`: hourly C7 comparator (`node scripts/compare-lights.mjs`, no secret): Lights' public list vs `/api/v1/events?scope=lights`; ids and counts only in its log.
 `.github/workflows/ingest.yml`: runs the ingest every 3 hours (cron `10 */3 * * *`, A10 real-time publishing; trusted `auto` sources apply new/edit surges, `found_drop`/`found_zero` still hold every source).
 `.github/workflows/rebuild.yml`: a daily (13:00 UTC) and manual call of the Cloudflare Pages deploy hook so the static site rebuilds from fresh data. One `curl` step, `permissions: {}`, no checkout, no `uses:`, no package manager; its only secret is `PAGES_DEPLOY_HOOK_URL`. `scripts/check-workflows.mjs` enforces this.
 
