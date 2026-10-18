@@ -50,7 +50,7 @@ select is(
      'public.geocode_usage', 'public.held_runs', 'public.owner_activity', 'public.regions', 'public.review_cards', 'public.series',
      'public.source_event_versions', 'public.source_events', 'public.source_runs', 'public.sources', 'public.suppressions',
      'public.venues']) x),
-  'M0 + M1 + W1 tables in public + private are exactly the expected set (25)');
+  'M0 + M1 + W1 tables in public + private are exactly the expected set (25; W3 adds none)');
 select has_extension('pg_trgm', 'pg_trgm extension is installed');
 select has_extension('pg_cron', 'pg_cron extension is installed');
 select has_extension('pg_net', 'pg_net extension is installed');
@@ -126,14 +126,17 @@ select is(pg_temp.fn_list('authenticated', 'public'),
      'admin_log_activity(text, integer)', 'admin_merge_events(uuid, uuid)', 'admin_owner_minutes_7d()', 'admin_queue(text, integer)', 'admin_set_event_status(uuid, text, text)',
      'admin_set_source_enabled(text, boolean)', 'admin_set_source_trust(text, text)', 'admin_source_health()', 'admin_unlock_field(uuid, text)',
      'admin_update_event(uuid, jsonb)', 'admin_whoami()', 'api_events_v1(text, text, integer, date, date, text[], text[], integer, text)',
-     'list_event_pages()', 'list_events(integer)', 'list_sources_public()']) x),
-  'authenticated EXECUTE is the four public reads + the M0 and M1 admin RPCs (exact, W1: 19)');
-select is(cardinality(pg_temp.fn_list('authenticated', 'public')), 19, 'AC-W1-17 authenticated EXECUTE count is 19');
+     'list_event_pages()', 'list_events(integer)', 'list_sources_public()',
+     'admin_lights_mirror_status()', 'admin_accept_lights_removals(text, text, integer, uuid[])', 'admin_set_lights_include(uuid, text)',
+     'admin_set_lights_override(uuid)', 'admin_lights_events(text, integer)']) x),
+  'authenticated EXECUTE is the four public reads + the M0, M1 and W3 admin RPCs (exact, W3: 24)');
+select is(cardinality(pg_temp.fn_list('authenticated', 'public')), 24, 'AC-W3-15 authenticated EXECUTE count is 24');
 select is(pg_temp.fn_list('service_role', 'public'),
   (select array_agg(x order by x) from unnest(array[
      'svc_cluster_and_publish(integer)', 'svc_ingest_batch(text, jsonb, jsonb)', 'svc_ingest_nonce(text)', 'svc_issue_run_grants()',
-     'svc_set_venue_geocode(uuid, double precision, double precision, text)', 'svc_weekly_report()']) x),
-  'AC-M1-05 service_role EXECUTE in public is exactly the six svc_* routines');
+     'svc_set_venue_geocode(uuid, double precision, double precision, text)', 'svc_weekly_report()',
+     'svc_issue_mirror_grant()', 'svc_lights_mirror_apply(text, jsonb, jsonb)']) x),
+  'AC-W3-15 service_role EXECUTE in public is exactly the eight svc_* routines (W3: + the two mirror RPCs)');
 select is(pg_temp.fn_list('service_role', 'private'), '{}'::text[], 'service_role executes nothing in private');
 select is(pg_temp.fn_list('anon', 'private'), '{}'::text[], 'anon executes nothing in private');
 select is(pg_temp.fn_list('authenticated', 'private'), '{}'::text[], 'authenticated executes nothing in private');

@@ -445,3 +445,73 @@ test('AC-M1-68 two sessions ingesting the same townless venue end up on one venu
   const ids = await q(obs, `select distinct venue_id from public.source_events where external_key = any($1)`, [[`v1-${sfx}`, `v2-${sfx}`]]);
   assert.equal(ids.rows.length, 1, 'both occurrences share its id');
 });
+
+// ----------------------------------------------------------------------------------------------------------------------
+// AC-W3-17 (Spec_Vibes_Widget W3.1 step 4): two svc_lights_mirror_apply calls for one pair serialize on the pair's advisory lock.
+// The pair is a random far-future halloween year, so reruns never collide and the purge never touches it.
+// ----------------------------------------------------------------------------------------------------------------------
+async function mirrorGrant() {
+  await q(obs, 'begin');
+  try {
+    await q(obs, `update public.sources set next_due_at = now() - interval '1 minute' where slug = 'truckee-lights'`);
+    await q(obs, 'set local role service_role');
+    const { rows } = await q(obs, 'select public.svc_issue_mirror_grant() as r');
+    await q(obs, 'commit');
+    assert.ok(rows[0].r.grant, 'no mirror grant issued');
+    return rows[0].r.grant;
+  } catch (e) {
+    await q(obs, 'rollback').catch(() => {});
+    throw e;
+  }
+}
+const mirrorSql = 'select public.svc_lights_mirror_apply($1, $2::jsonb, $3::jsonb) as r';
+const lightsRow = (id, n, year) => ({
+  id, region_id: '7a1e0000-0000-4000-8000-000000000001', season: 'halloween', year, title: `Conc lights ${n} ${sfx}`,
+  description: 'A synthetic house for the concurrency test.', venue: null, address: '1 Main St, Truckee', lat: 39.328, lng: -120.1833,
+  starts_at: iso(at(10 + n)), ends_at: null, url: null, adults_only: false,
+});
+const mirrorRun = (year, total) => JSON.stringify({ region: 'truckee', season: 'halloween', year, status: 'ok', total });
+
+test('AC-W3-17 two concurrent svc_lights_mirror_apply calls for one pair serialize (the second waits on the advisory lock)', { timeout: 30_000 }, async () => {
+  const year = 2070 + Math.floor(Math.random() * 30);
+  const ids = Array.from({ length: 10 }, () => randomUUID());
+  const rows = (except) => ids.map((id, i) => lightsRow(id, i + 1, year)).filter((_, i) => !except.includes(i + 1));
+  // committed first run: 10 live rows
+  const g0 = await mirrorGrant();
+  await beginService(B);
+  await q(B, mirrorSql, [g0, mirrorRun(year, 10), JSON.stringify(rows([]))]);
+  await q(B, 'commit');
+  const gA = await mirrorGrant();
+  const gB = await mirrorGrant();   // mirrorGrant makes the source due first (the 10-minute spacing)
+  const pidB = await pidOf(B);
+  let pB;
+  let resA;
+  try {
+    // A: 2 of 10 missing -> G3 removes them (threshold 3.0); the transaction stays open, holding the pair lock
+    await beginService(A);
+    resA = (await q(A, mirrorSql, [gA, mirrorRun(year, 8), JSON.stringify(rows([1, 2]))])).rows[0].r;
+    // B: 4 missing. Applied after A, L = 8 (threshold 2.4) and R = {3, 4}, so G3 removes 2. Applied against the state before A,
+    // L = 10 and R = {1, 2, 3, 4} (4 > 3.0) would open a hold instead, so the outcome proves the serialization.
+    await beginService(B);
+    pB = start(B, mirrorSql, [gB, mirrorRun(year, 6), JSON.stringify(rows([1, 2, 3, 4]))]);
+    await waitsOn(pidB, 'advisory');
+    await q(A, 'commit');
+    const res = await pB;
+    assert.ok(res.ok, `second apply failed: ${res.err?.message}`);
+    await q(B, 'commit');
+    assert.equal(resA.status, 'ok');
+    assert.equal(Number(resA.removed), 2);
+    assert.equal(res.rows[0].r.status, 'ok');
+    assert.equal(Number(res.rows[0].r.removed), 2, 'the second apply saw the first one committed');
+  } finally {
+    await cleanup([pB]);
+  }
+  const { rows: st } = await q(obs, `select lights_id, removed_at is not null as removed from private.lights_mirror
+      where region_slug = 'truckee' and season = 'halloween' and year = $1`, [year]);
+  const removed = new Set(st.filter((r) => r.removed).map((r) => r.lights_id));
+  assert.deepEqual([...removed].sort(), ids.slice(0, 4).sort(), 'final state equals sequential application: rows 1-4 removed');
+  const { rows: h } = await q(obs, `select count(*)::int as n from private.lights_mirror_holds where region_slug = 'truckee' and season = 'halloween' and year = $1`, [year]);
+  assert.equal(h[0].n, 0, 'no hold');
+  await q(obs, `delete from private.lights_mirror where region_slug = 'truckee' and season = 'halloween' and year = $1`, [year]);
+  await q(obs, `delete from private.lights_mirror_runs where region_slug = 'truckee' and season = 'halloween' and year = $1`, [year]);
+});

@@ -316,7 +316,44 @@ describe('check-workflows adversarial cases (AC-M0-16)', () => {
     const mod = await import(CHECK);
     expect(mod.checkWorkflow('ci.yml', CI + IDENTITY_JOB)).toEqual([]);
     expect(mod.checkWorkflow('ci.yml', CI.replace('pull_request:', 'pull_request_target:')).join('\n')).toContain('trigger_set');
-    expect(Object.keys(mod.ALLOWED_TRIGGERS).sort()).toEqual(['ci.yml', 'ingest.yml', 'rebuild.yml', 'sign-feed.yml', 'sign-gate-probe.yml']);
+    expect(Object.keys(mod.ALLOWED_TRIGGERS).sort()).toEqual(['ci.yml', 'ingest.yml', 'lights-compare.yml', 'lights-mirror.yml', 'rebuild.yml', 'sign-feed.yml', 'sign-gate-probe.yml']);
+  });
+
+  // AC-W3-22: the two Lights workflows are schedule + workflow_dispatch only.
+  it('the real lights-mirror.yml and lights-compare.yml pass', async () => {
+    const { readFileSync } = await import('node:fs');
+    const mod = await import(CHECK);
+    for (const f of ['lights-mirror.yml', 'lights-compare.yml']) {
+      const text = readFileSync(join(REPO_ROOT, '.github', 'workflows', f), 'utf8');
+      expect(mod.checkWorkflow(f, text), f).toEqual([]);
+      expect(check({ [f]: text }).status, f).toBe(0);
+    }
+  });
+  it('a pull_request trigger added to either Lights workflow fails trigger_set', async () => {
+    const { readFileSync } = await import('node:fs');
+    for (const f of ['lights-mirror.yml', 'lights-compare.yml']) {
+      const text = readFileSync(join(REPO_ROOT, '.github', 'workflows', f), 'utf8');
+      expect(text).toContain('workflow_dispatch: {}');
+      failsWith({ [f]: text.replace('workflow_dispatch: {}', 'workflow_dispatch: {}, pull_request: {}') }, 'trigger_set');
+    }
+  });
+  it('the Lights workflows: mirror runs on main every 15 minutes with the mirror env; compare holds no secret', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { parse } = await import('yaml');
+    const m = parse(readFileSync(join(REPO_ROOT, '.github', 'workflows', 'lights-mirror.yml'), 'utf8'));
+    expect(m.on.schedule).toEqual([{ cron: '*/15 * * * *' }]);
+    expect(m.concurrency).toEqual({ group: 'lights-mirror', 'cancel-in-progress': false });
+    const job = Object.values(m.jobs)[0];
+    expect(job.if).toBe("github.ref == 'refs/heads/main'");
+    expect(job['timeout-minutes']).toBe(5);
+    const run = job.steps.find((st) => st.run === 'npm run mirror');
+    expect(run.env).toEqual({ INGEST_URL: '${{ vars.INGEST_URL }}', INGEST_HMAC_KEY: '${{ secrets.INGEST_HMAC_KEY }}',
+      LIGHTS_REST_URL: '${{ vars.LIGHTS_REST_URL }}', LIGHTS_PUBLISHABLE_KEY: '${{ vars.LIGHTS_PUBLISHABLE_KEY }}' });
+    const ctext = readFileSync(join(REPO_ROOT, '.github', 'workflows', 'lights-compare.yml'), 'utf8');
+    const c = parse(ctext);
+    expect(c.on.schedule).toEqual([{ cron: '37 * * * *' }]);
+    expect(ctext).not.toMatch(/\bsecrets\b/);
+    expect(ctext).toContain('node scripts/compare-lights.mjs');
   });
 
   it('the real ci.yml has the identity job and passes', async () => {

@@ -67,3 +67,19 @@ Deno.test('a nonce reply that is not a boolean is treated as an error, not as "f
   // deno-lint-ignore no-explicit-any
   await assertRejects(() => ingestDb(sb as any).nonce('0123456789abcdef0123456789abcdef'));
 });
+
+Deno.test('W3.2 ingestDb.mirrorGrant / mirrorApply call svc_issue_mirror_grant and svc_lights_mirror_apply with their exact parameter names', async () => {
+  const { ingestDb } = await load();
+  const { sb, calls } = fakeClient({
+    svc_issue_mirror_grant: { data: { grant: null }, error: null },
+    svc_lights_mirror_apply: { data: { status: 'held', seen: 1, added: 0, changed: 0, removed: 0, held: 3, invalid: 0 }, error: null },
+  });
+  // deno-lint-ignore no-explicit-any
+  const db = ingestDb(sb as any);
+  assertEquals(await db.mirrorGrant(), { grant: null });
+  assertEquals((await db.mirrorApply('tok', { status: 'ok' }, [{ id: 'a' }])).held, 3);
+  assertEquals(calls, [
+    ['svc_issue_mirror_grant', {}],
+    ['svc_lights_mirror_apply', { p_grant: 'tok', p_run: { status: 'ok' }, p_rows: [{ id: 'a' }] }],
+  ]);
+});
