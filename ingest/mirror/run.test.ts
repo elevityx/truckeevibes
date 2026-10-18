@@ -16,7 +16,7 @@ const row = (i: number) => ({
   starts_at: '2026-10-30T02:00:00+00:00', ends_at: null, url: `https://synthetic-url.example/${i}`, adults_only: false,
 });
 
-interface Opts { grant?: string | null; ingestFail?: 'grant' | 'submit'; lights?: 'ok' | 'partial' | 'down'; submitReply?: Record<string, unknown> }
+interface Opts { grant?: string | null; ingestFail?: 'grant' | 'submit'; lights?: 'ok' | 'partial' | 'down' | 'http503'; submitReply?: Record<string, unknown> }
 function world(o: Opts = {}) {
   const ops: { op: string; body: Record<string, unknown> }[] = [];
   const lightsCalls: string[] = [];
@@ -38,6 +38,7 @@ function world(o: Opts = {}) {
     lightsCalls.push(u);
     if (o.lights === 'down') throw new DOMException('timed out', 'TimeoutError');
     if (u.includes('/rpc/')) return new Response(JSON.stringify(ctx), { status: 200 });
+    if (o.lights === 'http503') return new Response('{}', { status: 503 });
     const rows = [row(1), row(2)];
     return new Response(JSON.stringify(rows), { status: 200, headers: { 'content-range': o.lights === 'partial' ? '0-1/3' : '0-1/2' } });
   }) as typeof globalThis.fetch;
@@ -109,6 +110,13 @@ describe('AC-W3-20 mirror runner', () => {
     const w = world();
     expect(await main({ ...w.deps, env: { ...ENV, LIGHTS_REST_URL: undefined } })).toBe(1);
     expect(w.ops).toEqual([]);
+    expectSafe(w.logs);
+  });
+  it('an events read that returns 503 -> an aborted submit with abort_code http_503 (the code pgTAP 27 accepts)', async () => {
+    const w = world({ lights: 'http503' });
+    expect(await main(w.deps)).toBe(0);
+    expect(w.ops[1].body.run).toEqual({ region: 'truckee', season: 'halloween', year: 2026, status: 'aborted', abort_code: 'http_503' });
+    expect(w.logs[0]).toBe('mirror: aborted code=http_503');
     expectSafe(w.logs);
   });
 });

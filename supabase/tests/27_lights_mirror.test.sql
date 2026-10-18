@@ -443,6 +443,11 @@ select is(pg_temp.snap('private.lights_mirror_holds'), (select s from h07), 'AC-
 select is(pg_temp.snap('private.lights_mirror'), (select m from h07), 'AC-W3-07 mirror rows untouched');
 select pg_temp.ma('07d', '[]'::jsonb, 2051, 'halloween', '{"status":"aborted","abort_code":"Bad-Code"}');
 select ok(pg_temp.err(pg_temp.rerr('07d'), '22023', 'invalid_input', 'run'), 'W3.1 step 4 a malformed abort_code -> 22023 run');
+-- review fix 2: the runner's HTTP codes (http_<n>) are one vocabulary from client to table
+select pg_temp.ma('07e', '[]'::jsonb, 2051, 'halloween', '{"status":"aborted","abort_code":"http_503"}');
+select is(pg_temp.r('07e', 'status'), 'aborted', 'W3.3 an aborted run with abort_code http_503 is accepted');
+select is((select count(*)::int from private.lights_mirror_runs where year = 2051 and abort_code = 'http_503'), 1, 'W3.3 ... and recorded with its code');
+select is(pg_temp.snap('private.lights_mirror_holds'), (select s from h07), 'W3.3 ... the hold still byte-identical');
 
 -- ---------------------------------------------------------------------------------------------------------------------
 -- AC-W3-08 admin accept
@@ -670,6 +675,17 @@ select ok(pg_temp.adm(format($$public.admin_set_lights_include(%L::uuid, 'maybe'
 select ok(pg_temp.adm($$public.admin_set_lights_include('00000000-0000-4000-8000-0000000000ff'::uuid, 'no')$$) like 'ERR:P0002|%', 'W3.1 step 7 an unknown event -> P0002');
 select ok(pg_temp.adm($$public.admin_set_lights_override('00000000-0000-4000-8000-0000000000ff'::uuid)$$) like 'ERR:P0002|%', 'W3.1 step 8 an unknown event -> P0002');
 select ok(pg_temp.adm($$public.admin_lights_events('easter', 2026)$$) like 'ERR:22023|%', 'W3.1 step 9 a bad season -> 22023');
+-- review fix 1: an excluded event keeps its admin control (auto -> no -> auto through the RPCs)
+select is(pg_temp.adm(format($$public.admin_set_lights_include(%L::uuid, 'no')$$, (select id from e14))), '', 'W3.4 set the event to no');
+select is(pg_temp.lev(pg_temp.sseason(), pg_temp.syear(), (select id from e14)) ->> 'lightsInclude', 'no',
+  'W3.4 an event set to no is still listed by admin_lights_events (its lights_season is empty)');
+select is(pg_temp.lev(pg_temp.sseason(), pg_temp.syear(), (select id from e14)) ->> 'shown', 'false', 'W3.4 ... and is not shown');
+select is(pg_temp.adm(format($$public.admin_set_lights_include(%L::uuid, 'auto')$$, (select id from e14))), '', 'W3.4 set it back to auto');
+select is(pg_temp.lev(pg_temp.sseason(), pg_temp.syear(), (select id from e14)) ->> 'lightsInclude', 'auto', 'W3.4 ... still listed, now auto');
+create temp table e14b as select pg_temp.ev('W3 Plain Talk', pg_temp.at14() + interval '1 hour',
+  (select id from public.venues where name = 'W3 Lights Hall' order by created_at limit 1)) as id;
+select is(pg_temp.lev(pg_temp.sseason(), pg_temp.syear(), (select id from e14b)) ->> 'lightsInclude', 'auto',
+  'W3.4 a published event in the window that fails auto eligibility is listed, so it can be set to yes');
 select is((select string_agg(k, ',' order by k) from jsonb_object_keys(pg_temp.lev(pg_temp.sseason(), pg_temp.syear(), (select id from e14))) k),
   'coveredLive,id,lightsInclude,shown,startsAt,title,vetoed', 'W3.1 step 9 admin_lights_events row keys');
 

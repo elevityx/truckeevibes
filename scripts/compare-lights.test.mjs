@@ -21,9 +21,10 @@ const arow = (l, over = {}) => ({
 });
 const vrow = (i) => ({ ...arow(lrow(1)), id: `11111111-0000-4000-8000-${String(i).padStart(12, '0')}`, origin: 'vibes', title: `SYNTHETIC-VIBES-${i}` });
 const MIRROR = { state: 'confirmed', confirmedAt: iso(10 * MIN), heldSince: null, heldCount: 0 };
+// pageComplete follows nextCursor (as the API sets it) unless a case overrides it
 const page = (events, over = {}) => ({
-  version: 1, scope: 'lights', season: 'halloween', year: 2026, stale: false, pageComplete: true, dataAt: iso(2 * MIN), mirror: MIRROR,
-  region: { tz: 'America/Los_Angeles', localBox: {} }, count: events.length, nextCursor: null, events, attribution: {}, ...over,
+  version: 1, scope: 'lights', season: 'halloween', year: 2026, stale: false, pageComplete: (over.nextCursor ?? null) === null, dataAt: iso(2 * MIN),
+  mirror: MIRROR, region: { tz: 'America/Los_Angeles', localBox: {} }, count: events.length, nextCursor: null, events, attribution: {}, ...over,
 });
 
 /**
@@ -197,5 +198,38 @@ describe('AC-W3-21 compare-lights', () => {
     const w = world([same()]);
     expect(await compareLights({ ...w.deps, env: { VIBES_API_URL: 'https://api.test' } })).toBe(2);
     expect(w.urls).toEqual([]);
+  });
+  // review fix 3: fail closed on an incomplete or duplicated API response
+  it('pageComplete false with nextCursor null -> exit 2 (a page that denies completeness)', async () => {
+    const r = same({ pages: [page(L3.map((l) => arow(l)), { pageComplete: false })] });
+    expect(await compareLights(world([r, r]).deps)).toBe(2);
+  });
+  it('a missing nextCursor or pageComplete key -> exit 2', async () => {
+    const p1 = page(L3.map((l) => arow(l)));
+    delete p1.nextCursor;
+    const p2 = page(L3.map((l) => arow(l)));
+    delete p2.pageComplete;
+    expect(await compareLights(world([{ lights: L3, pages: [p1] }, { lights: L3, pages: [p1] }]).deps)).toBe(2);
+    expect(await compareLights(world([{ lights: L3, pages: [p2] }, { lights: L3, pages: [p2] }]).deps)).toBe(2);
+  });
+  it('pageComplete true with a nextCursor -> exit 2', async () => {
+    const pages = [page([arow(L3[0])], { nextCursor: 'c1', pageComplete: true }), page([arow(L3[1]), arow(L3[2])])];
+    expect(await compareLights(world([{ lights: L3, pages }, { lights: L3, pages }]).deps)).toBe(2);
+  });
+  it('one Lights row twice in the API response -> exit 1 field_diff=<id>:duplicate (not 1:1)', async () => {
+    const r = same({ pages: [page([...L3.map((l) => arow(l)), arow(L3[1])])] });
+    const w = world([r, r]);
+    expect(await compareLights(w.deps)).toBe(1);
+    expect(last(w).at(-1)).toContain(`${id(2)}:duplicate`);
+    expect(last(w).at(-1)).toContain('result=mismatch');
+  });
+  it('a duplicate across two pages -> exit 1', async () => {
+    const pages = [page([arow(L3[0]), arow(L3[1])], { nextCursor: 'c1', pageComplete: false }), page([arow(L3[1]), arow(L3[2])])];
+    expect(await compareLights(world([{ lights: L3, pages }, { lights: L3, pages }]).deps)).toBe(1);
+  });
+  it('a duplicated Lights row id -> exit 2 (the Lights read is not a set)', async () => {
+    const l = [lrow(1), lrow(2), lrow(2)];
+    const r = { lights: l, pages: [page([arow(l[0]), arow(l[1])])] };
+    expect(await compareLights(world([r, r]).deps)).toBe(2);
   });
 });
