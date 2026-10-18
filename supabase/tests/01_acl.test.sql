@@ -44,12 +44,13 @@ select is(
      from pg_class c join pg_namespace n on n.oid = c.relnamespace
     where n.nspname in ('public', 'private') and c.relkind in ('r', 'p') order by 1),
   (select array_agg(x order by x) from unnest(array[
-     'private.blocked_terms', 'private.ingest_grants', 'private.ingest_nonces', 'private.notify_log',
+     'private.blocked_terms', 'private.ingest_grants', 'private.ingest_nonces', 'private.lights_mirror', 'private.lights_mirror_holds',
+     'private.lights_mirror_runs', 'private.notify_log',
      'public.admins', 'public.areas', 'public.categories', 'public.event_categories', 'public.event_changes', 'public.events',
      'public.geocode_usage', 'public.held_runs', 'public.owner_activity', 'public.regions', 'public.review_cards', 'public.series',
      'public.source_event_versions', 'public.source_events', 'public.source_runs', 'public.sources', 'public.suppressions',
      'public.venues']) x),
-  'M0 + M1 tables in public + private are exactly the expected set (22)');
+  'M0 + M1 + W1 tables in public + private are exactly the expected set (25)');
 select has_extension('pg_trgm', 'pg_trgm extension is installed');
 select has_extension('pg_cron', 'pg_cron extension is installed');
 select has_extension('pg_net', 'pg_net extension is installed');
@@ -116,14 +117,18 @@ create function pg_temp.fn_list(p_role text, p_schema text) returns text[] langu
    where n.nspname = p_schema and has_function_privilege(p_role, p.oid, 'EXECUTE')
      and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e') order by 1)
 $$;
-select is(pg_temp.fn_list('anon', 'public'), array['list_event_pages()', 'list_events(integer)', 'list_sources_public()'], 'anon EXECUTE is exactly list_event_pages() + list_events(integer) + list_sources_public()');
+select is(pg_temp.fn_list('anon', 'public'),
+  array['api_events_v1(text, text, integer, date, date, text[], text[], integer, text)', 'list_event_pages()', 'list_events(integer)', 'list_sources_public()'],
+  'anon EXECUTE is exactly api_events_v1(...) + list_event_pages() + list_events(integer) + list_sources_public() (W1: 4)');
 select is(pg_temp.fn_list('authenticated', 'public'),
   (select array_agg(x order by x) from unnest(array[
      'admin_add_suppression(text, text, text)', 'admin_card_open(uuid)', 'admin_decide_card(uuid, text, text, integer)', 'admin_list_sources()',
      'admin_log_activity(text, integer)', 'admin_merge_events(uuid, uuid)', 'admin_owner_minutes_7d()', 'admin_queue(text, integer)', 'admin_set_event_status(uuid, text, text)',
      'admin_set_source_enabled(text, boolean)', 'admin_set_source_trust(text, text)', 'admin_source_health()', 'admin_unlock_field(uuid, text)',
-     'admin_update_event(uuid, jsonb)', 'admin_whoami()', 'list_event_pages()', 'list_events(integer)', 'list_sources_public()']) x),
-  'authenticated EXECUTE is the three public reads + the M0 and M1 admin RPCs (exact)');
+     'admin_update_event(uuid, jsonb)', 'admin_whoami()', 'api_events_v1(text, text, integer, date, date, text[], text[], integer, text)',
+     'list_event_pages()', 'list_events(integer)', 'list_sources_public()']) x),
+  'authenticated EXECUTE is the four public reads + the M0 and M1 admin RPCs (exact, W1: 19)');
+select is(cardinality(pg_temp.fn_list('authenticated', 'public')), 19, 'AC-W1-17 authenticated EXECUTE count is 19');
 select is(pg_temp.fn_list('service_role', 'public'),
   (select array_agg(x order by x) from unnest(array[
      'svc_cluster_and_publish(integer)', 'svc_ingest_batch(text, jsonb, jsonb)', 'svc_ingest_nonce(text)', 'svc_issue_run_grants()',
@@ -132,6 +137,10 @@ select is(pg_temp.fn_list('service_role', 'public'),
 select is(pg_temp.fn_list('service_role', 'private'), '{}'::text[], 'service_role executes nothing in private');
 select is(pg_temp.fn_list('anon', 'private'), '{}'::text[], 'anon executes nothing in private');
 select is(pg_temp.fn_list('authenticated', 'private'), '{}'::text[], 'authenticated executes nothing in private');
+
+-- (5b) AC-W1-17 role statement timeouts, set by the W1 migration (not the platform default)
+select ok((select 'statement_timeout=3s' = any (rolconfig) from pg_roles where rolname = 'anon'), 'AC-W1-17 anon has statement_timeout=3s');
+select ok((select 'statement_timeout=8s' = any (rolconfig) from pg_roles where rolname = 'authenticated'), 'AC-W1-17 authenticated has statement_timeout=8s');
 
 -- (6) every SECURITY DEFINER function is owned by postgres
 select is(

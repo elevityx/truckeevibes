@@ -15,7 +15,7 @@
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
     "db:test:concurrency": "node --test scripts/db-concurrency.dbtest.mjs",
-    "db:test:rest": "node --test scripts/manifest-rest.dbtest.mjs",
+    "db:test:rest": "node --test scripts/manifest-rest.dbtest.mjs scripts/api-rest.dbtest.mjs",
     "ingest": "tsx ingest/run.ts",
     "classify-report": "tsx ingest/tools/classify-report.ts",
     "test:static": "cp scripts/fixtures/snapshot-static.json public/data/events.json && next build && node scripts/check-static-snapshot.mjs",
