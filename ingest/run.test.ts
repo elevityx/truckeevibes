@@ -469,3 +469,54 @@ describe('the Tribe fixture yields a real free event (AC-R4b-13, plan RG2)', () 
     expect(h.submits()[0].body.run.parser_version).toBe('tribe.1-c2');
   });
 });
+
+describe('A12 TTUSD sources through the runner (AC-M1-114 c/d/h, AC-M1-120)', () => {
+  const TT_ROBOTS = 'User-agent: *\nCrawl-delay: 5\nDisallow: /fs/\nAllow: /fs/pages/\n';
+  const ttGrant = (school: string, host: string, path = '/calendar') => grant(`ttusd-${school}`, {
+    family: 'html_finalsite', allowed_hosts: [host], allowed_methods: ['html'], page_cap: 6,
+    config: { calendarUrl: `https://${host}${path}`, school, allowlist: 'ttusd', tz: 'America/Los_Angeles' },
+  });
+  const htmlRes = (b: string) => new Response(b, { status: 200, headers: { 'content-type': 'text/html' } });
+
+  it('ttusd-te logs counts only and submits the five items', async () => {
+    const h = harness({
+      grants: [ttGrant('te', 'te.ttusd.org')],
+      other: (u) => {
+        if (u.pathname === '/robots.txt') return text(TT_ROBOTS);
+        const m = u.searchParams.get('cal_date')?.slice(0, 7);
+        return htmlRes(fixture(m === '2026-10' ? 'finalsite/te_2026-10.html' : m === '2026-11' ? 'finalsite/te_2026-11.html' : 'finalsite/empty_month.html'));
+      },
+    });
+    expect(await h.run()).toBe(0);
+    const line = h.logs.find((l) => l.startsWith('source=ttusd-te'))!;
+    expect(line).toMatch(/^source=ttusd-te status=ok found=5 new=5 changed=0 invalid=0 filtered=5 /);
+    expect(line).not.toMatch(/Pumpkin|Walk|Parade|Concert|https?:|calendar|cal_date/i);
+    expect(h.submits()[0].body.run.parser_version).toBe('html_finalsite.1-c2');
+    const cats = (h.submits()[0].body.items as { categoriesHint: string[] }[]).every((i) => i.categoriesHint.includes('schools'));
+    expect(cats).toBe(true);
+  });
+  it('robots 503 -> robots_blocked; a page redirecting into /fs/ -> skipped / path_not_allowed (nothing under /fs/ requested)', async () => {
+    const a = harness({ grants: [ttGrant('te', 'te.ttusd.org')], other: (u) => (u.pathname === '/robots.txt' ? text('down', 503) : text('', 404)) });
+    expect(await a.run()).toBe(0);
+    expect(a.submits()[0].body.run).toMatchObject({ status: 'robots_blocked' });
+    expect(a.submits()[0].body.items).toEqual([]);
+    const b = harness({
+      grants: [ttGrant('te', 'te.ttusd.org')],
+      other: (u) => (u.pathname === '/robots.txt' ? text(TT_ROBOTS) : new Response(null, { status: 302, headers: { location: 'https://te.ttusd.org/fs/calendar-manager/events.ics?calendar_ids[]=1' } })),
+    });
+    expect(await b.run()).toBe(0);
+    expect(b.submits()[0].body.run).toMatchObject({ status: 'skipped', error_code: 'path_not_allowed' });
+    expect(b.net.urls().some((x) => x.includes('/fs/'))).toBe(false);
+  });
+  it('the runner never has two TTUSD sources in flight, and the family floor spaces the first request of the next', async () => {
+    let live = 0; let max = 0;
+    const adapter = fake('html_finalsite', async () => { live++; max = Math.max(max, live); await new Promise((r) => setTimeout(r, 10)); live--; return okResult(1); });
+    const h = harness({
+      grants: [ttGrant('te', 'te.ttusd.org'), ttGrant('nths', 'nths.ttusd.org'), ttGrant('district', 'www.ttusd.org', '/parents-students/calendars/calendars2')],
+      adapters: { html_finalsite: adapter },
+    });
+    expect(await h.run()).toBe(0);
+    expect(h.submits()).toHaveLength(3);
+    expect(max).toBe(1);
+  });
+});

@@ -451,3 +451,98 @@ describe('shared spacer across sources (AC-M1-73 d, A6-2)', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// A12 (AC-M1-114): TTUSD family floor and path guard
+// ---------------------------------------------------------------------------------------------------------------------
+import { familyOf, HOST_FAMILIES, spacingKey } from './politeFetch';
+
+describe('AC-M1-114 TTUSD family: path guard and floor', () => {
+  const TT_ROBOTS = 'User-agent: *\nCrawl-delay: 5\nDisallow: /fs/\nAllow: /fs/pages/\n';
+  const ttSrc = (host: string) => source({ slug: `ttusd-${host.split('.')[0]}`, allowed_hosts: [host], allowed_methods: ['html'], page_cap: 10 });
+  function tt(host: string, handler: (u: URL) => Response | undefined, shared?: { clock: ReturnType<typeof makeClock>; spacer: ReturnType<typeof createSpacer> }) {
+    const clock = shared?.clock ?? makeClock();
+    const spacer = shared?.spacer ?? createSpacer({ now: clock.now, sleep: clock.sleep });
+    const net = fakeNet((u) => handler(u) ?? (u.pathname === '/robots.txt' ? text(TT_ROBOTS) : text('<html>ok</html>')), clock.now);
+    const pf = createPoliteFetch(ttSrc(host), { fetch: net.fetch, now: clock.now, sleep: clock.sleep, spacer });
+    return { pf, net, clock, spacer };
+  }
+  const page = (host: string, d = '2026-11-01') => `https://${host}/calendar?cal_date=${d}`;
+  const noFs = (net: ReturnType<typeof fakeNet>) => expect(net.calls.some((c) => new URL(c.url).pathname.startsWith('/fs/'))).toBe(false);
+
+  it('(a) robots.txt redirecting into /fs/ -> robots_blocked, no request to /fs/, 0 page fetches', async () => {
+    const t = tt('te.ttusd.org', (u) => (u.pathname === '/robots.txt' ? redirect('https://te.ttusd.org/fs/robots') : undefined));
+    expect(await code(t.pf(page('te.ttusd.org'), { kind: 'html' }))).toBe('robots_blocked');
+    noFs(t.net);
+    expect(t.net.urls()).toEqual(['https://te.ttusd.org/robots.txt']);
+  });
+  it('(b) robots disallowing /calendar -> robots_blocked, 0 page fetches', async () => {
+    const t = tt('te.ttusd.org', (u) => (u.pathname === '/robots.txt' ? text('User-agent: *\nCrawl-delay: 5\nDisallow: /calendar\n') : undefined));
+    expect(await code(t.pf(page('te.ttusd.org'), { kind: 'html' }))).toBe('robots_blocked');
+    expect(content(t.net)).toHaveLength(0);
+  });
+  it('(c) robots 503 -> robots_blocked, and the next TTUSD source waits >= 5000 ms after the failed request', async () => {
+    const clock = makeClock();
+    const spacer = createSpacer({ now: clock.now, sleep: clock.sleep });
+    const a = tt('te.ttusd.org', (u) => (u.pathname === '/robots.txt' ? text('down', 503) : undefined), { clock, spacer });
+    expect(await code(a.pf(page('te.ttusd.org'), { kind: 'html' }))).toBe('robots_blocked');
+    const failedAt = a.net.calls[0].at;
+    const b = tt('nths.ttusd.org', () => undefined, { clock, spacer });
+    await b.pf(page('nths.ttusd.org'), { kind: 'html' });
+    expect(b.net.calls[0].at - failedAt).toBeGreaterThanOrEqual(5000);
+  });
+  it('(d) a page redirecting to /fs/calendar-manager/events.ics -> path_not_allowed, never requested', async () => {
+    const t = tt('te.ttusd.org', (u) => (u.pathname === '/calendar' ? redirect('https://te.ttusd.org/fs/calendar-manager/events.ics?calendar_ids[]=1', 302) : undefined));
+    expect(await code(t.pf(page('te.ttusd.org'), { kind: 'html' }))).toBe('path_not_allowed');
+    noFs(t.net);
+  });
+  it('(e) a redirect to another allowed month page is followed', async () => {
+    const t = tt('te.ttusd.org', (u) => (u.pathname === '/calendar' && u.searchParams.get('cal_date') === '2026-10-01' ? redirect('/calendar?cal_date=2026-11-01', 302) : undefined));
+    const out = await t.pf(page('te.ttusd.org', '2026-10-01'), { kind: 'html' });
+    expect(out.status).toBe(200);
+    expect(t.net.urls()).toContain(page('te.ttusd.org'));
+  });
+  it('(f) the first request on te.ttusd.org after one on nths.ttusd.org waits >= 5000 ms', async () => {
+    const clock = makeClock();
+    const spacer = createSpacer({ now: clock.now, sleep: clock.sleep });
+    const a = tt('nths.ttusd.org', () => undefined, { clock, spacer });
+    await a.pf.fetchRobots('nths.ttusd.org');
+    const b = tt('te.ttusd.org', () => undefined, { clock, spacer });
+    await b.pf(page('te.ttusd.org'), { kind: 'html' });
+    expect(b.net.calls[0].url).toBe('https://te.ttusd.org/robots.txt');
+    expect(b.net.calls[0].at - a.net.calls[0].at).toBeGreaterThanOrEqual(5000);
+  });
+  it('(g) spacingKey / familyOf, and non-family hosts keep 1000 ms and no path guard', async () => {
+    expect(spacingKey('www.ttusd.org')).toBe('ttusd.org');
+    expect(spacingKey('ttusd.org')).toBe('ttusd.org');
+    expect(spacingKey('chamber.truckee.com')).toBe('chamber.truckee.com');
+    expect(familyOf('te.ttusd.org')).toBe('ttusd.org');
+    expect(familyOf('notttusd.org')).toBeUndefined();
+    expect(HOST_FAMILIES['ttusd.org'].floorMs).toBe(5000);
+    const { pf, net } = setup({ robots: 'User-agent: *\nDisallow: /nothing\n' });
+    await pf('https://a.test/fs/anything', { kind: 'html' });
+    await pf('https://a.test/other', { kind: 'html' });
+    const at = content(net).map((u) => net.calls.find((c) => c.url === u)!.at);
+    expect(at[1] - at[0]).toBeGreaterThanOrEqual(1000);
+    expect(at[1] - at[0]).toBeLessThan(5000);
+  });
+  it('the guard needs the exact month query and the allowed paths (every hop, first request included)', async () => {
+    for (const bad of ['https://te.ttusd.org/calendar', 'https://te.ttusd.org/calendar?cal_date=2026-11-02', 'https://te.ttusd.org/calendar?cal_date=2026-11-01&x=1',
+      'https://te.ttusd.org/fs/pages/home?cal_date=2026-11-01', 'https://te.ttusd.org/other?cal_date=2026-11-01']) {
+      const t = tt('te.ttusd.org', () => undefined);
+      expect(await code(t.pf(bad, { kind: 'html' })), bad).toBe('path_not_allowed');
+      expect(t.net.calls).toHaveLength(0);
+    }
+    const ok = tt('www.ttusd.org', () => undefined);
+    expect((await ok.pf('https://www.ttusd.org/parents-students/calendars/calendars2?cal_date=2026-11-01', { kind: 'html' })).status).toBe(200);
+  });
+  it('the floor is seeded before the first request: robots itself starts >= 5000 ms after an earlier family request', async () => {
+    const clock = makeClock();
+    const spacer = createSpacer({ now: clock.now, sleep: clock.sleep });
+    await spacer.acquire('ttusd.org', 1000);
+    const t0 = clock.now();
+    const t = tt('te.ttusd.org', () => undefined, { clock, spacer });
+    await t.pf(page('te.ttusd.org'), { kind: 'html' });
+    expect(t.net.calls[0].at - t0).toBeGreaterThanOrEqual(5000);
+  });
+});
