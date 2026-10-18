@@ -277,10 +277,37 @@ update public.sources set next_due_at = now() + interval '1 day' where slug <> '
 update public.sources set next_due_at = now() where slug = 'w3-other-src';
 insert into g13 select 'other', g ->> 'grant' from jsonb_array_elements(public.svc_issue_run_grants() -> 'grants') g where g #>> '{source,slug}' = 'w3-other-src';
 select pg_temp.ma('13e', pg_temp.lrows('g13', 2, 2041), 2041, 'halloween', '{}', (select v from g13 where k = 'other'));
-select ok(pg_temp.rerr('13e') like 'ERR:23514|%', 'AC-W3-13 a grant for another source -> 23514');
+select ok(pg_temp.err(pg_temp.rerr('13e'), '42501', 'forbidden'), 'AC-W3-13 / AC-W3-26 a normal ingest grant (another source) -> 42501 forbidden (Amendment W3-1)');
 update public.sources set next_due_at = now() - interval '1 minute' where slug = 'truckee-lights';
 select pg_temp.t($$(not exists (select 1 from jsonb_array_elements(public.svc_issue_run_grants() -> 'grants') g where g #>> '{source,slug}' = 'truckee-lights'))$$,
   'AC-W3-13 svc_issue_run_grants() never returns truckee-lights, even when due');
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Amendment W3-1: mirror grants are mirror-only (AC-W3-25, AC-W3-26)
+-- ---------------------------------------------------------------------------------------------------------------------
+create temp table w31 as select
+  pg_temp.snap('public.source_runs') as sr, pg_temp.snap('public.held_runs') as hr, pg_temp.snap('public.source_events') as se,
+  pg_temp.snap('public.events') as ev, pg_temp.snap('private.lights_mirror') as lm, pg_temp.snap('private.lights_mirror_runs') as lr;
+insert into g13 values ('w31m', pg_temp.mgrant());
+select is(pg_temp.v('service_role', format($$public.svc_ingest_batch(%L, jsonb_build_object('status', 'ok', 'started_at',
+    to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), 'http_status', 200, 'parser_version', 'test-1'),
+    jsonb_build_array(jsonb_build_object('externalKey', 'w31', 'title', 'W31 Probe Event', 'startsAt', to_char((now() + interval '3 days') at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+      'allDay', false, 'timeKnown', true, 'venueName', 'Test Hall', 'address', '10 Main St', 'town', 'Truckee', 'lat', 39.328, 'lng', -120.1833,
+      'url', 'https://example.test/e/w31', 'priceKind', 'free', 'age', 'unknown', 'categoriesHint', jsonb_build_array('music'))))::text$$,
+    (select v from g13 where k = 'w31m'))) like 'ERR:42501|forbidden|%', true, 'AC-W3-25 svc_ingest_batch with a valid mirror grant -> 42501 forbidden');
+select is(pg_temp.snap('public.source_runs') || pg_temp.snap('public.held_runs') || pg_temp.snap('public.source_events') || pg_temp.snap('public.events'),
+  (select sr || hr || se || ev from w31), 'AC-W3-25 ... and writes nothing (source_runs, held_runs, source_events, events)');
+select ok((select used_at is null from private.ingest_grants where token_hash = extensions.digest((select v from g13 where k = 'w31m'), 'sha256')),
+  'AC-W3-25 ... and the mirror grant is not spent');
+select pg_temp.mk_source('w31-src');
+update public.sources set next_due_at = now() + interval '1 day' where slug <> 'w31-src' and next_due_at <= now();
+update public.sources set next_due_at = now() where slug = 'w31-src';
+insert into g13 select 'w31i', g ->> 'grant' from jsonb_array_elements(public.svc_issue_run_grants() -> 'grants') g where g #>> '{source,slug}' = 'w31-src';
+select pg_temp.ma('w31a', pg_temp.lrows('w31', 3, 2069), 2069, 'halloween', '{}', (select v from g13 where k = 'w31i'));
+select ok(pg_temp.err(pg_temp.rerr('w31a'), '42501', 'forbidden'), 'AC-W3-26 svc_lights_mirror_apply with a normal ingest grant -> 42501 forbidden');
+select is(pg_temp.snap('private.lights_mirror') || pg_temp.snap('private.lights_mirror_runs'), (select lm || lr from w31),
+  'AC-W3-26 ... and writes nothing (mirror rows, runs)');
+select ok((select used_at is null from private.ingest_grants where token_hash = extensions.digest((select v from g13 where k = 'w31i'), 'sha256')),
+  'AC-W3-26 ... and the ingest grant is not spent');
 insert into g13 values ('dis', pg_temp.mgrant());
 update public.sources set enabled = false where slug = 'truckee-lights';
 select pg_temp.ma('13f', pg_temp.lrows('g13', 2, 2041), 2041, 'halloween', '{}', (select v from g13 where k = 'dis'));

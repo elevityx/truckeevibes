@@ -832,3 +832,25 @@ describe('W3 lights_mirror migration: canonical block, cumulative allowlist + th
     expect(cumulativeProblems(prev, cur, createdFns(sql))).toEqual([]);
   });
 });
+
+// Amendment W3-1 (AC-W3-27): the W3 svc_ingest_batch is its realtime predecessor plus one marked W3-1 block, nothing else.
+describe('AC-W3-27 svc_ingest_batch in the W3 migration', () => {
+  const fnText = (sql) => {
+    const at = sql.search(/create or replace function public\.svc_ingest_batch\(/);
+    expect(at).toBeGreaterThan(-1);
+    const end = sql.indexOf('\nend $$;', at);
+    return sql.slice(at, end + '\nend $$;'.length);
+  };
+  const W31 = /\n[ \t]*-- W3-1 begin[^\n]*\n[\s\S]*?\n[ \t]*-- W3-1 end[^\n]*/g;
+  it('is byte-identical to 20261023000100_realtime.sql apart from the marked W3-1 block', () => {
+    const prev = fnText(readFileSync(join(DIR, '20261023000100_realtime.sql'), 'utf8'));
+    const cur = fnText(read('lights_mirror'));
+    expect(cur.match(W31)?.length ?? 0).toBe(1);
+    expect(cur.replace(W31, '')).toBe(prev);
+  });
+  it('the W3-1 block refuses a lights_mirror source with 42501 forbidden', () => {
+    const block = fnText(read('lights_mirror')).match(W31)?.[0] ?? '';
+    expect(block).toMatch(/family\s*=\s*'lights_mirror'/);
+    expect(block).toMatch(/raise exception 'forbidden' using errcode = '42501'/);
+  });
+});
