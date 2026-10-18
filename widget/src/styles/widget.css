@@ -19,6 +19,7 @@ ul{list-style:none}
 /* globals.css */
 :focus-visible{outline:3px solid var(--focus, var(--tv-focus)); outline-offset:2px}
 .disp{font-family:var(--font-display, var(--tv-display)); font-weight:400; letter-spacing:.01em}
+:host([data-season=christmas]) .disp{font-style:italic; font-weight:700; font-variation-settings:"SOFT" 100, "opsz" 72; letter-spacing:0}
 .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:44px; padding:0 18px; border-radius:999px; border:2px solid transparent;
   font-weight:700; font-size:15px; cursor:pointer; text-decoration:none; white-space:nowrap}
 .btn.primary{background:var(--accent, var(--tv-accent)); color:var(--on-accent, var(--tv-on-accent))}
@@ -84,13 +85,15 @@ ul{list-style:none}
 
 /* Sheet.tsx: scrim + panel. Bottom sheet below 760px, 400px right panel at 760px and up. */
 .tv-scrim{position:fixed; inset:0; z-index:40; background:rgba(0,0,0,.6)}
-.tv-panel{position:fixed; z-index:50; overflow-y:auto; overscroll-behavior:contain; background:var(--panel,#17121f); color:var(--text,#f3eefa);
+/* background + borders: Lights globals.css "Next port additions" (aside[role=dialog] overrides Sheet.tsx's --panel background). */
+.tv-panel{position:fixed; z-index:50; overflow-y:auto; overscroll-behavior:contain; background:var(--surface, var(--tv-surface)); border-top:2px solid var(--accent, var(--tv-accent)); color:var(--text,#f3eefa);
   box-shadow:0 25px 50px -12px rgba(0,0,0,.25); left:0; right:0; bottom:0; max-height:85dvh; border-radius:16px 16px 0 0; padding:16px}
 @media (min-width:760px){
   .tv-scrim{display:none}
-  .tv-panel{top:0; right:0; bottom:0; left:auto; width:400px; max-height:none; border-radius:0}
+  .tv-panel{top:calc(var(--row-h, 60px) + var(--band-h, 40px)); right:0; bottom:0; left:auto; width:400px; max-height:none; border-radius:0; border-left:2px solid var(--accent, var(--tv-accent))}
 }
 
 /* Widget-only: the credit and the state notes, in the muted footnote style. */
+.tv-credit{line-height:20px}
 .tv-credit a,.tv-note a{color:var(--muted, var(--tv-muted)); text-decoration:underline}
 .tv-note{margin:0; font-size:13.5px; color:var(--muted, var(--tv-muted))}

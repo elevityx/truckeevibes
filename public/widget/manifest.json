@@ -13,6 +13,13 @@
       "integrity": "sha384-r8WxdnEY9Df/81XkQPPa6St+LMWeuclbzVhJNrHO32EDrt9BpbJ/neCjpivB30PE",
       "bytes": 32284,
       "gzipBytes": 11849
+    },
+    {
+      "version": "1.0.2",
+      "file": "/widget/v1/tv-events.1.0.2.js",
+      "integrity": "sha384-06AtMAD0fZ9RvtXu5+HeN2H5CXd+oR+W5SvNEoZWuoXH3P0hlQvOpCTVJsXi4ZD1",
+      "bytes": 32750,
+      "gzipBytes": 11988
     }
   ]
 }
