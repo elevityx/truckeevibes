@@ -431,6 +431,8 @@ select is(pg_temp.keys((select j -> 'mirror' from env_keys)), 'confirmedAt,heldC
 select is(pg_temp.keys((select j -> 'region' from env_keys)), 'localBox,tz', 'AC-W1-09 region keys');
 select is(pg_temp.keys((select j #> '{region,localBox}' from env_keys)), 'maxLat,maxLng,minLat,minLng', 'AC-W1-09 localBox keys');
 select is((select j #>> '{region,tz}' from env_keys), 'America/Los_Angeles', 'region.tz from public.regions');
+select ok((select j ->> 'dataAt' ~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$' from env_keys), 'Amendment W1-1 dataAt (the cache generation) is fixed-width UTC with microseconds');
+select is((select (j ->> 'dataAt')::timestamptz from env_keys), now(), 'Amendment W1-1 dataAt = the transaction time');
 select is((select array_agg(distinct pg_temp.keys(x)) from env_keys, jsonb_array_elements(j -> 'events') x),
   array['address,adultsOnly,age,allDay,categories,description,endDate,endsAt,formerIds,id,lat,lng,origin,pageUrl,startDate,startsAt,summary,ticketUrl,timeKnown,title,town,url,venue'],
   'AC-W1-09 every vibes row has exactly the schema keys (a title containing status/confidence/lights changes nothing)');

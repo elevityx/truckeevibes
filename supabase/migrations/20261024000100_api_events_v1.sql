@@ -299,7 +299,8 @@ begin
                                                                        'minLng', r.local_min_lng, 'maxLng', r.local_max_lng))
     into v_region from public.regions r where r.slug = 'truckee';
 
-  return jsonb_build_object('dataAt', private.api_ts(now()), 'mirror', v_mirror, 'region', v_region,
+  -- dataAt doubles as the cache generation (Amendment W1-1): fixed-width microseconds, so string order = time order
+  return jsonb_build_object('dataAt', to_char(now() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'), 'mirror', v_mirror, 'region', v_region,
                             'count', least(v_n, v_limit), 'nextCursor', v_next, 'events', v_rows);
 end $$;
 
