@@ -478,7 +478,7 @@ describe('A12 TTUSD sources through the runner (AC-M1-114 c/d/h, AC-M1-120)', ()
   });
   const htmlRes = (b: string) => new Response(b, { status: 200, headers: { 'content-type': 'text/html' } });
 
-  it('ttusd-te logs counts only and submits the five items', async () => {
+  it('ttusd-te logs counts only and submits the four listings', async () => {
     const h = harness({
       grants: [ttGrant('te', 'te.ttusd.org')],
       other: (u) => {
@@ -489,7 +489,7 @@ describe('A12 TTUSD sources through the runner (AC-M1-114 c/d/h, AC-M1-120)', ()
     });
     expect(await h.run()).toBe(0);
     const line = h.logs.find((l) => l.startsWith('source=ttusd-te'))!;
-    expect(line).toMatch(/^source=ttusd-te status=ok found=5 new=5 changed=0 invalid=0 filtered=5 /);
+    expect(line).toMatch(/^source=ttusd-te status=ok found=4 new=4 changed=0 invalid=0 filtered=6 /);
     expect(line).not.toMatch(/Pumpkin|Walk|Parade|Concert|https?:|calendar|cal_date/i);
     expect(h.submits()[0].body.run.parser_version).toBe('html_finalsite.1-c2');
     const cats = (h.submits()[0].body.items as { categoriesHint: string[] }[]).every((i) => i.categoriesHint.includes('schools'));

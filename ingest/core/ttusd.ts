@@ -1,7 +1,7 @@
 // A12: TTUSD school calendars. The grammar here is the single source of truth for what may be published from a school or
 // district calendar: a title passes only when it matches one of a few anchored whole-title templates, decided on the full
 // decoded title before anything is shaped, truncated or submitted. Anything else is dropped. Pure: no network, no clock.
-import { makeEvent } from '../adapters/common';
+import { localDate, makeEvent } from '../adapters/common';
 import type { SourceEvent } from '../types';
 import { capReasons } from './reasonCodes';
 
@@ -162,14 +162,25 @@ export function filterSchoolItems(raw: RawOccurrence[], source: SchoolKey, tz: s
   const count = (r: DropReason) => { reasons[r] = (reasons[r] ?? 0) + 1; };
   const items: SourceEvent[] = [];
   const seen = new Set<string>();
+  const timedGroups = new Set<string>(); // (school|title|date) groups that have a timed item: their all-day copies are dropped, in any order
   const ordered = [...raw].sort((a, b) => idOf(a.externalKey) - idOf(b.externalKey) || (a.externalKey < b.externalKey ? -1 : a.externalKey > b.externalKey ? 1 : 0));
+  for (const o of ordered) {
+    const a = analyze(o.title, o.allDay, source);
+    if (o.allDay || a.decision.kind !== 'event') continue;
+    const title = a.prefixLen > 0 ? tidy(o.title).slice(a.prefixLen).trim() : tidy(o.title);
+    timedGroups.add([a.decision.school, norm(title), localDate(new Date(o.startsAt), tz)].join('|'));
+  }
   for (const o of ordered) {
     const a = analyze(o.title, o.allDay, source);
     if (a.decision.kind === 'drop') { count(a.decision.reason); continue; }
     const full = tidy(o.title);
     const title = a.prefixLen > 0 ? full.slice(a.prefixLen).trim() : full;
     const school = SCHOOLS[a.decision.kind === 'event' ? a.decision.school : source];
-    const key = [school.key, norm(title), o.allDay ? `d${o.startDate ?? ''}` : `t${o.startsAt}`].join('|');
+    // One listing per event per day, or one per distinct start time (r4): group by (school, title, local date), then by start.
+    const date = o.allDay ? (o.startDate ?? '') : localDate(new Date(o.startsAt), tz);
+    const group = [school.key, norm(title), date].join('|');
+    if (o.allDay && timedGroups.has(group)) { count('dup'); continue; }
+    const key = `${group}|${o.allDay ? 'allday' : o.startsAt}`;
     if (seen.has(key)) { count('dup'); continue; }
     seen.add(key);
 
