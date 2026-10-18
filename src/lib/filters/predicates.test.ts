@@ -188,3 +188,13 @@ describe('AC-R1c-02 cats, kids, query', () => {
     expect(applyFilters(list, { ...f, q: 'triv' }, NOW, LA).map((e) => e.id)).toEqual(['b']);
   });
 });
+
+describe('AC-M1-118 cat=schools predicate (A12)', () => {
+  it('keeps a school notice and a school event, drops a Chamber event', () => {
+    const notice = ev({ id: 'n', title: 'Thanksgiving Break', allDay: true, startDate: '2026-11-25', endDate: '2026-11-28', categories: ['schools'] });
+    const school = ev({ id: 's', categories: ['schools', 'community'] });
+    const chamber = ev({ id: 'c', categories: ['community'], sources: ['Truckee Chamber of Commerce'] });
+    const kept = [notice, school, chamber].filter((e) => matchesCats(e, ['schools'])).map((e) => e.id);
+    expect(kept).toEqual(['n', 's']);
+  });
+});

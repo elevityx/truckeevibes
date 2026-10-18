@@ -170,3 +170,11 @@ describe('pageUrl (filters + the open event)', () => {
     expect(pageUrl('https://truckeevibes.com/?event=old', EMPTY_FILTERS, null)).toBe('/');
   });
 });
+
+describe('AC-M1-119 the schools category (A12)', () => {
+  it('CATEGORY_SLUGS has 14 entries and schools is last', () => {
+    expect(CATEGORY_SLUGS).toHaveLength(14);
+    expect(CATEGORY_SLUGS[13]).toBe('schools');
+  });
+  it('cat=schools parses to [schools]', () => expect(parseFilters('cat=schools').cats).toEqual(['schools']));
+});
