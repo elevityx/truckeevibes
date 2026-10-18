@@ -23,21 +23,33 @@ export function recordingFetch(responder: (url: string, init: RequestInit) => Re
 export const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
-// In-memory stand-in for caches.default (match/put by URL; stores body text and headers).
+// In-memory stand-in for caches.default (match/put/delete by URL; stores body text and headers). `failPut` makes a put reject.
 export class FakeCache {
   store = new Map<string, { body: string; headers: Record<string, string> }>();
   puts: string[] = [];
+  failPut: (key: string) => boolean = () => false;
+  failDelete = false;
+  private key(req: RequestInfo | URL) {
+    return typeof req === 'string' ? req : req instanceof URL ? req.href : req.url;
+  }
   async match(req: RequestInfo | URL): Promise<Response | undefined> {
-    const key = typeof req === 'string' ? req : req instanceof URL ? req.href : req.url;
-    const hit = this.store.get(key);
+    const hit = this.store.get(this.key(req));
     return hit ? new Response(hit.body, { status: 200, headers: hit.headers }) : undefined;
   }
   async put(req: RequestInfo | URL, res: Response): Promise<void> {
-    const key = typeof req === 'string' ? req : req instanceof URL ? req.href : req.url;
+    const key = this.key(req);
+    if (this.failPut(key)) throw new Error('put rejected');
     this.puts.push(key);
     this.store.set(key, { body: await res.text(), headers: Object.fromEntries(res.headers.entries()) });
   }
+  async delete(req: RequestInfo | URL): Promise<boolean> {
+    if (this.failDelete) throw new Error('delete rejected');
+    return this.store.delete(this.key(req));
+  }
 }
+
+// a generation (= the RPC's dataAt, microseconds, Z) `ms` milliseconds after the epoch
+export const gen = (ms: number) => new Date(ms).toISOString().replace(/\.(\d{3})Z$/, '.$1000Z');
 
 const pad = (n: number, w = 12) => String(n).padStart(w, '0');
 export const uuidOf = (i: number) => `00000000-0000-4000-a000-${pad(i)}`;
@@ -73,7 +85,7 @@ export function rawEnvelope(o: { n?: number; origin?: 'lights' | 'vibes'; nextCu
                                  mirror?: Record<string, unknown> } = {}): Record<string, unknown> {
   const n = o.n ?? 2;
   return {
-    dataAt: o.dataAt ?? '2026-10-17T20:00:00Z',
+    dataAt: o.dataAt ?? '2026-10-17T20:00:00.000000Z',
     mirror: o.mirror ?? { state: 'none', confirmedAt: null, heldSince: null, heldCount: 0 },
     region: { tz: 'America/Los_Angeles', localBox: { minLat: 39.1, maxLat: 39.5, minLng: -120.47, maxLng: -119.88 } },
     count: n,
