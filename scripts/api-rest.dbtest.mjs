@@ -106,10 +106,19 @@ test('AC-W1-18b the anon statement_timeout cancels a slow RPC with 57014 in < 4,
     await db.query('grant execute on function public.tv_test_slow() to anon');
     await reloadSchema();
     await waitForRpc('tv_test_slow', true);
-    const t0 = performance.now();
-    const res = await rpc('tv_test_slow', {}, 10_000);
-    const body = await res.json().catch(() => ({}));
-    const ms = performance.now() - t0;
+    // the OpenAPI root can list the RPC a moment before the RPC router has it: retry a PGRST202 within the same 10 s budget
+    let res;
+    let body;
+    let ms;
+    const deadline = Date.now() + 10_000;
+    do {
+      const t0 = performance.now();
+      res = await rpc('tv_test_slow', {}, 10_000);
+      body = await res.json().catch(() => ({}));
+      ms = performance.now() - t0;
+      if (body.code !== 'PGRST202') break;
+      await new Promise((r) => setTimeout(r, 250));
+    } while (Date.now() < deadline);
     assert.ok(res.status >= 400, `status ${res.status}`);
     assert.equal(body.code, '57014');
     assert.ok(ms < 4500, `took ${Math.round(ms)} ms`);
