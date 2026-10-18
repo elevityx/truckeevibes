@@ -602,9 +602,8 @@ describe('event_pages_read keeps the canonical block and adds exactly list_event
     expect(createdFns(read('event_pages_read'))).toEqual(new Set(['list_event_pages']));
     expect(cumulativeProblems(prev, cur, createdFns(read('event_pages_read')))).toEqual([]);
   });
-  it('the newest migration in the tree grants exactly 24 functions', () => {
-    const newest = sqlFiles().pop();
-    expect(canonicalGrants(readFileSync(join(DIR, newest), 'utf8')).size).toBe(24);
+  it('event_pages_read grants exactly 24 functions (W1 grows the newest allowlist; see the W1 block)', () => {
+    expect(canonicalGrants(read('event_pages_read')).size).toBe(24);
   });
   it('replaces private.events_before_write as a verbatim copy plus one marked R2a block', () => {
     const fnBody = (sql) => {
@@ -634,7 +633,7 @@ describe('event_pages_read keeps the canonical block and adds exactly list_event
 describe('db:test:rest wiring (R2a-db)', () => {
   it('package.json pins db:test:rest by string equality', () => {
     const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'));
-    expect(pkg.scripts['db:test:rest']).toBe('node --test scripts/manifest-rest.dbtest.mjs');
+    expect(pkg.scripts['db:test:rest']).toBe('node --test scripts/manifest-rest.dbtest.mjs scripts/api-rest.dbtest.mjs');   // W1.2
   });
   it('ci.yml db job exports the local API URL and keys, then runs db:test:rest after db:test:concurrency', () => {
     const ci = parseYaml(readFileSync(join(REPO_ROOT, '.github', 'workflows', 'ci.yml'), 'utf8'));
@@ -680,8 +679,8 @@ describe('tags_notices keeps the canonical block and the unchanged 24-grant allo
     expect(createdFns(read('tags_notices')).size).toBe(0);
     expect(cumulativeProblems(prev, cur, createdFns(read('tags_notices')))).toEqual([]);
   });
-  it('the newest migration in the tree grants exactly 24 functions', () => {
-    expect(canonicalGrants(readFileSync(join(DIR, sqlFiles().pop()), 'utf8')).size).toBe(24);
+  it('tags_notices grants exactly 24 functions (W1 grows the newest allowlist; see the W1 block)', () => {
+    expect(canonicalGrants(read('tags_notices')).size).toBe(24);
   });
   it('no helper or hide function is granted', () => {
     const sql = stripComments(read('tags_notices'));
@@ -782,7 +781,31 @@ describe('retag_activate: series rule, hide re-run, sources reset, unchanged 24 
     expect(cumulativeProblems(prev, cur, createdFns(read('retag_activate')))).toEqual([]);
     expect(stripComments(read('retag_activate'))).not.toMatch(/grant execute on function private\./i);
   });
-  it('the newest migration in the tree grants exactly 24 functions', () => {
-    expect(canonicalGrants(readFileSync(join(DIR, sqlFiles().pop()), 'utf8')).size).toBe(24);
+  it('retag_activate grants exactly 24 functions (W1 grows the newest allowlist; see the W1 block)', () => {
+    expect(canonicalGrants(read('retag_activate')).size).toBe(24);
+  });
+});
+
+describe('W1 api_events_v1 migration: canonical block, cumulative allowlist + api_events_v1 (25)', () => {
+  const sqlFiles = () => files.filter((x) => x.endsWith('.sql'));
+  it('is the newest migration and sorts after 20261023000100_realtime.sql', () => {
+    expect(sqlFiles().pop()).toBe('20261024000100_api_events_v1.sql');
+    expect('20261024000100_api_events_v1.sql' > '20261023000100_realtime.sql').toBe(true);
+  });
+  it('its grants are the realtime set plus api_events_v1(...)->anon,authenticated', () => {
+    const prev = canonicalGrants(readFileSync(join(DIR, '20261023000100_realtime.sql'), 'utf8'));
+    const sql = read('api_events_v1');
+    const cur = canonicalGrants(sql);
+    expect(prev.size).toBe(24);
+    expect(cur.size).toBe(25);
+    expect([...cur].filter((x) => !prev.has(x))).toEqual(['public.api_events_v1(text,text,integer,date,date,text[],text[],integer,text)->anon,authenticated']);
+    expect(cumulativeProblems(prev, cur, createdFns(sql))).toEqual([]);
+  });
+  it('grants nothing in private and pins search_path on every function', () => {
+    const sql = read('api_events_v1');
+    expect(stripComments(sql)).not.toMatch(/grant execute on function private\./i);
+    const headers = sql.match(/create\s+(?:or\s+replace\s+)?function[\s\S]*?\bas\s+\$/gi) ?? [];
+    expect(headers.length).toBeGreaterThanOrEqual(10);
+    for (const h of headers) expect(h, h.slice(0, 80)).toMatch(/set\s+search_path\s*=\s*''/i);
   });
 });

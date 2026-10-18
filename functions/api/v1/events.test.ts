@@ -126,7 +126,7 @@ describe('AC-W1-23 last known good', () => {
   ];
   const seedLkg = async (cache: FakeCache, ageMs: number) => {
     const dataAt = new Date(NOW - ageMs).toISOString();
-    const env = { ...rawEnvelope({ n: 1, mirror: { state: 'confirmed', confirmedAt: dataAt, heldSince: null, heldCount: 0 } }), dataAt,
+    const env: Record<string, unknown> = { ...rawEnvelope({ n: 1, mirror: { state: 'confirmed', confirmedAt: dataAt, heldSince: null, heldCount: 0 } }), dataAt,
       version: 1, scope: 'vibes', season: null, year: null, stale: false, pageComplete: true,
       attribution: { name: 'TruckeeVibes', url: 'https://truckeevibes.com/' } };
     await cache.put(lkgKey('scope=vibes'), new Response(JSON.stringify(env), { headers: { 'cache-control': 's-maxage=21600' } }));

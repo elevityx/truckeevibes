@@ -105,8 +105,8 @@ describe('AC-R1a-15 pinned scripts, vitest include and the CI visual job', () =>
     }
   });
   it('check:repo includes the token check', () => expect(scripts['check:repo']).toContain('node scripts/build-tokens.mjs --check'));
-  it('vitest include equals the r2 value', () => {
-    expect(read('vitest.config.ts')).toContain("include: ['src/**/*.test.ts', 'ingest/**/*.test.ts', 'scripts/**/*.test.{mjs,ts}']");
+  it('vitest include equals the r2 value plus the W0 functions/widget globs', () => {
+    expect(read('vitest.config.ts')).toContain("include: ['src/**/*.test.ts', 'ingest/**/*.test.ts', 'scripts/**/*.test.{mjs,ts}', 'functions/**/*.test.ts', 'widget/**/*.test.ts']");
   });
 
   const VISUAL_RUNS = ['npm ci', 'npx playwright install --with-deps chromium', 'npm run test:visual', 'npm run test:lhci', 'npm run test:budget']; // R2c appends og:bench; R3b test:clarity
