@@ -101,6 +101,10 @@ for (const season of ['halloween', 'christmas'] as const) {
     await page.locator('[data-tv-list] .erow').first().click();
     await expect(page.locator('[data-tv-overlay] aside[role=dialog]')).toBeVisible();
     await expect(page.locator('[data-tv-overlay] .tv-credit')).toHaveText('Powered by TruckeeVibes');
+    const creditH = await page.locator('[data-tv-overlay] .tv-credit').evaluate((e) => e.getBoundingClientRect().height);
+    expect(Number.isInteger(creditH), `credit height ${creditH}`).toBe(true);
+    const border = await page.locator('[data-tv-overlay] aside').evaluate((e) => [getComputedStyle(e).borderTopWidth, getComputedStyle(e).borderLeftWidth]);
+    expect(border).toEqual(isPhone ? ['2px', '0px'] : ['2px', '2px']);
     const b = (await sheetBox(page))!;
     if (isPhone) {
       expect(Math.abs(b.bottom - b.ih)).toBeLessThan(1);
@@ -109,7 +113,7 @@ for (const season of ['halloween', 'christmas'] as const) {
     } else {
       expect(b.width).toBeCloseTo(400, 0);
       expect(b.right).toBeCloseTo(b.iw, 0);
-      expect(b.top).toBeCloseTo(0, 0);
+      expect(b.top).toBeCloseTo(100, 0); // below Lights' header: --row-h 60px + --band-h 40px
       expect(b.bottom).toBeCloseTo(b.ih, 0);
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth === window.innerWidth)).toBe(true);
