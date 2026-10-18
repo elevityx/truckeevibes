@@ -344,9 +344,9 @@ select is(
      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and has_function_privilege('service_role', p.oid, 'EXECUTE')
       and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e') order by 1),
-  array['svc_cluster_and_publish(integer)', 'svc_ingest_batch(text, jsonb, jsonb)', 'svc_ingest_nonce(text)', 'svc_issue_run_grants()',
-        'svc_set_venue_geocode(uuid, double precision, double precision, text)', 'svc_weekly_report()',
-        'svc_issue_mirror_grant()', 'svc_lights_mirror_apply(text, jsonb, jsonb)'],   -- W3 (20261024000200_lights_mirror.sql)
+  array['svc_cluster_and_publish(integer)', 'svc_ingest_batch(text, jsonb, jsonb)', 'svc_ingest_nonce(text)',
+        'svc_issue_mirror_grant()', 'svc_issue_run_grants()', 'svc_lights_mirror_apply(text, jsonb, jsonb)',   -- + the two W3 mirror routines
+        'svc_set_venue_geocode(uuid, double precision, double precision, text)', 'svc_weekly_report()'],
   'AC-M1-05 the service_role EXECUTE list in public is exactly the six svc_* routines + the two W3 mirror routines');
 select is(
   array(select p.proname::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace
