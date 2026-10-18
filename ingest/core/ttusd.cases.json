@@ -1,0 +1,518 @@
+[
+ {
+  "source": "district",
+  "title": "Thanksgiving Break - NO SCHOOL",
+  "allDay": true,
+  "expect": "notice",
+  "school": "district",
+  "categories": [
+   "schools"
+  ]
+ },
+ {
+  "source": "district",
+  "title": "Thanksgiving Break",
+  "allDay": true,
+  "expect": "notice",
+  "categories": [
+   "schools"
+  ]
+ },
+ {
+  "source": "district",
+  "title": "Winter Break",
+  "allDay": true,
+  "expect": "notice"
+ },
+ {
+  "source": "district",
+  "title": "Conference Week - TK-8 Minimum Days",
+  "allDay": true,
+  "expect": "notice"
+ },
+ {
+  "source": "district",
+  "title": "Conference Week- Minimum day all week",
+  "allDay": true,
+  "expect": "notice"
+ },
+ {
+  "source": "district",
+  "title": "First Day of School",
+  "allDay": true,
+  "expect": "notice"
+ },
+ {
+  "source": "district",
+  "title": "Last Day of School",
+  "allDay": true,
+  "expect": "notice"
+ },
+ {
+  "source": "district",
+  "title": "NO SCHOOL - Veteran's Day",
+  "allDay": true,
+  "expect": "notice"
+ },
+ {
+  "source": "district",
+  "title": "Veteran’s Day-No School",
+  "allDay": true,
+  "expect": "notice"
+ },
+ {
+  "source": "district",
+  "title": "Martin Luther King Day - No School",
+  "allDay": true,
+  "expect": "notice"
+ },
+ {
+  "source": "district",
+  "title": "President's Day - No School",
+  "allDay": true,
+  "expect": "notice"
+ },
+ {
+  "source": "district",
+  "title": "Holiday - Christmas",
+  "allDay": true,
+  "expect": "notice"
+ },
+ {
+  "source": "district",
+  "title": "Holiday - New Year's Day",
+  "allDay": true,
+  "expect": "notice"
+ },
+ {
+  "source": "district",
+  "title": "All Schools Minimum Day",
+  "allDay": true,
+  "expect": "notice"
+ },
+ {
+  "source": "district",
+  "title": "Middle/High Schools Minimum Days",
+  "allDay": true,
+  "expect": "notice"
+ },
+ {
+  "source": "nts",
+  "title": "Thanksgiving Break - NO SCHOOL",
+  "allDay": true,
+  "expect": "drop:notice_dup"
+ },
+ {
+  "source": "te",
+  "title": "Winter Break",
+  "allDay": true,
+  "expect": "drop:notice_dup"
+ },
+ {
+  "source": "district",
+  "title": "All Schools Minimum Day",
+  "allDay": false,
+  "expect": "drop:notice_timed"
+ },
+ {
+  "source": "district",
+  "title": "Staff Training - Winter Break",
+  "allDay": true,
+  "expect": "drop:internal"
+ },
+ {
+  "source": "district",
+  "title": "Sampleton's Holiday Break",
+  "allDay": true,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "district",
+  "title": "Winter Break Members Party",
+  "allDay": true,
+  "expect": "drop:restricted"
+ },
+ {
+  "source": "district",
+  "title": "Conference Week - Parent Night",
+  "allDay": true,
+  "expect": "drop:internal"
+ },
+ {
+  "source": "district",
+  "title": "Winter Break Camp",
+  "allDay": true,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "district",
+  "title": "Last Day to Order Yearbooks",
+  "allDay": true,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "ths",
+  "title": "Students Only Fall Concert",
+  "allDay": false,
+  "expect": "drop:restricted"
+ },
+ {
+  "source": "ths",
+  "title": "Fall Concert (Staff Only)",
+  "allDay": false,
+  "expect": "drop:restricted"
+ },
+ {
+  "source": "ths",
+  "title": "Jane Sampleton Senior Recital",
+  "allDay": false,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "ths",
+  "title": "Mr. Example Band Concert",
+  "allDay": false,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "ths",
+  "title": "Recital - J Example",
+  "allDay": false,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "ths",
+  "title": "Sampleton's Winter Concert",
+  "allDay": false,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "nts",
+  "title": "Karaoke Night/Open Mic Night",
+  "allDay": false,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "ths",
+  "title": "Fall Concert for the whole school and community at the main hall tonight Staff Only",
+  "allDay": false,
+  "expect": "drop:oversize"
+ },
+ {
+  "source": "district",
+  "title": "Regular Board Meeting",
+  "allDay": false,
+  "expect": "drop:internal"
+ },
+ {
+  "source": "district",
+  "title": "ELAC: THS",
+  "allDay": false,
+  "expect": "drop:internal"
+ },
+ {
+  "source": "district",
+  "title": "PTO & TTUSD Fall Connect",
+  "allDay": false,
+  "expect": "drop:internal"
+ },
+ {
+  "source": "kbe",
+  "title": "IA Training at KBE",
+  "allDay": false,
+  "expect": "drop:internal"
+ },
+ {
+  "source": "te",
+  "title": "Make Up Picture Day",
+  "allDay": true,
+  "expect": "drop:internal"
+ },
+ {
+  "source": "acms",
+  "title": "Middle School Dance in the Gym",
+  "allDay": false,
+  "expect": "drop:internal"
+ },
+ {
+  "source": "te",
+  "title": "Minimum Day-- All Students Dismissed",
+  "allDay": true,
+  "expect": "drop:internal"
+ },
+ {
+  "source": "ths",
+  "title": "THS Class of 2027 Graduation",
+  "allDay": false,
+  "expect": "event:ceremony",
+  "school": "ths",
+  "categories": [
+   "community",
+   "schools"
+  ]
+ },
+ {
+  "source": "te",
+  "title": "8th Grade Promotion",
+  "allDay": false,
+  "expect": "event:ceremony",
+  "categories": [
+   "community",
+   "schools"
+  ]
+ },
+ {
+  "source": "district",
+  "title": "NTHS: Open House",
+  "allDay": false,
+  "expect": "event:open_house",
+  "school": "nths",
+  "categories": [
+   "community",
+   "schools"
+  ]
+ },
+ {
+  "source": "tle",
+  "title": "TLE All-School Fall Musical",
+  "allDay": false,
+  "expect": "event:performance",
+  "school": "tle",
+  "categories": [
+   "arts",
+   "music",
+   "schools"
+  ]
+ },
+ {
+  "source": "acms",
+  "title": "ACMS Fall Concert, Cafetorium",
+  "allDay": false,
+  "expect": "event:performance",
+  "school": "acms",
+  "categories": [
+   "arts",
+   "music",
+   "schools"
+  ]
+ },
+ {
+  "source": "acms",
+  "title": "ACMS Winter Concert, Cafetorium",
+  "allDay": false,
+  "expect": "event:performance"
+ },
+ {
+  "source": "te",
+  "title": "Winter Band Concert",
+  "allDay": false,
+  "expect": "event:performance",
+  "categories": [
+   "arts",
+   "music",
+   "schools"
+  ]
+ },
+ {
+  "source": "district",
+  "title": "Truckee Elementary Pumpkin Patch & Kermes",
+  "allDay": false,
+  "expect": "event:festival",
+  "school": "te",
+  "categories": [
+   "community",
+   "family",
+   "halloween-fall",
+   "kids",
+   "schools"
+  ]
+ },
+ {
+  "source": "te",
+  "title": "Pumpkin Patch",
+  "allDay": false,
+  "expect": "event:festival",
+  "school": "te",
+  "categories": [
+   "community",
+   "family",
+   "halloween-fall",
+   "kids",
+   "schools"
+  ]
+ },
+ {
+  "source": "te",
+  "title": "Walk- a- thon",
+  "allDay": false,
+  "expect": "event:festival"
+ },
+ {
+  "source": "te",
+  "title": "Walk-a-Thon!",
+  "allDay": true,
+  "expect": "event:festival"
+ },
+ {
+  "source": "te",
+  "title": "Halloween Parade",
+  "allDay": false,
+  "expect": "event:festival",
+  "categories": [
+   "community",
+   "family",
+   "halloween-fall",
+   "kids",
+   "schools"
+  ]
+ },
+ {
+  "source": "ths",
+  "title": "Fall Festival",
+  "allDay": false,
+  "expect": "event:festival",
+  "school": "ths",
+  "categories": [
+   "community",
+   "family",
+   "schools"
+  ]
+ },
+ {
+  "source": "district",
+  "title": "Winter Break Camp",
+  "allDay": false,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "ths",
+  "title": "Boys Soccer vs South Tahoe (JV @ 2, V @ 3:45)",
+  "allDay": false,
+  "expect": "event:home_game",
+  "school": "ths",
+  "categories": [
+   "schools",
+   "sports"
+  ]
+ },
+ {
+  "source": "ths",
+  "title": "Girls Soccer @ South Tahoe (JV @ 2, V @ 3:45)",
+  "allDay": false,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "ths",
+  "title": "Boys Basketball vs Wooster - Neutral Site",
+  "allDay": false,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "ths",
+  "title": "Boys Basketball vs Wooster Neutral Site",
+  "allDay": false,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "ths",
+  "title": "Boys Basketball vs Wooster Offsite",
+  "allDay": false,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "ths",
+  "title": "Boys Basketball vs Wooster at Reno",
+  "allDay": false,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "ths",
+  "title": "Boys Basketball vs Example High",
+  "allDay": false,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "ths",
+  "title": "Boys Basketball vs Jane Sampleton",
+  "allDay": false,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "ths",
+  "title": "Boys Soccer Regionals",
+  "allDay": false,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "acms",
+  "title": "Boys Basketball vs Pau Wa Lu (Home)",
+  "allDay": false,
+  "expect": "event:home_game",
+  "school": "acms",
+  "categories": [
+   "schools",
+   "sports"
+  ]
+ },
+ {
+  "source": "acms",
+  "title": "Boys Basketball vs Pau Wa Lu",
+  "allDay": false,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "acms",
+  "title": "Boys Basketball vs Pau Wa Lu (Home) - Neutral Site",
+  "allDay": false,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "acms",
+  "title": "Boys Basketball at Carson Valley (Away)",
+  "allDay": false,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "nts",
+  "title": "Boys Basketball home vs. TEA",
+  "allDay": false,
+  "expect": "event:home_game",
+  "school": "nts"
+ },
+ {
+  "source": "nts",
+  "title": "Boys Basketball away vs. Incline",
+  "allDay": false,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "te",
+  "title": "Boys Basketball vs Example (Home)",
+  "allDay": false,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "te",
+  "title": "Boys Basketball vs Pau Wa Lu (Home)",
+  "allDay": false,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "district",
+  "title": "CSA: Graduation",
+  "allDay": false,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "district",
+  "title": "National Special Education Day",
+  "allDay": true,
+  "expect": "drop:no_match"
+ },
+ {
+  "source": "te",
+  "title": "4th Grade Feast and Festival",
+  "allDay": false,
+  "expect": "drop:no_match"
+ }
+]

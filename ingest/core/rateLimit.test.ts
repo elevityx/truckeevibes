@@ -49,3 +49,19 @@ describe('createSpacer under concurrency (AC-M1-73 a-c)', () => {
     expect(sp.lastStart('h')).toBe(got);
   });
 });
+
+describe('Spacer.raise (A12 family floor)', () => {
+  it('a raised floor is sticky, takes the max, and applies to later acquires with a smaller gap', async () => {
+    const clock = makeClock();
+    const sp = createSpacer({ now: clock.now, sleep: clock.sleep });
+    sp.raise('k', 5000);
+    sp.raise('k', 2000); // never lowers
+    const a = await sp.acquire('k', 1000);
+    const b = await sp.acquire('k', 1000);
+    expect(b - a).toBeGreaterThanOrEqual(5000);
+    const c = await sp.acquire('k', 8000);
+    expect(c - b).toBeGreaterThanOrEqual(8000);
+    const other = await sp.acquire('other', 1000);
+    expect(other).toBe(clock.now());
+  });
+});
