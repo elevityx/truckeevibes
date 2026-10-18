@@ -14,6 +14,10 @@ insert into public.sources (slug, name, homepage_url, allowed_hosts, family, cla
           encode(extensions.digest('Sister site; public event list read through its public API.', 'sha256'), 'hex'),
           'owner', now(), now() + interval '1 year', 'Sister site; public event list read through its public API.');
 
+-- 1b One abort-code vocabulary from the runner to the table: the runner's codes include http_<status> (W3 review).
+alter table private.lights_mirror_runs drop constraint lights_mirror_runs_abort_code_check;
+alter table private.lights_mirror_runs add constraint lights_mirror_runs_abort_code_check check (abort_code ~ '^[a-z0-9_]{1,40}$');
+
 -- 2 The 3-hourly ingest never picks up the mirror source: verbatim copy of 20261020000200_ingest_rpcs.sql:395-420 plus one predicate.
 create or replace function public.svc_issue_run_grants() returns jsonb
 language plpgsql security definer set search_path = '' as $$
@@ -302,7 +306,7 @@ begin
     if jsonb_typeof(p_run -> 'region') is distinct from 'string' or not exists (select 1 from private.lights_mirror_box(v_region)) then raise exception 'x'; end if;
     if v_status = 'aborted' then
       v_abort := p_run ->> 'abort_code';
-      if jsonb_typeof(p_run -> 'abort_code') is distinct from 'string' or v_abort !~ '^[a-z_]{1,40}$' then raise exception 'x'; end if;
+      if jsonb_typeof(p_run -> 'abort_code') is distinct from 'string' or v_abort !~ '^[a-z0-9_]{1,40}$' then raise exception 'x'; end if;
     end if;
     -- an aborted read may come before the pair is known (the context call failed): season and year then stay null
     if v_status = 'ok' or p_run ? 'season' or p_run ? 'year' then
@@ -549,7 +553,9 @@ begin
   perform private.recompute_event(e.id);
 end $$;
 
--- 9 Vibes events eligible for a pair, with the one Lights predicate (shown_on_lights) and why one is not shown.
+-- 9 Vibes events an admin can place on a pair: every published event starting inside the pair's window (whatever its current
+-- lights_include, so an event set to 'no' or failing auto eligibility keeps its control), plus any row whose lights_season holds the
+-- pair; with the one Lights predicate (shown_on_lights) and why one is not shown.
 create function public.admin_lights_events(p_season text, p_year integer) returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
 begin
@@ -569,7 +575,8 @@ begin
       order by e.starts_at, e.id)
     from public.events e left join public.venues v on v.id = e.venue_id
    where e.merged_into is null
-     and e.lights_season @> jsonb_build_array(jsonb_build_object('season', p_season, 'year', p_year))), '[]'::jsonb);
+     and ((e.status = 'published' and e.starts_at <@ private.lights_window(p_season, p_year))
+          or e.lights_season @> jsonb_build_array(jsonb_build_object('season', p_season, 'year', p_year)))), '[]'::jsonb);
 end $$;
 
 -- 10 Purge pairs 30 days after their window ends.

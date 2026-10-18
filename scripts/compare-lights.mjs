@@ -57,6 +57,7 @@ async function readLights(env, fetchFn) {
   const m = /^(?:\d+-\d+|\*)\/(\d+)$/.exec(res.headers.get('content-range') ?? '');
   if (!Array.isArray(rows) || !m || Number(m[1]) !== rows.length || rows.length >= 1000) throw new Incomplete('partial');
   if (rows.some((r) => !isObj(r) || r.region_id !== c1.regionId || r.season !== c1.season || r.year !== c1.year)) throw new Incomplete('pair_mismatch');
+  if (new Set(rows.map((r) => r.id)).size !== rows.length) throw new Incomplete('duplicate_id');
   const c2 = await ctx();
   if (c2.regionId !== c1.regionId || c2.season !== c1.season || c2.year !== c1.year) throw new Incomplete('pair_changed');
   return { season: c1.season, year: c1.year, rows };
@@ -78,13 +79,19 @@ async function readApi(env, fetchFn, season, year) {
     if (!isObj(body) || body.version !== 1 || body.stale !== false || !Array.isArray(body.events) || !isObj(body.mirror)) {
       throw Object.assign(new Incomplete('page'), { pages });
     }
+    // paging must be explicit and consistent: nextCursor null or a string, pageComplete exactly (nextCursor === null)
+    const nc = body.nextCursor;
+    if (!('nextCursor' in body) || (nc !== null && (typeof nc !== 'string' || nc === '')) || typeof body.pageComplete !== 'boolean'
+        || body.pageComplete !== (nc === null)) {
+      throw Object.assign(new Incomplete('paging'), { pages });
+    }
     const mj = JSON.stringify(body.mirror);
     if (mirror !== undefined && mj !== mirror) throw Object.assign(new Incomplete('mirror_changed'), { pages });
     mirror = mj;
     if (dataAt === null || Date.parse(body.dataAt) < Date.parse(dataAt)) dataAt = body.dataAt;   // the oldest page counts
     events.push(...body.events);
-    if (body.nextCursor === null || body.nextCursor === undefined) break;
-    cursor = String(body.nextCursor);
+    if (nc === null) break;
+    cursor = nc;
   }
   return { events, mirror: JSON.parse(mirror), dataAt, pages };
 }
@@ -106,12 +113,16 @@ async function pass(deps) {
     return { result: 'transport', line: `compare: pair=${pair} lights=${lights ? lights.rows.length : 0} api_lights=0 missing= extra= field_diff= `
       + `vibes_added=0 vibes_added_ids= mirror=unknown confirmed_age_min=- pages=${pages} result=transport` };
   }
+  // 1:1: an id that appears more than once anywhere in the drained API response is a mismatch, never collapsed by the Map
+  const seen = new Map();
+  for (const x of api.events) seen.set(x?.id, (seen.get(x?.id) ?? 0) + 1);
+  const dups = [...seen].filter(([, k]) => k > 1).map(([i]) => String(i)).sort();
   const apiLights = new Map(api.events.filter((x) => x.origin === 'lights').map((x) => [x.id, x]));
   const vibes = api.events.filter((x) => x.origin === 'vibes').map((x) => x.id).sort();
   const lightsIds = new Map(lights.rows.map((r) => [r.id, r]));
   const missing = [...lightsIds.keys()].filter((id) => !apiLights.has(id)).sort();
   const extra = [...apiLights.keys()].filter((id) => !lightsIds.has(id)).sort();
-  const diffs = [];
+  const diffs = dups.map((i) => `${i}:duplicate`);
   for (const [id, r] of [...lightsIds].sort(([a], [b]) => (a < b ? -1 : 1))) {
     const a = apiLights.get(id);
     if (!a) continue;
