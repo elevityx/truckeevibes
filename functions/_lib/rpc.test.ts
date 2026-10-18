@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { RpcError, callApiEvents } from './rpc';
 import { ENV, jsonResponse, rawEnvelope, recordingFetch } from './testing';
 
+const fail = (p: Promise<unknown>): Promise<RpcError> => p.then(() => { throw new Error('resolved'); }, (x) => x as RpcError);
+
 describe('callApiEvents', () => {
   it('POSTs rpc/api_events_v1 with the publishable key and all nine args (absent -> null)', async () => {
     const f = recordingFetch(() => jsonResponse(rawEnvelope()));
@@ -30,19 +32,19 @@ describe('callApiEvents', () => {
   });
   it('a 400 with code 22023 and a known param detail -> RpcError(400, param)', async () => {
     const f = recordingFetch(() => jsonResponse({ code: '22023', details: 'limit', hint: null, message: 'invalid_input' }, 400));
-    const e = await callApiEvents(ENV, { scope: 'vibes' }, f).catch((x) => x);
+    const e = await fail(callApiEvents(ENV, { scope: 'vibes' }, f));
     expect(e).toBeInstanceOf(RpcError);
     expect(e.status).toBe(400);
     expect(e.code).toBe('limit');
   });
   it('an unknown detail or other body never becomes the code', async () => {
     for (const body of [{ code: '22023', details: 'p_secret', message: 'x' }, { code: 'PGRST202', details: 'limit' }, { message: 'boom' }]) {
-      const e = await callApiEvents(ENV, { scope: 'vibes' }, recordingFetch(() => jsonResponse(body, 400))).catch((x) => x);
+      const e = await fail(callApiEvents(ENV, { scope: 'vibes' }, recordingFetch(() => jsonResponse(body, 400))));
       expect(e).toBeInstanceOf(RpcError);
       expect(e.code).toBeNull();
       expect(String(e.message)).not.toContain('boom');
     }
-    const e = await callApiEvents(ENV, { scope: 'vibes' }, recordingFetch(() => new Response('<html>oops</html>', { status: 500 }))).catch((x) => x);
+    const e = await fail(callApiEvents(ENV, { scope: 'vibes' }, recordingFetch(() => new Response('<html>oops</html>', { status: 500 }))));
     expect(e).toBeInstanceOf(RpcError);
     expect(e.status).toBe(500);
     expect(e.code).toBeNull();
@@ -52,17 +54,17 @@ describe('callApiEvents', () => {
       init.signal?.addEventListener('abort', () => rej(new DOMException('aborted', 'AbortError')));
     }));
     const t0 = Date.now();
-    const e = await callApiEvents(ENV, { scope: 'vibes' }, f, 50).catch((x) => x);
+    const e = await fail(callApiEvents(ENV, { scope: 'vibes' }, f, 50));
     expect(e).toBeInstanceOf(RpcError);
     expect(Date.now() - t0).toBeLessThan(1000);
   });
   it('a 200 with a non-JSON body -> RpcError', async () => {
-    const e = await callApiEvents(ENV, { scope: 'vibes' }, recordingFetch(() => new Response('not json', { status: 200 }))).catch((x) => x);
+    const e = await fail(callApiEvents(ENV, { scope: 'vibes' }, recordingFetch(() => new Response('not json', { status: 200 }))));
     expect(e).toBeInstanceOf(RpcError);
   });
   it('no Supabase env -> RpcError, no fetch', async () => {
     const f = recordingFetch(() => jsonResponse(rawEnvelope()));
-    const e = await callApiEvents({}, { scope: 'vibes' }, f).catch((x) => x);
+    const e = await fail(callApiEvents({}, { scope: 'vibes' }, f));
     expect(e).toBeInstanceOf(RpcError);
     expect(f.calls).toHaveLength(0);
   });
