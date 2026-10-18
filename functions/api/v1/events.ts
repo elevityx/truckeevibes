@@ -1,6 +1,6 @@
 // GET /api/v1/events: the public, read-only events API (V13: GET/HEAD/OPTIONS only, no secret, counts-only logs).
 import { corsHeaders } from '../../_lib/cors';
-import { deleteLkg, GEN_RE, putFresh, putLkg, readFresh, readLkg, type CacheLike } from '../../_lib/lkg';
+import { GEN_RE, putFresh, readFresh, type CacheLike } from '../../_lib/cache';
 import { parseQuery } from '../../_lib/query';
 import { RpcError, callApiEvents } from '../../_lib/rpc';
 import { shapeEnvelope } from '../../_lib/shape';
@@ -15,8 +15,7 @@ export interface Deps {
   rpcTimeoutMs?: number;
 }
 
-const LKG_MAX_AGE_MS = 6 * 60 * 60 * 1000;
-const FRESH_CC = 'public, max-age=60, s-maxage=300, stale-while-revalidate=300';
+const FRESH_CC = 'public, max-age=60, s-maxage=300';   // AC-W1-35: removals reach clients within 5 min
 
 function respond(req: Request, status: number, body: string | null, cc: string, cors: Headers, extra: Record<string, string> = {}) {
   const h = new Headers(cors);
@@ -39,7 +38,7 @@ const countOf = (body: string) => {
 
 export async function handle(req: Request, env: Env, deps: Deps): Promise<Response> {
   const cors = corsHeaders(req.headers.get('origin'), env.CF_PAGES_BRANCH);
-  const log = (status: number, scope: string, count: number, cache: 'hit' | 'miss' | 'lkg' | 'none') =>
+  const log = (status: number, scope: string, count: number, cache: 'hit' | 'miss' | 'none') =>
     deps.log(`api v1 status=${status} scope=${scope} count=${count} cache=${cache}`);
 
   if (req.method === 'OPTIONS') {
@@ -76,19 +75,11 @@ export async function handle(req: Request, env: Env, deps: Deps): Promise<Respon
   try {
     const raw = await callApiEvents(env, q, deps.fetch, deps.rpcTimeoutMs);
     const envelope = shapeEnvelope(raw, q);
-    // Amendment W1-1: the RPC's dataAt is the generation; without a valid one nothing is served or cached
+    // the RPC's dataAt is the generation; without a valid one nothing is served or cached
     if (!envelope || !GEN_RE.test(envelope.dataAt)) throw new RpcError(502, null);
     const body = JSON.stringify(envelope);
     const gen = envelope.dataAt;
-    deps.waitUntil((async () => {
-      await putFresh(deps.cache, canonical, body, gen).catch(() => undefined);
-      try {
-        await putLkg(deps.cache, canonical, body, gen);
-      } catch {
-        // fail closed: no older snapshot may outlive a newer observed one
-        await deleteLkg(deps.cache, canonical).catch(() => undefined);
-      }
-    })());
+    deps.waitUntil(putFresh(deps.cache, canonical, body, gen).catch(() => undefined));
     log(200, q.scope, envelope.count, 'miss');
     return respond(req, 200, body, FRESH_CC, cors);
   } catch (e) {
@@ -96,15 +87,9 @@ export async function handle(req: Request, env: Env, deps: Deps): Promise<Respon
       log(400, q.scope, 0, 'none');
       return respond(req, 400, JSON.stringify({ error: 'bad_param', param: e.code }), 'no-store', cors);
     }
-    const lkg = await readLkg(deps.cache, canonical).catch(() => null);
-    const valid = lkg ? shapeEnvelope(lkg.env, q) : null;                 // a stored copy must still be a whole, valid envelope
-    const at = lkg ? Date.parse(lkg.generation) : NaN;
-    if (valid && valid.dataAt === lkg?.generation && Number.isFinite(at) && deps.now() - at <= LKG_MAX_AGE_MS) {
-      log(200, q.scope, valid.count, 'lkg');
-      return respond(req, 200, JSON.stringify({ ...valid, stale: true }), 'no-store', cors, { 'x-tv-stale': '1' });
-    }
+    // Amendment W1-2: no stale fallback. A failure or timeout is a 503 with no event data.
     log(503, q.scope, 0, 'none');
-    return respond(req, 503, '{"error":"unavailable"}', 'no-store', cors);
+    return respond(req, 503, '{"error":"unavailable"}', 'no-store', cors, { 'retry-after': '60' });
   }
 }
 
