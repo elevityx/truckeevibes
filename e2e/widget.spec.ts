@@ -31,6 +31,25 @@ function serious(r: Pick<AxeResults, 'violations'>, season: Season): string[] {
   return out;
 }
 
+async function open(page: Page, season: Season, state: string, isPhone: boolean) {
+  if (isPhone) {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 3, mobile: true });
+  }
+  await page.clock.install({ time: CLOCK[season] });
+  await page.goto(`/widget-demo/?season=${season}&state=${state}`);
+  await expect(page.locator('html')).toHaveAttribute('data-tv-state', /ready|held|stale|failed/);
+}
+
+const sheetBox = (page: Page) =>
+  page.evaluate(() => {
+    const host = document.querySelector('body > [data-tv-overlay]');
+    const aside = host?.shadowRoot?.querySelector('aside.tv-panel');
+    if (!aside) return null;
+    const r = aside.getBoundingClientRect();
+    return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height, ih: innerHeight, iw: innerWidth };
+  });
+
 test('the axe baseline filter accepts only the two Lights findings', () => {
   const node = (target: unknown[], html: string, data?: object) => ({ target, html, any: data ? [{ data }] : [] }) as unknown as AxeNode;
   const res = (id: string, n: AxeNode) => ({ violations: [{ id, impact: 'serious', nodes: [n] }] }) as unknown as AxeResults;

@@ -7,7 +7,7 @@ export const MAX_PAGES = 4;
 export const FETCH_TIMEOUT_MS = 10_000;
 
 export interface FetchOpts { endpoint: string; season: Season; year: number; fetch: typeof fetch; timeoutMs?: number }
-export type FetchError = 'network' | 'http' | 'shape' | 'incomplete';
+export type FetchError = 'network' | 'http' | 'shape' | 'incomplete' | 'inconsistent';
 export type FetchResult = { env: Envelope; events: WidgetEvent[]; invalid: number } | { error: FetchError };
 
 function pageUrl(o: FetchOpts, cursor: string | null): string {
@@ -42,6 +42,9 @@ async function getPage(o: FetchOpts, cursor: string | null): Promise<Envelope | 
   }
 }
 
+const sameMirror = (a: Envelope['mirror'], b: Envelope['mirror']) =>
+  a.state === b.state && a.confirmedAt === b.confirmedAt && a.heldSince === b.heldSince && a.heldCount === b.heldCount;
+
 export async function fetchAll(o: FetchOpts): Promise<FetchResult> {
   let first: Envelope | null = null;
   let dataAt = '';
@@ -56,6 +59,10 @@ export async function fetchAll(o: FetchOpts): Promise<FetchResult> {
     if (!first) {
       first = env;
       dataAt = env.dataAt;
+    } else if (!sameMirror(first.mirror, env.mirror)) {
+      // Every page must describe the same mirror snapshot; a page read after the mirror moved (held, none, a different or expired
+      // confirmation) makes the whole read unusable, so the controller takes the failed / handoff path. No page's status is dropped.
+      return { error: 'inconsistent' };
     }
     if (env.dataAt < dataAt) dataAt = env.dataAt; // canonical ISO strings: string order = time order
     stale = stale || env.stale;

@@ -17,7 +17,7 @@ export function eventRow(e: WidgetEvent, ctx: ViewCtx): HTMLElement {
   const town = townOf(e.address);
   const far = worthTheDrive(ctx.localBox, e);
   const label = `${e.title}, ${whenLong(e, ctx.tz)}${town ? `, ${town}` : ''}${e.adultsOnly ? ', adults only, 21 and over' : ''}${far ? ', worth the drive' : ''}`;
-  const b = el('button', { type: 'button', class: 'erow', 'aria-label': label },
+  const b = el('button', { type: 'button', class: 'erow', 'aria-label': label, 'data-id': e.id },
     dateChipEl(e.startsAt, ctx.tz),
     el('span', { class: 'info', 'aria-hidden': 'true' },
       el('strong', {}, e.title),

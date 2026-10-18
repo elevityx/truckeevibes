@@ -27,10 +27,19 @@ function validOptions(o: ControllerOptions): boolean {
   return !!b && [b.minLat, b.maxLat, b.minLng, b.maxLng].every((v) => typeof v === 'number' && Number.isFinite(v));
 }
 
+/** The focused element inside `root`, or null (guarded: some DOM shims throw when focus sits on a removed node). */
+function activeIn(root: ShadowRoot): Element | null {
+  try {
+    return root.activeElement;
+  } catch {
+    return null;
+  }
+}
+
 /** Deepest focused element, through open shadow roots. */
 function deepActive(): HTMLElement | null {
   let a: Element | null = document.activeElement;
-  while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
+  while (a && a.shadowRoot && activeIn(a.shadowRoot)) a = activeIn(a.shadowRoot);
   return a instanceof HTMLElement ? a : null;
 }
 
@@ -51,6 +60,7 @@ export function createController(o: ControllerOptions): Controller {
   let destroyed = false;
   let openEv: WidgetEvent | null = null;
   let opener: HTMLElement | null = null;
+  let openerId: string | null = null;
   let overlayHost: HTMLElement | null = null;
   let overlayRoot: ShadowRoot | null = null;
   let renderKey = '';
@@ -63,8 +73,22 @@ export function createController(o: ControllerOptions): Controller {
   const viewCtx = (): ViewCtx => ({
     season: o.season, year: o.year, tz: o.tz, localBox: o.localBox, now: now(), state, info, onOpen: (id) => void api.open(id),
   });
-  const renderAll = () => mounts.forEach((m) => m.render());
-  const keyOf = (t: number) => `${state}|${events.map((e) => e.id).join(',')}|${new Date(t).toISOString().slice(0, 13)}`;
+  /** Re-renders every mount; a focused event row gets focus back on its replacement (same event id). */
+  const renderAll = () =>
+    mounts.forEach((m) => {
+      const id = activeIn(m.root)?.getAttribute('data-id') ?? null;
+      m.render();
+      if (id) m.root.querySelector<HTMLElement>(`.erow[data-id="${id}"]`)?.focus();
+    });
+  // What the mounts show: unchanged -> no re-render, so an identical refresh keeps every node (and keyboard focus) in place.
+  const keyOf = (t: number) => `${state}|${info.note}|${new Date(t).toISOString().slice(0, 13)}|${JSON.stringify(events)}`;
+  const rowFor = (id: string) => {
+    for (const m of mounts) {
+      const r = m.root.querySelector<HTMLElement>(`.erow[data-id="${id}"]`);
+      if (r) return r;
+    }
+    return null;
+  };
 
   function setData(next: WidgetEvent[], ref: number | null) {
     all = next;
@@ -100,8 +124,13 @@ export function createController(o: ControllerOptions): Controller {
       info = { note: noteText(next, ref, o.tz), dataAt: r.env.dataAt, confirmedAt: r.env.mirror.confirmedAt };
     }
     state = next;
-    renderKey = keyOf(t);
-    renderAll();
+    const k = keyOf(t);
+    if (k !== renderKey) {
+      renderKey = k;
+      renderAll();
+    }
+    // A failed read leaves an open sheet to the host's handoff (L1); a successful one reconciles it with the new data.
+    if (next !== 'failed') reconcile();
     emit('events', events.slice());
     emit('state', state, { ...info });
   }
@@ -129,7 +158,10 @@ export function createController(o: ControllerOptions): Controller {
       renderKey = k;
       renderAll();
     }
-    if (changed) emit('events', events.slice());
+    if (changed) {
+      reconcile();
+      emit('events', events.slice());
+    }
   }, now);
 
   // ---- mounts ----
@@ -186,6 +218,27 @@ export function createController(o: ControllerOptions): Controller {
     }
     return overlayRoot;
   }
+  /** Draws the sheet for `e` into the overlay; `focus` moves focus to its heading. */
+  function drawSheet(e: WidgetEvent, focus: boolean) {
+    const root = ensureOverlay();
+    const style = styleFor(root);
+    const [scrim, panel] = renderSheet(e, { season: o.season, year: o.year, tz: o.tz, localBox: o.localBox, onClose: () => api.close(), onShare: share });
+    root.replaceChildren(...(style ? [style] : []), scrim, panel);
+    const h = panel.querySelector('h2');
+    if (h) {
+      h.setAttribute('tabindex', '-1');
+      if (focus) h.focus();
+    }
+  }
+  /** Keeps the open sheet in step with the data: closes it when its event is gone, redraws it when the event changed. */
+  function reconcile() {
+    if (!openEv) return;
+    const cur = events.find((e) => e.id === openEv!.id);
+    if (!cur) return api.close();
+    if (JSON.stringify(cur) === JSON.stringify(openEv)) return;
+    openEv = cur;
+    drawSheet(cur, overlayRoot ? activeIn(overlayRoot) != null : false);
+  }
   function resolve(id: string): WidgetEvent | null {
     return events.find((e) => e.id === id) ?? events.find((e) => e.formerIds.includes(id)) ?? null;
   }
@@ -206,18 +259,11 @@ export function createController(o: ControllerOptions): Controller {
       if (openEv && openEv.id === e.id) return true;
       if (!openEv) {
         opener = deepActive();
+        openerId = opener?.getAttribute('data-id') ?? null;
         document.addEventListener('keydown', onKey);
       }
       openEv = e;
-      const root = ensureOverlay();
-      const style = styleFor(root);
-      const [scrim, panel] = renderSheet(e, { season: o.season, year: o.year, tz: o.tz, localBox: o.localBox, onClose: () => api.close(), onShare: share });
-      root.replaceChildren(...(style ? [style] : []), scrim, panel);
-      const h = panel.querySelector('h2');
-      if (h) {
-        h.setAttribute('tabindex', '-1');
-        h.focus();
-      }
+      drawSheet(e, true);
       emit('open', e.id);
       return true;
     },
@@ -227,9 +273,11 @@ export function createController(o: ControllerOptions): Controller {
       openEv = null;
       document.removeEventListener('keydown', onKey);
       overlayRoot?.replaceChildren();
-      const back = opener;
+      // The opener may have been replaced by a re-render: fall back to the current row of the same event.
+      const back = opener && opener.isConnected ? opener : openerId ? rowFor(openerId) : null;
       opener = null;
-      if (back && back.isConnected) back.focus();
+      openerId = null;
+      back?.focus();
       emit('close', id);
     },
     isOpen: () => openEv !== null,
