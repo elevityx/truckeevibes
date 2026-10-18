@@ -45,7 +45,7 @@ describe('AC-M1-104 ttusd.cases.json', () => {
 
 describe('directory', () => {
   it('has the eleven schools with one-line addresses and venue names', () => {
-    expect(Object.keys(SCHOOLS).sort()).toEqual(['acms', 'district', 'dte', 'ges', 'kbe', 'nths', 'nts', 'shs', 'te', 'tle', 'ths']);
+    expect(Object.keys(SCHOOLS).sort()).toEqual(['acms', 'district', 'dte', 'ges', 'kbe', 'nths', 'nts', 'shs', 'te', 'ths', 'tle']);
     expect(SCHOOLS.te.address).toBe('11911 Donner Pass Rd, Truckee, CA 96161');
     expect(SCHOOLS.nths.address).toBe('2945 Polaris Rd, Tahoe City, CA 96145');
     expect(SCHOOLS.district.name).toBe('Tahoe Truckee Unified School District');
