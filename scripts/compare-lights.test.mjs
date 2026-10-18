@@ -19,7 +19,7 @@ const arow = (l, over = {}) => ({
   allDay: false, startDate: null, endDate: null, timeKnown: true, venue: l.venue, address: l.address, town: null, lat: l.lat, lng: l.lng,
   categories: [], age: 'unknown', adultsOnly: l.adults_only, url: l.url, ticketUrl: null, ...over,
 });
-const vrow = (i) => ({ ...arow(lrow(900 + i)), id: `11111111-0000-4000-8000-${String(i).padStart(12, '0')}`, origin: 'vibes', title: `SYNTHETIC-VIBES-${i}` });
+const vrow = (i) => ({ ...arow(lrow(1)), id: `11111111-0000-4000-8000-${String(i).padStart(12, '0')}`, origin: 'vibes', title: `SYNTHETIC-VIBES-${i}` });
 const MIRROR = { state: 'confirmed', confirmedAt: iso(10 * MIN), heldSince: null, heldCount: 0 };
 const page = (events, over = {}) => ({
   version: 1, scope: 'lights', season: 'halloween', year: 2026, stale: false, pageComplete: true, dataAt: iso(2 * MIN), mirror: MIRROR,

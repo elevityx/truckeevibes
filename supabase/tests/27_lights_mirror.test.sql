@@ -176,9 +176,6 @@ create function pg_temp.removed_of(p_tag text, p_n int) returns boolean language
   select removed_at is not null from private.lights_mirror where lights_id = pg_temp.lid(p_tag, p_n) $$;
 create function pg_temp.mapi(p_year int, p_season text default 'halloween') returns jsonb language sql as $$
   select pg_temp.jb(pg_temp.v('anon', format('public.api_events_v1(p_scope => ''lights'', p_season => %L, p_year => %s)', p_season, p_year))) -> 'mirror' $$;
-create function pg_temp.lastrun(p_year int, p_season text default 'halloween') returns private.lights_mirror_runs language sql as $$
-  select r from private.lights_mirror_runs r where region_slug = 'truckee' and season = p_season and year = p_year
-   order by finished_at desc, (status = 'ok') limit 1 $$;
 create function pg_temp.nruns(p_year int, p_status text, p_season text default 'halloween') returns int language sql as $$
   select count(*)::int from private.lights_mirror_runs where region_slug = 'truckee' and season = p_season and year = p_year and status = p_status $$;
 -- run an expression as an authenticated caller with the given claim shape (03_admin_amr.test.sql); errors -> ERR:<state>
@@ -413,7 +410,8 @@ update private.lights_mirror_holds set first_obs_at = now() - interval '7 minute
 create temp table h07 as select pg_temp.snap('private.lights_mirror_holds') as s, pg_temp.snap('private.lights_mirror') as m;
 select pg_temp.ma('07c', '[]'::jsonb, 2051, 'halloween', '{"status":"aborted","abort_code":"partial"}');
 select is(pg_temp.r('07c', 'status'), 'aborted', 'AC-W3-07 an aborted submit returns status aborted');
-select is((pg_temp.lastrun(2051)).status || ':' || (pg_temp.lastrun(2051)).abort_code, 'aborted:partial', 'AC-W3-07 run row aborted with its code');
+select is((select string_agg(status || ':' || coalesce(abort_code, '-'), ',') from private.lights_mirror_runs where year = 2051 and status = 'aborted'),
+  'aborted:partial', 'AC-W3-07 run row aborted with its code');
 select is(pg_temp.snap('private.lights_mirror_holds'), (select s from h07), 'AC-W3-07 hold row byte-identical');
 select is(pg_temp.snap('private.lights_mirror'), (select m from h07), 'AC-W3-07 mirror rows untouched');
 select pg_temp.ma('07d', '[]'::jsonb, 2051, 'halloween', '{"status":"aborted","abort_code":"Bad-Code"}');

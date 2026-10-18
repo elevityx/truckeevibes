@@ -4,3 +4,4 @@ export * from './admin';
 export * from './sources';
 export * from './public';
 export * from './adminQueue';
+export * from './adminLights';

@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { DataError } from '@/lib/data/types';
 import type { LightsHold, LightsEventRow } from '@/lib/data/adminLights';
-import { acceptPayload, acceptErrorMessage, canShowAnyway, holdSummary, STALE_SET_MESSAGE } from './lightsTab';
+import { acceptPayload, acceptErrorMessage, canShowAnyway, currentPair, holdSummary, STALE_SET_MESSAGE } from './lightsTab';
 
 const hold: LightsHold = {
   region: 'truckee', season: 'halloween', year: 2026, observations: 2,
@@ -50,5 +50,14 @@ describe('AC-W3-23 Show on Lights anyway', () => {
     expect(canShowAnyway(ev({ vetoed: false }))).toBe(false);
     expect(canShowAnyway(ev({ vetoed: false, coveredLive: true }))).toBe(false);
     expect(canShowAnyway(ev({ vetoed: false, shown: true, lightsInclude: 'yes' }))).toBe(false);
+  });
+});
+
+describe('currentPair (the tab opens on the pair Lights is showing, Pacific dates)', () => {
+  it.each([
+    ['2026-10-17T18:00:00Z', 'halloween', 2026], ['2026-11-02T12:00:00Z', 'christmas', 2026], ['2026-12-24T12:00:00Z', 'christmas', 2026],
+    ['2027-01-06T12:00:00Z', 'christmas', 2026], ['2027-01-08T12:00:00Z', 'halloween', 2027], ['2026-11-01T07:30:00Z', 'halloween', 2026],
+  ])('%s -> %s %s', (iso, season, year) => {
+    expect(currentPair(new Date(iso))).toEqual({ season, year });
   });
 });

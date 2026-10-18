@@ -9,7 +9,7 @@ export class IngestHttpError extends Error {
 }
 
 export interface IngestClientOpts { url: string; key: string; fetch: typeof globalThis.fetch; now?: () => number }
-export type IngestOp = 'due_sources' | 'submit_batch' | 'finish';
+export type IngestOp = 'due_sources' | 'submit_batch' | 'finish' | 'mirror_grant' | 'submit_lights_mirror';
 
 const safeCode = (v: unknown, status: number) => (typeof v === 'string' && /^[a-z0-9_]{1,40}$/.test(v) ? v : `http_${status}`);
 

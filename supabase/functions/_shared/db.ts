@@ -1,5 +1,5 @@
 // Service-role data access. The ONLY place the Edge Functions touch the database: the `svc_*` routines in `public`
-// (migrations 20261020000200_ingest_rpcs.sql and 20261020000400_jobs.sql), granted to service_role alone.
+// (migrations 20261020000200_ingest_rpcs.sql, 20261020000400_jobs.sql and 20261024000200_lights_mirror.sql), granted to service_role alone.
 // The client is built from function env, server-side only. Row shapes mirror those migrations; if a signature there
 // changes, this is the one file to edit. Modeled on TL:supabase/functions/_shared/db.ts.
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.117.3';
@@ -23,6 +23,18 @@ export interface BatchOut {
   run_id: string; status: string; new?: number; changed?: number; gone?: number; reasons?: string[]; geocode?: GeocodeRequest[];
   [key: string]: unknown;
 }
+/** `svc_issue_mirror_grant()`: a single-use grant for the truckee-lights mirror, or `{grant: null}` when not due (W3). */
+export interface MirrorGrantOut {
+  grant: string | null; run_id?: string;
+  source?: {
+    slug: string; allowed_hosts: string[]; allowed_methods: string[]; page_cap: number; etag: string | null; last_modified: string | null;
+    ingest_disposition: string; terms_recheck_at: string | null;
+  };
+}
+/** The mirror run (`p_run`): {region, season, year, status: 'ok'|'aborted', abort_code?, total}; the database validates it. */
+export type MirrorRun = Record<string, unknown>
+/** `svc_lights_mirror_apply` result: counts only. */
+export interface MirrorApplyOut { status: string; seen?: number; added?: number; changed?: number; removed?: number; held?: number; invalid?: number }
 export interface ClusterOut { processed: number; remaining: number; public_changed: boolean; busy?: boolean }
 
 export interface IngestDb {
@@ -32,6 +44,8 @@ export interface IngestDb {
   batch(grant: string, run: RunMeta, items: unknown[]): Promise<BatchOut>;
   setGeocode(venueId: string, lat: number | null, lng: number | null, geocoder: 'nominatim' | 'census'): Promise<void>;
   cluster(limit: number): Promise<ClusterOut>;
+  mirrorGrant(): Promise<MirrorGrantOut>;
+  mirrorApply(grant: string, run: MirrorRun, rows: unknown[]): Promise<MirrorApplyOut>;
 }
 
 /** `svc_weekly_report()`: numbers and source names only. Every key is optional so a consumer never trusts the shape. */
@@ -84,6 +98,16 @@ export function ingestDb(sb: SupabaseClient): IngestDb {
     async cluster(limit) {
       const r = await rpc<ClusterOut | null>(sb, 'svc_cluster_and_publish', { p_limit: limit });
       if (!r || typeof r !== 'object') throw new RpcError('svc_cluster_and_publish empty');
+      return r;
+    },
+    async mirrorGrant() {
+      const r = await rpc<MirrorGrantOut | null>(sb, 'svc_issue_mirror_grant', {});
+      if (!r || typeof r !== 'object') throw new RpcError('svc_issue_mirror_grant empty');
+      return r;
+    },
+    async mirrorApply(grant, run, rows) {
+      const r = await rpc<MirrorApplyOut | null>(sb, 'svc_lights_mirror_apply', { p_grant: grant, p_run: run, p_rows: rows });
+      if (!r || typeof r !== 'object') throw new RpcError('svc_lights_mirror_apply empty');
       return r;
     },
   };
