@@ -1,7 +1,7 @@
 // AC-W1-27 (repo half): /developers/ is built from the schema and listed in the sitemap; AGENTS.md carries V13.
 // Reads the static export, so it is a BUILD-TIME check: run `npm run build` first (CI `web` job does).
 import { describe, expect, it } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { REPO_ROOT } from './_testlib.mjs';
 
@@ -37,5 +37,18 @@ describe('W1.4 AGENTS.md', () => {
   });
   it('Layout lists functions/', () => {
     expect(agents).toContain('- `functions/` (Cloudflare Pages Functions');
+  });
+});
+
+describe('AC-W1-34 no last-known-good fallback (Amendment W1-2)', () => {
+  const walk = (d) => readdirSync(p(d), { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(d, e.name)) : [join(d, e.name)]));
+  it('no file under functions/ names an LKG entry or path', () => {
+    const hits = walk('functions').filter((f) => /lkg|last.?known.?good|x-tv-stale/i.test(read(f)) || /lkg/i.test(f));
+    expect(hits).toEqual([]);
+  });
+  it('the developers page and AGENTS.md say there is no stale fallback', () => {
+    expect(read('src', 'app', 'developers', 'page.tsx')).toMatch(/no stale fallback/i);
+    expect(read('AGENTS.md')).toMatch(/no stale fallback/i);
+    expect(read('AGENTS.md')).not.toMatch(/last-known-good copy/);
   });
 });

@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { handle, type Deps } from './events';
 import { ORIGINS } from '../../_lib/origins';
-import { cacheKey, lkgKey, putLkg, readLkg } from '../../_lib/lkg';
+import { cacheKey } from '../../_lib/cache';
 import { ENV, FakeCache, gen, jsonResponse, rawEnvelope, recordingFetch, type RecordingFetch } from '../../_lib/testing';
 import type { Env } from '../../_lib/types';
 
@@ -25,7 +25,7 @@ function setup(responder: Parameters<typeof recordingFetch>[0] = () => jsonRespo
   return { fetch, cache, logs, deps, call };
 }
 const headerMap = (r: Response) => Object.fromEntries([...r.headers.entries()].sort(([a], [b]) => a.localeCompare(b)));
-const FRESH_CC = 'public, max-age=60, s-maxage=300, stale-while-revalidate=300';
+const FRESH_CC = 'public, max-age=60, s-maxage=300';   // AC-W1-35 (Amendment W1-2: no stale-while-revalidate)
 
 describe('AC-W1-20 happy path headers and CORS', () => {
   it('200 with exactly content-type, cache-control, nosniff, vary (no Origin -> no ACAO)', async () => {
@@ -117,66 +117,52 @@ describe('AC-W1-22 edge cache', () => {
   });
 });
 
-describe('AC-W1-23 last known good', () => {
+describe('AC-W1-23 / AC-W1-33 upstream failure: 503, Retry-After, no data (no stale fallback)', () => {
   const failures: Array<[string, Parameters<typeof recordingFetch>[0]]> = [
     ['500', () => new Response('upstream secret text', { status: 500 })],
     ['timeout', (_u, init) => new Promise<Response>((_res, rej) => init.signal?.addEventListener('abort', () => rej(new Error('abort'))))],
     ['malformed body', () => jsonResponse({ hello: 'upstream secret text' })],
     ['network error', () => Promise.reject(new TypeError('upstream secret text'))],
+    ['success without a valid generation', () => jsonResponse(rawEnvelope({ n: 1, dataAt: '2026-10-17T20:00:00Z' }))],
   ];
-  const seedLkg = async (cache: FakeCache, ageMs: number) => {
-    const dataAt = gen(NOW - ageMs);
-    const env: Record<string, unknown> = { ...rawEnvelope({ n: 1, mirror: { state: 'confirmed', confirmedAt: dataAt, heldSince: null, heldCount: 0 } }), dataAt,
-      version: 1, scope: 'vibes', season: null, year: null, stale: false, pageComplete: true,
-      attribution: { name: 'TruckeeVibes', url: 'https://truckeevibes.com/' } };
-    await putLkg(cache, 'scope=vibes', JSON.stringify(env), dataAt);
-    return env;
-  };
   for (const [name, responder] of failures) {
-    it(`${name}: LKG 5 h 59 min old -> 200 stale:true, dataAt and mirror kept, x-tv-stale: 1, no-store`, async () => {
+    it(`${name}: 503 {error:'unavailable'}, Retry-After: 60, no-store, nothing cached`, async () => {
       const s = setup(responder);
-      const lkg = await seedLkg(s.cache, (5 * 60 + 59) * 60_000);
-      const r = await handleWithShortTimeout(s, 'scope=vibes');
-      expect(r.status).toBe(200);
-      expect(r.headers.get('x-tv-stale')).toBe('1');
-      expect(r.headers.get('cache-control')).toBe('no-store');
-      const body = await r.json();
-      expect(body.stale).toBe(true);
-      expect(body.dataAt).toBe(lkg.dataAt);
-      expect(body.mirror).toEqual(lkg.mirror);
-      expect(s.logs.at(-1)).toMatch(/ cache=lkg$/);
-    });
-    it(`${name}: LKG 6 h 1 min old -> 503 unavailable`, async () => {
-      const s = setup(responder);
-      await seedLkg(s.cache, (6 * 60 + 1) * 60_000);
-      const r = await handleWithShortTimeout(s, 'scope=vibes');
-      expect(r.status).toBe(503);
-      const text = await r.text();
-      expect(JSON.parse(text)).toEqual({ error: 'unavailable' });
-      expect(text).not.toContain('upstream');
-      expect(r.headers.get('cache-control')).toBe('no-store');
-      expect(s.logs.at(-1)).toMatch(/ cache=none$/);
-    });
-    it(`${name}: no LKG -> 503, body never carries upstream text`, async () => {
-      const s = setup(responder);
-      const r = await handleWithShortTimeout(s, 'scope=vibes');
+      s.deps.rpcTimeoutMs = 50;
+      const r = await s.call('scope=vibes', { origin: 'https://truckeelights.com' });
       expect(r.status).toBe(503);
       expect(await r.text()).toBe('{"error":"unavailable"}');
+      expect(r.headers.get('retry-after')).toBe('60');
+      expect(r.headers.get('cache-control')).toBe('no-store');
+      expect(r.headers.get('access-control-allow-origin')).toBe('https://truckeelights.com');
+      expect(s.cache.store.size).toBe(0);
+      expect(s.logs.at(-1)).toMatch(/ cache=none$/);
     });
   }
-  it('a fresh success also writes the LKG copy', async () => {
+  it('AC-W1-33 an earlier fresh body that has expired is never served during an outage', async () => {
+    let up = true;
+    const s = setup(() => (up ? jsonResponse(rawEnvelope({ n: 1 })) : new Response('x', { status: 500 })));
+    expect((await (await s.call('scope=vibes')).json()).count).toBe(1);
+    s.cache.store.delete(cacheKey('scope=vibes'));                         // the fresh TTL ran out
+    up = false;
+    const r = await s.call('scope=vibes');
+    expect(r.status).toBe(503);
+    expect(await r.text()).toBe('{"error":"unavailable"}');
+    expect(r.headers.get('retry-after')).toBe('60');
+  });
+  it('a success writes only the fresh entry (with its generation)', async () => {
     const s = setup();
     await s.call('scope=vibes');
-    expect(s.cache.puts.sort()).toEqual(['https://truckeevibes.com/__cache/api/v1/events?scope=vibes',
-      'https://truckeevibes.com/__lkg/api/v1/events?scope=vibes']);
+    expect(s.cache.puts).toEqual(['https://truckeevibes.com/__cache/api/v1/events?scope=vibes']);
+    expect(s.cache.store.get(cacheKey('scope=vibes'))!.headers['cache-control']).toBe('s-maxage=300');
+  });
+  it('a failing cache write never fails the response', async () => {
+    const s = setup();
+    s.cache.failPut = () => true;
+    const r = await s.call('scope=vibes');
+    expect(r.status).toBe(200);
   });
 });
-
-// the timeout case needs the Function's RPC timeout to fire quickly; handle takes it from deps.rpcTimeoutMs
-async function handleWithShortTimeout(s: ReturnType<typeof setup>, qs: string) {
-  s.deps.rpcTimeoutMs = 50;
-  return s.call(qs);
-}
 
 describe('AC-W1-24 upstream 400', () => {
   it("RPC 400 with details:'limit' -> 400 {error:'bad_param', param:'limit'}", async () => {
@@ -231,7 +217,7 @@ describe('AC-W1-25 methods and logs', () => {
     const lines = [...s.logs, ...s2.logs];
     expect(lines.length).toBe(5);
     for (const l of lines) {
-      expect(l).toMatch(/^api v1 status=\d{3} scope=(vibes|lights|-) count=\d+ cache=(hit|miss|lkg|none)$/);
+      expect(l).toMatch(/^api v1 status=\d{3} scope=(vibes|lights|-) count=\d+ cache=(hit|miss|none)$/);
       expect(l).not.toMatch(/\?|title|truckee|secret|2026/);
     }
     expect(s.logs[0]).toBe('api v1 status=200 scope=vibes count=2 cache=miss');
@@ -240,44 +226,9 @@ describe('AC-W1-25 methods and logs', () => {
   });
 });
 
-describe('Amendment W1-1: no LKG resurrection', () => {
+describe('Amendment W1-2: best-effort generation guard on fresh writes', () => {
   const G = (min: number) => gen(NOW - 60 * 60_000 + min * 60_000);
-  // a responder that walks through a script: an envelope (n events at generation g) or an outage
-  const scripted = (steps: Array<{ n: number; g: string } | 'down'>) => {
-    let i = 0;
-    return () => {
-      const st = steps[Math.min(i++, steps.length - 1)];
-      return st === 'down' ? new Response('upstream secret text', { status: 500 }) : jsonResponse(rawEnvelope({ n: st.n, dataAt: st.g }));
-    };
-  };
-  const expireFresh = (c: FakeCache, canonical = 'scope=vibes') => c.store.delete(cacheKey(canonical));
-
-  it('AC-W1-30 fresh success with 0 events + rejected LKG write -> a later outage is 503, never the earlier 1-event body', async () => {
-    const s = setup(scripted([{ n: 1, g: G(0) }, { n: 0, g: G(10) }, 'down']));
-    expect((await (await s.call('scope=vibes')).json()).count).toBe(1);
-    expect((await readLkg(s.cache, 'scope=vibes'))!.env.count).toBe(1);
-    expireFresh(s.cache);
-    s.cache.failPut = (k) => k === lkgKey('scope=vibes');
-    const r2 = await s.call('scope=vibes');
-    expect((await r2.json()).count).toBe(0);
-    expect(await readLkg(s.cache, 'scope=vibes')).toBeNull();               // the older LKG was deleted (fail closed)
-    expireFresh(s.cache);
-    const r3 = await s.call('scope=vibes');
-    expect(r3.status).toBe(503);
-    expect(await r3.text()).toBe('{"error":"unavailable"}');
-  });
-  it('AC-W1-30 control: with no write failure an outage serves the newer LKG (0 events), not the older one', async () => {
-    const s = setup(scripted([{ n: 1, g: G(0) }, { n: 0, g: G(10) }, 'down']));
-    await s.call('scope=vibes');
-    expireFresh(s.cache);
-    await s.call('scope=vibes');
-    expireFresh(s.cache);
-    const r3 = await s.call('scope=vibes');
-    expect(r3.status).toBe(200);
-    const b = await r3.json();
-    expect(b).toMatchObject({ stale: true, count: 0, dataAt: G(10) });
-  });
-  it('AC-W1-31 two responses finishing in reverse order keep the newer generation in the cache and the LKG', async () => {
+  it('two responses finishing in reverse order: the fresh entry keeps the newer generation', async () => {
     const release: Array<() => void> = [];
     const bodies = [rawEnvelope({ n: 1, dataAt: G(0) }), rawEnvelope({ n: 0, dataAt: G(10) })];
     let i = 0;
@@ -291,33 +242,12 @@ describe('Amendment W1-1: no LKG resurrection', () => {
     const older = req();
     const newer = req();
     await new Promise((r) => setTimeout(r, 0));
-    release[1]();                                                          // the newer finishes first
+    release[1]();
     expect((await (await newer).json()).count).toBe(0);
     await Promise.all(waits.splice(0));
-    release[0]();                                                          // then the older one
+    release[0]();
     expect((await (await older).json()).count).toBe(1);
     await Promise.all(waits.splice(0));
     expect(JSON.parse(s.cache.store.get(cacheKey('scope=vibes'))!.body).dataAt).toBe(G(10));
-    expect((await readLkg(s.cache, 'scope=vibes'))!.generation).toBe(G(10));
-  });
-  it('AC-W1-32 an LKG without a valid generation is never served (header missing, malformed, mismatched, bad body)', async () => {
-    const good = JSON.stringify({ ...rawEnvelope({ n: 1, dataAt: G(0) }), version: 1, scope: 'vibes', season: null, year: null, stale: false,
-      pageComplete: true, attribution: { name: 'TruckeeVibes', url: 'https://truckeevibes.com/' } });
-    const cases: Array<[string, Record<string, string>]> = [
-      [good, {}], [good, { 'x-tv-generation': '2026-10-17T19:00:00Z' }], [good, { 'x-tv-generation': G(5) }], ['not json', { 'x-tv-generation': G(0) }],
-      [JSON.stringify({ dataAt: G(0), count: 1 }), { 'x-tv-generation': G(0) }],                   // not a valid envelope
-    ];
-    for (const [b, h] of cases) {
-      const s = setup(() => new Response('x', { status: 500 }));
-      s.cache.store.set(lkgKey('scope=vibes'), { body: b, headers: { 'cache-control': 's-maxage=21600', ...h } });
-      const r = await s.call('scope=vibes');
-      expect(r.status).toBe(503);
-    }
-  });
-  it('an RPC success without a valid generation is treated as a failure (not cached)', async () => {
-    const s = setup(() => jsonResponse(rawEnvelope({ n: 1, dataAt: '2026-10-17T20:00:00Z' })));
-    const r = await s.call('scope=vibes');
-    expect(r.status).toBe(503);
-    expect(s.cache.store.size).toBe(0);
   });
 });
