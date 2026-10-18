@@ -88,6 +88,19 @@ $$;
 create function pg_temp.tstz(p_days int, p_hh int, p_mm int default 0, p_plus int default 0) returns timestamptz language sql as $$
   select pg_temp.ts(p_days, p_hh, p_mm, p_plus)::timestamptz $$;
 
+create function pg_temp.mk_source(p_slug text, p_class text default 'organizer', p_trust text default 'review',
+                                  p_hosts text[] default array['example.test'], p_cadence text default '24h') returns uuid
+language plpgsql as $$
+declare v_id uuid;
+begin
+  insert into public.sources (slug, name, homepage_url, allowed_hosts, family, class, trust, enabled, cadence,
+      ingest_disposition, allowed_methods, terms_url, terms_hash, terms_reviewed_by, terms_reviewed_at, terms_recheck_at)
+    values (p_slug, 'Src ' || p_slug, 'https://example.test/' || p_slug, p_hosts, 'ics', p_class::public.source_class,
+            p_trust::public.source_trust, true, p_cadence, 'permitted', array['feed'], 'https://example.test/terms',
+            repeat('a', 64), 'test', now(), now() + interval '30 days')
+    returning id into v_id;
+  return v_id;
+end $$;
 create function pg_temp.mk_run(p_src text, p_status text, p_finished interval) returns uuid language plpgsql as $$
 declare v_id uuid := gen_random_uuid();
 begin
@@ -169,10 +182,10 @@ select pg_temp.eq($$(select c.decision from public.review_cards c where c.source
 select pg_temp.eq($$(select trust::text from public.sources where slug = 'x-new')$$, 'review', 'AC-M1-101 a newer non-ok run does not supersede: demoted');
 select pg_temp.eq($$(select trust::text from public.sources where slug = 'x-fresh') || '/' || (select status from public.held_runs where source_id = (select id from public.sources where slug = 'x-fresh'))$$, 'auto/pending', 'AC-M1-101 a 2-day-old held run is untouched');
 
--- AC-M1-103 grants unchanged: the same 24 explicit EXECUTE grants as the predecessor (01_acl pins the exact list) ------
+-- AC-M1-103 grants unchanged: the same 24 grant statements (27 role grants) as the predecessor (01_acl pins the exact list) ------
 select pg_temp.eq($$(select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace, lateral aclexplode(p.proacl) a
    where n.nspname in ('public', 'private') and a.privilege_type = 'EXECUTE' and a.grantee in (select oid from pg_roles where rolname in ('anon', 'authenticated', 'service_role')))$$,
-  'GRANTCOUNT', 'AC-M1-103 the explicit EXECUTE grant count is unchanged');
+  '27', 'AC-M1-103 the explicit EXECUTE grant count is unchanged');
 
 select * from finish();
 rollback;
