@@ -28,12 +28,13 @@ describe('AC-R1b-05 Rail', () => {
     const on = renderToStaticMarkup(createElement(Rail, { counts, filters: { ...EMPTY_FILTERS, areas: ['truckee'] }, onChange: () => {} }));
     expect(on.match(/checked=""/g)).toHaveLength(1);
   });
-  it('Kind: 13 entries sorted by count then label order', () => {
+  it('Kind: 14 entries sorted by count then label order', () => {
     const k = items('Kind');
-    expect(k).toHaveLength(13);
+    expect(k).toHaveLength(14);
     expect(k[0]).toBe('Food & drink 23');
     expect(k).toContain('Family 0');
     expect(k).toContain('Kids 0');
+    expect(k).toContain('Schools 0');
     expect(k.slice(0, 4)).toEqual(['Food & drink 23', 'Nightlife 22', 'Arts 11', 'Music 10']);
   });
   it('Calendars we read lists the active names and links All sources', () => {
