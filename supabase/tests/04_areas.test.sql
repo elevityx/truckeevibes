@@ -38,12 +38,12 @@ select is(pg_temp.q($$private.area_for('NaN'::double precision, -120.18::double 
 
 select is(pg_temp.q($$(select count(*) from public.areas)$$), '7', 'seven areas are seeded');
 select is(pg_temp.q($$(select count(*) from public.regions where slug = 'truckee')$$), '1', 'truckee region is seeded');
-select is(pg_temp.q($$(select count(*) from public.categories)$$), '13', 'thirteen categories are seeded (twelve plus kids, R4a)');
+select is(pg_temp.q($$(select count(*) from public.categories)$$), '14', 'fourteen categories are seeded (twelve plus kids R4a, plus schools A12)');
 select is(pg_temp.q($$(select count(*) from private.blocked_terms)$$), '10', 'ten blocked terms are seeded');
-select is(pg_temp.q($$(select string_agg(slug, ',' order by slug) from public.sources where enabled)$$), 'alibi-truckee,tdrpd,truckee-chamber,visit-lake-tahoe', 'only the rollout sources are enabled');
+select is(pg_temp.q($$(select string_agg(slug, ',' order by slug) from public.sources where enabled)$$), 'alibi-truckee,tdrpd,truckee-chamber,ttusd-acms,ttusd-district,ttusd-nths,ttusd-nts,ttusd-te,ttusd-ths,ttusd-tle,visit-lake-tahoe', 'only the rollout sources are enabled');
 -- M1 (S1.13a) records the terms evidence of the nine M1 sources, so the M0 seed state now holds for the other five only.
 select is(pg_temp.q($$(select count(*) from public.sources where slug not in ('diamond-peak','ivgid','visit-lake-tahoe','truckee-chamber','tdrpd','alibi-truckee','tahoe-donner','truckee-roundhouse','arts-for-the-schools')
-  and (ingest_disposition <> 'unknown' or trust <> 'link_only'))$$), '0',
+  and slug not like 'ttusd-%' and (ingest_disposition <> 'unknown' or trust <> 'link_only'))$$), '0',
   'the five link-only listings are seeded unknown + link_only');
 select is(pg_temp.q($$(select count(*) from public.sources where trust = 'link_only')$$), '8', 'eight link_only sources: the five listings + the three permission-gated M1 sources');
 select is(pg_temp.q($$(select count(*) from public.sources where slug in ('diamond-peak','ivgid','visit-lake-tahoe','truckee-chamber','tdrpd','alibi-truckee','tahoe-donner','truckee-roundhouse','arts-for-the-schools'))$$),
