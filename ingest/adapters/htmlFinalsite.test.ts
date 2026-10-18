@@ -54,14 +54,14 @@ describe('AC-M1-111 TE', () => {
     const at = s.net.calls.map((c) => c.at);
     for (let i = 1; i < at.length; i++) expect(at[i] - at[i - 1]).toBeGreaterThanOrEqual(5000);
   });
-  it('yields the five passing items and five filtered', async () => {
+  it('yields the four listings (the all-day pumpkin patch is dropped for the timed one, r4) and six filtered', async () => {
     const r = await te().run();
     expect(r.status).toBe('ok');
     expect(r.httpStatus).toBe(200);
     expect(r.items.map((i) => `${i.title}|${i.allDay ? 'allday' : i.startsAt}`)).toEqual([
-      'Pumpkin Patch|allday', 'Pumpkin Patch|2026-10-18T16:00:00Z', 'Walk- a- thon|2026-10-23T16:30:00Z', 'Halloween Parade|2026-10-30T19:00:00Z', 'Winter Band Concert|2026-11-18T02:00:00Z',
+      'Pumpkin Patch|2026-10-18T16:00:00Z', 'Walk- a- thon|2026-10-23T16:30:00Z', 'Halloween Parade|2026-10-30T19:00:00Z', 'Winter Band Concert|2026-11-18T02:00:00Z',
     ]);
-    expect(r.filtered).toBe(5);
+    expect(r.filtered).toBe(6);
     expect(r.contentHash).toMatch(/^[0-9a-f]{64}$/);
     for (const i of r.items) { expect(i.url).toBe('https://te.ttusd.org/calendar'); expect(i.venueName).toBe('Truckee Elementary School'); }
     expect(JSON.stringify(r.items)).not.toContain('office');
@@ -69,10 +69,7 @@ describe('AC-M1-111 TE', () => {
   it('out-of-window "Picture Day" is neither an item nor counted; all-day dates are kept as local dates', async () => {
     const r = await te().run();
     expect(r.items.some((i) => i.title.startsWith('Picture'))).toBe(false);
-    const allDay = r.items.find((i) => i.allDay)!;
-    expect(allDay.startDate).toBe('2026-10-18');
-    expect(allDay.endDate).toBe('2026-10-19');
-    expect(allDay.startsAt).toBe('2026-10-18T07:00:00Z');
+    expect(r.items.some((i) => i.allDay)).toBe(false);
   });
   it('Thanksgiving (all-day 11-25 .. 11-28) is a school-source notice, so it is dropped but its dates parse', async () => {
     const r = await te().run();
@@ -80,7 +77,7 @@ describe('AC-M1-111 TE', () => {
   });
   it('externalKey is <eventId>#<startZ>', async () => {
     const r = await te().run();
-    expect(r.items[2].externalKey).toBe('1003#2026-10-23T16:30:00Z');
+    expect(r.items[1].externalKey).toBe('1003#2026-10-23T16:30:00Z');
   });
 });
 

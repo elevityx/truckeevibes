@@ -114,10 +114,26 @@ describe('AC-M1-109 truncation', () => {
 
 describe('AC-M1-110 in-feed dedupe (r3)', () => {
   const run = (raw: RawOccurrence[], source: SchoolKey = 'te') => filterSchoolItems(raw, source, TZ, NOW);
-  it('TE all-day + timed "Pumpkin Patch" on one day -> two items, dup 0', () => {
+  it('TE all-day + timed "Pumpkin Patch" on one day -> one listing (the timed one), dup 1 (r4, AC-M1-121)', () => {
     const r = run([allDayOcc('Pumpkin Patch', '2026-10-18', { externalKey: '1#a' }), occ('Pumpkin Patch', { externalKey: '2#b', startsAt: '2026-10-18T16:00:00Z', endsAt: '2026-10-18T18:00:00Z' })]);
+    expect(r.items).toHaveLength(1);
+    expect(r.items[0].allDay).toBe(false);
+    expect(r.items[0].startsAt).toBe('2026-10-18T16:00:00Z');
+    expect(r.reasons.dup).toBe(1);
+  });
+  it('AC-M1-121: the same result in every processing order', () => {
+    const a = allDayOcc('Pumpkin Patch', '2026-10-18', { externalKey: '9#a' });
+    const t = occ('Pumpkin Patch', { externalKey: '1#b', startsAt: '2026-10-18T16:00:00Z', endsAt: '2026-10-19T00:00:00Z' });
+    for (const raw of [[a, t], [t, a]]) {
+      const r = run(raw);
+      expect(r.items.map((i) => i.startsAt)).toEqual(['2026-10-18T16:00:00Z']);
+    }
+  });
+  it('AC-M1-122: musical at 14:00, 19:00 and 19:00 (duplicate) -> two listings', () => {
+    const r = run([occ('Fall Musical', { externalKey: '1#a', startsAt: '2026-10-20T21:00:00Z' }), occ('Fall Musical', { externalKey: '2#b', startsAt: '2026-10-21T02:00:00Z' }),
+      occ('Fall Musical', { externalKey: '3#c', startsAt: '2026-10-21T02:00:00Z' })]);
     expect(r.items).toHaveLength(2);
-    expect(r.reasons.dup ?? 0).toBe(0);
+    expect(r.reasons.dup).toBe(1);
   });
   it('two timed "Fall Musical" at 14:00 and 19:00 -> two items', () => {
     const r = run([occ('Fall Musical', { externalKey: '1#a', startsAt: '2026-10-20T21:00:00Z' }), occ('Fall Musical', { externalKey: '2#b', startsAt: '2026-10-21T02:00:00Z' })]);

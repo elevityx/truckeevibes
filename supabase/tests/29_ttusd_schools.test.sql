@@ -307,7 +307,18 @@ select pg_temp.arrive('ttusd-te', pg_temp.tad('pp-t', 'Pumpkin Patch', 35, 'Truc
 select pg_temp.arrive('ttusd-district', pg_temp.tad('pq-d', 'Pumpkin Patch', 36, 'Truckee Elementary School'));
 select pg_temp.arrive('ttusd-te', pg_temp.ti('pq-t', 'Pumpkin Patch', 36, 9, 'Truckee Elementary School'));
 select pg_temp.eq($$pg_temp.n_events('Pumpkin Patch', 35)$$, '1', 'AC-M1-116 district all-day + TE all-day "Pumpkin Patch" on one date -> one event');
-select pg_temp.eq($$pg_temp.n_events('Pumpkin Patch', 36)$$, '2', 'AC-M1-116 district all-day + TE 09:00 -> two events');
+select pg_temp.eq($$pg_temp.n_events('Pumpkin Patch', 36)$$, '1', 'AC-M1-116/121 district all-day + TE 09:00 -> one listing (r4)');
+select pg_temp.eq($$(select (not all_day)::text || '|' || time_known::text from public.events where title = 'Pumpkin Patch' and start_day = (now() at time zone 'America/Los_Angeles')::date + 36)$$, 'true|true', 'AC-M1-121 ... and it is the timed one');
+-- timed first, then all-day (TE 9:00, then district all-day on another day) -> still one, timed wins
+select pg_temp.arrive('ttusd-te', pg_temp.ti('pr-t', 'Pumpkin Patch', 37, 9, 'Truckee Elementary School'));
+select pg_temp.arrive('ttusd-district', pg_temp.tad('pr-d', 'Pumpkin Patch', 37, 'Truckee Elementary School'));
+select pg_temp.eq($$pg_temp.n_events('Pumpkin Patch', 37)$$, '1', 'AC-M1-121 timed first, all-day second -> one listing');
+select pg_temp.eq($$(select (not all_day)::text from public.events where title = 'Pumpkin Patch' and start_day = (now() at time zone 'America/Los_Angeles')::date + 37)$$, 'true', 'AC-M1-121 ... the timed one');
+-- AC-M1-122: 14:00 + 19:00 + 19:00 (district duplicate) -> two listings
+select pg_temp.arrive('ttusd-te', pg_temp.ti('mu-1', 'School Musical', 39, 14, 'Truckee Elementary School'));
+select pg_temp.arrive('ttusd-te', pg_temp.ti('mu-2', 'School Musical', 39, 19, 'Truckee Elementary School'));
+select pg_temp.arrive('ttusd-district', pg_temp.ti('mu-3', 'School Musical', 39, 19, 'Truckee Elementary School'));
+select pg_temp.eq($$pg_temp.n_events('School Musical', 39)$$, '2', 'AC-M1-122 14:00, 19:00 and 19:00 (duplicate) -> two listings');
 -- same key at different venues -> two
 select pg_temp.arrive('ttusd-district', pg_temp.ti('vx-d', 'Winter Concert', 38, 18, 'Truckee Elementary School'));
 select pg_temp.arrive('ttusd-ths', pg_temp.ti('vx-t', 'Winter Concert', 38, 18, 'Truckee High School'));

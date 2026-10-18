@@ -46,8 +46,8 @@ update public.sources set enabled = true, trust = 'auto'
  where slug in ('ttusd-district', 'ttusd-ths', 'ttusd-nths', 'ttusd-acms', 'ttusd-nts', 'ttusd-te', 'ttusd-tle');
 
 -- ---------------------------------------------------------------------------------------------------------------------
--- ttusd_twin: a pure equality lookup. Same school venue, same normalized title and the same exact start instant (timed) or the
--- same start date (all-day). Equality is transitive and every TTUSD item joins only through it, so all copies with one key share
+-- ttusd_twin: a pure lookup (r4). Same school venue, same normalized title, same local date, and the same exact start instant (timed);
+-- an all-day copy joins the timed listing of its day (one listing per event per day or per distinct start). Equality is transitive and every TTUSD item joins only through it, so all copies with one key share
 -- one event whatever the arrival order. No grant: only cluster_and_publish calls it.
 -- ---------------------------------------------------------------------------------------------------------------------
 create function private.ttusd_twin(p_se public.source_events) returns uuid
@@ -62,9 +62,14 @@ language sql stable set search_path = '' as $$
      and e.merged_into is null
      and y.venue_id = p_se.venue_id
      and y.normalized_title = p_se.normalized_title
-     and ((not y.all_day and not p_se.all_day and y.starts_at = p_se.starts_at)
-          or (y.all_day and p_se.all_day and y.start_date = p_se.start_date))
-   order by e.id
+     and y.start_day = p_se.start_day
+     and (   (not y.all_day and not p_se.all_day and y.starts_at = p_se.starts_at)   -- same title, date and start
+          or (y.all_day and p_se.all_day)                                            -- two all-day copies of one date
+          or (p_se.all_day and not y.all_day)                                        -- r4: an all-day copy joins a timed listing
+          or (not p_se.all_day and y.all_day                                         -- r4: a timed item joins an all-day-only listing
+              and not exists (select 1 from public.source_events z where z.cluster_id = e.id and z.source_status <> 'gone'
+                                 and not z.all_day and z.id <> p_se.id)))
+   order by (y.all_day = p_se.all_day and not p_se.all_day) desc, e.id
    limit 1
 $$;
 
@@ -160,7 +165,7 @@ begin
   v_sig_before := private.event_public_sig(e);
   v_locked := e.locked_fields;
 
-  select array_agg(se order by s.priority desc, se.first_seen_at, se.id) into c
+  select array_agg(se order by (s.slug like 'ttusd-%' and se.all_day), s.priority desc, se.first_seen_at, se.id) into c  -- A12: a TTUSD all-day copy never outranks a timed one
     from public.source_events se join public.sources s on s.id = se.source_id
    where se.cluster_id = e.id and se.source_status <> 'gone';
   v_n := coalesce(cardinality(c), 0);
