@@ -363,6 +363,35 @@ select pg_temp.arrive('ttusd-te', pg_temp.ti('timed1', 'Fall Concert', 49, 18, '
 select pg_temp.eq($$pg_temp.ev_n('timed1')$$, 'published', 'AC-M1-117 a timed TTUSD item with coordinates and a link -> published');
 select pg_temp.eq($$pg_temp.ev_col('timed1', 'confidence')$$, '80', 'AC-M1-117 ... at confidence 80 (40 + 15 + 15 + 10)');
 
+-- Review P2: contributor ordering and lifecycle -----------------------------------------------------------------------
+-- (a) all-day only: source priority still decides. TE (organizer, 100) all-day wins over district (municipal, 80) all-day, with or without a non-TTUSD item.
+select pg_temp.arrive('ttusd-district', pg_temp.tad('po-d', 'Spring Fair', 52, 'Truckee Elementary School', '{"categoriesHint":["schools"]}'));
+select pg_temp.arrive('ttusd-te', pg_temp.tad('po-t', 'Spring Fair', 52, 'Truckee Elementary School', '{"categoriesHint":["schools"]}'));
+select pg_temp.eq($$(select (select url from public.source_events where external_key = 'po-t') = organizer_url from public.events where id = pg_temp.ev_id('po-t'))$$, 'true',
+  'review P2: in an all-day-only cluster the organizer school copy still outranks the district copy');
+-- (b) a non-TTUSD organizer all-day and a TTUSD all-day at one venue keep source priority (no demotion without a timed TTUSD item)
+select pg_temp.arrive('ttusd-te', pg_temp.tad('pn2', 'Autumn Fair', 53, 'Truckee Elementary School', '{"categoriesHint":["schools"]}'));
+select pg_temp.rb('pn', 'x-b', (select jsonb_agg(item order by k) from (
+  select 'xb1' as k, jsonb_set(pg_temp.item('xb1', 'Oktoberfest Truckee 2026', 40, 18, '{"venueName":"Cluster Hall"}'), '{startsAt}', to_jsonb(pg_temp.ts(40, 18, 20))) as item
+  union all select 'pn1', pg_temp.tad('pn1', 'Autumn Fair', 53, 'Truckee Elementary School', '{"categoriesHint":["community"],"url":"https://example.test/e/pn1"}')) q));
+select pg_temp.cluster_all();
+select pg_temp.eq($$(select count(distinct cluster_id) from public.source_events where external_key in ('pn1', 'pn2'))$$, '1', 'review P2: fixture, the non-TTUSD copy joined the school event by the unchanged rule');
+select pg_temp.eq($$(select e.organizer_url from public.events e where e.id = pg_temp.ev_id('pn2'))$$, 'https://te.ttusd.org/calendar', 'review P2: a TTUSD organizer all-day copy keeps source authority over a lower-priority non-TTUSD copy');
+-- (c) removing a timed occurrence does not resurrect the all-day copy next to a sibling timed listing
+select pg_temp.arrive('ttusd-district', pg_temp.tad('lc-a', 'Spring Musical', 55, 'Truckee Elementary School'));
+select pg_temp.arrive('ttusd-te', pg_temp.ti('lc-1', 'Spring Musical', 55, 14, 'Truckee Elementary School'));
+select pg_temp.arrive('ttusd-te', pg_temp.ti('lc-2', 'Spring Musical', 55, 19, 'Truckee Elementary School'));
+select pg_temp.eq($$(select count(*) from public.events where title = 'Spring Musical' and status = 'published' and merged_into is null)$$, '2', 'review P2: all-day + 14:00 + 19:00 -> two published listings');
+update public.source_events set source_status = 'gone', needs_cluster = true where external_key = 'lc-1';
+select private.recompute_event(cluster_id) from public.source_events where external_key = 'lc-1';
+select pg_temp.cluster_all();
+select pg_temp.eq($$(select string_agg(to_char(starts_at at time zone 'America/Los_Angeles', 'HH24:MI') || case when all_day then 'A' else '' end, ',' order by starts_at)
+   from public.events where title = 'Spring Musical' and status = 'published' and merged_into is null)$$, '19:00', 'review P2: after 14:00 goes away only the 19:00 listing remains (no resurrected all-day)');
+update public.source_events set source_status = 'live', needs_cluster = true where external_key = 'lc-1';
+select pg_temp.cluster_all();
+select pg_temp.eq($$(select string_agg(to_char(starts_at at time zone 'America/Los_Angeles', 'HH24:MI'), ',' order by starts_at)
+   from public.events where title = 'Spring Musical' and status = 'published' and merged_into is null)$$, '14:00,19:00', 'review P2: when 14:00 returns both timed listings are back, still no all-day');
+
 -- AC-M1-118 public read -------------------------------------------------------------------------------------------------
 select pg_temp.eq($$(select count(*) from public.list_events() where title = 'Thanksgiving Break' and all_day and categories = array['schools'])$$, '1', 'AC-M1-118 a published TTUSD notice is in list_events with all_day true and categories {schools}');
 select is(pg_temp.q($$(select count(*) from public.list_events() where 'schools' = any (categories))$$),

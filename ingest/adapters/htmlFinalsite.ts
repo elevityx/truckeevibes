@@ -6,9 +6,33 @@ import { decodeEntities, toUtcFromLocal } from '../core/normalize';
 import { filterSchoolItems, SCHOOLS, type RawOccurrence, type SchoolKey } from '../core/ttusd';
 
 const OCCUR = /^(\d+)_(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ)_(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ)$/;
-const TAG = /<a\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
 const ATTR = /\s([a-z-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
 const DAY_MS = 86_400_000;
+
+/**
+ * Every `<a ...>` start tag, in one linear pass. A tag ends at the first `>` outside quotes; a tag that never ends (or has an
+ * unterminated quote) is malformed and throws `Layout` after at most one scan to the end of the page.
+ */
+function anchorTags(html: string): string[] {
+  const out: string[] = [];
+  const lower = html.toLowerCase();
+  let i = 0;
+  for (;;) {
+    const at = lower.indexOf('<a', i);
+    if (at < 0) return out;
+    const c = lower.charCodeAt(at + 2);
+    if (!(c === 32 || c === 9 || c === 10 || c === 13 || c === 12 || c === 62 || c === 47)) { i = at + 2; continue; } // `<abbr`, `<article`...
+    let j = at + 2;
+    let q = 0;
+    for (; j < html.length; j++) {
+      const ch = html.charCodeAt(j);
+      if (q) { if (ch === q) q = 0; } else if (ch === 34 || ch === 39) q = ch; else if (ch === 62) break;
+    }
+    if (j >= html.length) throw new Layout();
+    out.push(html.slice(at, j + 1));
+    i = j + 1;
+  }
+}
 
 class Layout extends Error { constructor() { super('layout_changed'); } }
 
@@ -29,8 +53,8 @@ function parsePage(html: string, tz: string, url: string): RawOccurrence[] {
   if (!html.includes('fsCalendarDaybox')) throw new Layout();
   const out: RawOccurrence[] = [];
   let anchors = 0;
-  for (const tag of html.matchAll(TAG)) {
-    const a = attrsOf(tag[0]);
+  for (const tag of anchorTags(html)) {
+    const a = attrsOf(tag);
     if (!(a.get('class') ?? '').split(/\s+/).includes('fsCalendarEventLink')) continue;
     anchors++;
     const title = decodeEntities(a.get('title') ?? '').replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim();

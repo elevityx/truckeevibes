@@ -143,3 +143,28 @@ describe('AC-M1-113 layout and config fail closed', () => {
     await expect(adapter.fetch({ source: src, fetch: pf, now: new Date(NOW) })).rejects.toBeInstanceOf(FetchError);
   });
 });
+
+describe('adversarial markup is rejected in linear time (review P1)', () => {
+  const MB = 1024 * 1024;
+  const cases: [string, string][] = [
+    ['repeated unterminated anchors', '<a '.repeat(MB / 3)],
+    ['unterminated quotes', '<a x="'.repeat(MB / 6)],
+    ['attribute-like noise', `<a ${'b '.repeat(MB / 2)}`],
+    ['one huge closed tag', `<a ${'b '.repeat(MB / 2)}>`],
+    ['many tiny tags', '<a class="x">'.repeat(MB / 13)],
+  ];
+  it.each(cases)('1 MB of %s finishes in < 200 ms', async (_n, junk) => {
+    const page = `<td class="fsCalendarDaybox">${junk}`;
+    const s = te({ pages: { '2026-10': page } });
+    const t0 = performance.now();
+    const r = await s.run();
+    const ms = performance.now() - t0;
+    expect(ms).toBeLessThan(200);
+    expect(r.items.length === 0 || r.status === 'ok').toBe(true);
+  });
+  it('an unterminated tag after valid anchors is layout_changed', async () => {
+    const page = fixture('finalsite/single_quoted.html').replace('</tr>', '<a class="fsCalendarEventLink" title="x" </tr>');
+    const r = await te({ pages: { '2026-10': page } }).run();
+    expect(`${r.status}:${r.errorCode}`).toBe('parse_error:layout_changed');
+  });
+});

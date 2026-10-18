@@ -158,17 +158,38 @@ declare
   v_sig_before jsonb; v_sig_after jsonb;
   v_conf smallint; v_summary text; v_status public.event_status; v_reason text; v_rule text; v_published timestamptz;
   v_all_cancelled boolean; v_card text; v_card_src uuid; v_close_decision text;
-  v_locked text[];
+  v_locked text[]; v_sib uuid;
 begin
   select * into e from public.events x where x.id = p_event_id for update;
   if not found then return false; end if;
   v_sig_before := private.event_public_sig(e);
   v_locked := e.locked_fields;
 
-  select array_agg(se order by (s.slug like 'ttusd-%' and se.all_day), s.priority desc, se.first_seen_at, se.id) into c  -- A12: a TTUSD all-day copy never outranks a timed one
+  select array_agg(se order by
+           -- A12: only inside a cluster that also holds a timed TTUSD item does a TTUSD all-day copy yield to it; everywhere else source priority rules
+           (s.slug like 'ttusd-%' and se.all_day and exists (select 1 from public.source_events t join public.sources ts on ts.id = t.source_id
+                                                             where t.cluster_id = se.cluster_id and t.source_status <> 'gone' and not t.all_day and ts.slug like 'ttusd-%')),
+           s.priority desc, se.first_seen_at, se.id) into c
     from public.source_events se join public.sources s on s.id = se.source_id
    where se.cluster_id = e.id and se.source_status <> 'gone';
   v_n := coalesce(cardinality(c), 0);
+
+  -- A12 begin (r4): a cluster left holding only TTUSD all-day copies (its timed contributor went away) must not list them next to a
+  -- timed listing of the same event and day. Hand them to that listing; this cluster then has no live contributor and is unlisted.
+  if v_n > 0 and not exists (select 1 from unnest(c) x join public.sources s on s.id = x.source_id where not (s.slug like 'ttusd-%' and x.all_day)) then
+    select e2.id into v_sib
+      from public.events e2
+      join public.source_events y on y.cluster_id = e2.id
+      join public.sources ys on ys.id = y.source_id
+     where e2.id <> e.id and e2.merged_into is null and ys.slug like 'ttusd-%' and y.source_status <> 'gone' and not y.all_day
+       and exists (select 1 from unnest(c) x where x.venue_id = y.venue_id and x.normalized_title = y.normalized_title and x.start_day = y.start_day)
+     order by e2.id limit 1;
+    if v_sib is not null then
+      update public.source_events set cluster_id = v_sib, needs_cluster = true where id in (select x.id from unnest(c) x);
+      return private.recompute_event(e.id);
+    end if;
+  end if;
+  -- A12 end
 
   if v_n > 0 then
     -- first non-null among the contributors, ordered by source priority then first seen
