@@ -43,6 +43,7 @@ interface Fake {
   logs: string[];
   clock: { t: number };
   geocodeCalls: { q: string; at: number }[];
+  censusCalls: { a: string; at: number }[];
   geoSet: unknown[][];
   clusterCalls: number[];
   deps: Record<string, unknown>;
@@ -50,10 +51,11 @@ interface Fake {
 function fake(over: {
   batch?: (g: string, run: unknown, items: unknown[]) => Promise<unknown>;
   geocode?: (q: string) => Promise<{ lat: number; lng: number } | null>;
+  census?: (a: string) => Promise<{ lat: number; lng: number } | null>;
   cluster?: () => Promise<{ processed: number; remaining: number; public_changed: boolean; busy?: boolean }>;
   nonce?: (n: string) => Promise<boolean>;
 } = {}): Fake {
-  const f: Fake = { calls: [], logs: [], clock: { t: T0 }, geocodeCalls: [], geoSet: [], clusterCalls: [], deps: {} };
+  const f: Fake = { calls: [], logs: [], clock: { t: T0 }, geocodeCalls: [], censusCalls: [], geoSet: [], clusterCalls: [], deps: {} };
   const seen = new Set<string>();
   f.deps = {
     db: {
@@ -76,9 +78,15 @@ function fake(over: {
         return over.cluster ? over.cluster() : Promise.resolve({ processed: 0, remaining: 0, public_changed: false });
       },
     },
-    geocode: (q: string) => {
+    geocode: async (q: string) => {
       f.geocodeCalls.push({ q, at: f.clock.t });
-      return over.geocode ? over.geocode(q) : Promise.resolve({ lat: 39.328, lng: -120.1833 });
+      const hit = over.geocode ? await over.geocode(q) : { lat: 39.328, lng: -120.1833 };
+      return { hit, status: hit ? 200 : 404 };
+    },
+    census: async (a: string) => {
+      f.censusCalls.push({ a, at: f.clock.t });
+      const hit = over.census ? await over.census(a) : null;
+      return { hit, status: hit ? 200 : 404 };
     },
     now: () => f.clock.t,
     sleep: (ms: number) => { f.clock.t += ms; return Promise.resolve(); },
@@ -403,4 +411,80 @@ Deno.test('AC-M1-69(c) 20 fast entries: 20 lookups, starts >= 1,000 ms apart, al
   const { starts } = await geoRun(20, []);
   assertEquals(starts.length, 20);
   for (let i = 1; i < starts.length; i++) assert(starts[i] - starts[i - 1] >= 1000, `gap ${i}`);
+});
+
+// Amendment 11. AC-M1-99 / AC-M1-100: Census first for a street address, Nominatim fallback, one log line per request.
+const geoAddr = (n: number) => Array.from({ length: n }, (_, i) => ({
+  venue_id: `00000000-0000-4000-8000-0000000001${String(i).padStart(2, '0')}`,
+  query: `Hall ${i}, ${i + 10} Pine St, Truckee`, address: `${i + 10} Pine St, Truckee, CA 96161`,
+}));
+const submit = async (f: Fake) => {
+  const handle = await load();
+  return handle(await signedRequest(op({ op: 'submit_batch', grant: 'g'.repeat(64), run: { status: 'ok' }, items: [] })), ENV, f.deps);
+};
+
+Deno.test('AC-M1-99 an address venue resolves via Census (no Nominatim call) and is stored with geocoder census', async () => {
+  const a = geoAddr(1);
+  const f = fake({
+    batch: () => Promise.resolve({ run_id: 'r', status: 'ok', new: 1, changed: 0, gone: 0, geocode: a }),
+    census: () => Promise.resolve({ lat: 39.3, lng: -120.2 }),
+  });
+  await submit(f);
+  assertEquals(f.censusCalls.map((c) => c.a), [a[0].address]);
+  assertEquals(f.geocodeCalls.length, 0);
+  assertEquals(f.geoSet, [[a[0].venue_id, 39.3, -120.2, 'census']]);
+});
+
+Deno.test('AC-M1-99 a Census miss falls through to Nominatim (address, then the full query); both failing stores null', async () => {
+  const a = geoAddr(1);
+  const f = fake({
+    batch: () => Promise.resolve({ run_id: 'r', status: 'ok', new: 1, changed: 0, gone: 0, geocode: a }),
+    census: () => Promise.resolve(null),
+    geocode: (q) => Promise.resolve(q === a[0].query ? { lat: 39.31, lng: -120.21 } : null),
+  });
+  await submit(f);
+  assertEquals(f.geocodeCalls.map((c) => c.q), [a[0].address, a[0].query]);
+  assertEquals(f.geoSet, [[a[0].venue_id, 39.31, -120.21, 'nominatim']]);
+  for (let i = 1; i < f.geocodeCalls.length; i++) assert(f.geocodeCalls[i].at - f.geocodeCalls[i - 1].at >= 1000, 'nominatim calls stay >= 1 s apart');
+  const f2 = fake({
+    batch: () => Promise.resolve({ run_id: 'r', status: 'ok', new: 1, changed: 0, gone: 0, geocode: a }),
+    census: () => Promise.resolve(null), geocode: () => Promise.resolve(null),
+  });
+  await submit(f2);
+  assertEquals(f2.geoSet, [[a[0].venue_id, null, null, 'nominatim']]);
+});
+
+Deno.test('AC-M1-99 a venue without an address skips Census and uses the query only', async () => {
+  const f = fake({ batch: () => Promise.resolve({ run_id: 'r', status: 'ok', new: 1, changed: 0, gone: 0, geocode: geo(1) }) });
+  await submit(f);
+  assertEquals(f.censusCalls.length, 0);
+  assertEquals(f.geocodeCalls.map((c) => c.q), [geo(1)[0].query]);
+});
+
+Deno.test('AC-M1-100 the geocode log line carries src/status/hit and never the query text', async () => {
+  const a = geoAddr(2);
+  const f = fake({
+    batch: () => Promise.resolve({ run_id: 'r', status: 'ok', new: 2, changed: 0, gone: 0, geocode: a }),
+    census: (x) => Promise.resolve(x === a[0].address ? { lat: 39.3, lng: -120.2 } : null),
+    geocode: () => Promise.resolve(null),
+  });
+  await submit(f);
+  const lines = f.logs.filter((l) => l.startsWith('geocode '));
+  assertEquals(lines, ['geocode src=census status=200 hit=1', 'geocode src=nominatim status=404 hit=0']);
+  assertFalse(f.logs.join('\n').includes('Pine St'));
+});
+
+Deno.test('census() parses addressMatches, sends the UA, and a miss or HTTP error is a null hit with its status', async () => {
+  const mod = await import('./index.ts') as unknown as { census: (a: string, f?: typeof fetch) => Promise<{ hit: { lat: number; lng: number } | null; status: number }> };
+  let url = ''; let ua = '';
+  const ok = ((u: string, init: RequestInit) => { url = u; ua = (init.headers as Record<string, string>)['User-Agent']; return Promise.resolve(new Response(JSON.stringify({ result: { addressMatches: [{ coordinates: { x: -120.2, y: 39.3 } }] } }), { status: 200 })); }) as unknown as typeof fetch;
+  assertEquals(await mod.census('12593 Donner Pass Rd, Truckee, CA 96161', ok), { hit: { lat: 39.3, lng: -120.2 }, status: 200 });
+  assert(url.startsWith('https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=12593%20Donner%20Pass%20Rd%2C%20Truckee%2C%20CA%2096161&benchmark=Public_AR_Current&format=json'), url);
+  assert(ua.startsWith('TruckeeVibesBot/'));
+  const miss = (() => Promise.resolve(new Response(JSON.stringify({ result: { addressMatches: [] } }), { status: 200 }))) as unknown as typeof fetch;
+  assertEquals(await mod.census('x', miss), { hit: null, status: 200 });
+  const bad = (() => Promise.resolve(new Response('no', { status: 503 }))) as unknown as typeof fetch;
+  assertEquals(await mod.census('x', bad), { hit: null, status: 503 });
+  const boom = (() => Promise.reject(new Error('net'))) as unknown as typeof fetch;
+  assertEquals(await mod.census('x', boom), { hit: null, status: 0 });
 });
