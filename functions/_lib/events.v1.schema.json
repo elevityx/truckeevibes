@@ -12,7 +12,7 @@
     "season": { "type": ["string", "null"], "enum": ["halloween", "christmas", null], "description": "The season (scope=lights), else null." },
     "year": { "type": ["integer", "null"], "description": "The season's December year (scope=lights), else null." },
     "dataAt": { "type": "string", "format": "date-time", "description": "When the database produced this page (UTC)." },
-    "stale": { "type": "boolean", "description": "true when the database was unreachable and this is the last good copy (at most 6 hours old)." },
+    "stale": { "type": "boolean", "description": "Always false in v1: there is no stale fallback (an outage is a 503). Kept so clients can keep checking it." },
     "pageComplete": { "type": "boolean", "description": "true when this is the last page (nextCursor is null)." },
     "mirror": {
       "type": "object",

@@ -116,13 +116,13 @@ curl '${ENDPOINT}?scope=lights&season=christmas&year=2026'`}</code></pre>
           <ul>
             <li><code>400</code> <code>{'{"error":"bad_param","param":"<name>"}'}</code>: a parameter is unknown, repeated or out of range.</li>
             <li><code>405</code>: only GET, HEAD and OPTIONS are allowed.</li>
-            <li><code>503</code> <code>{'{"error":"unavailable"}'}</code>: the database is unreachable and no recent copy exists. Try again in a minute.</li>
+            <li><code>503</code> <code>{'{"error":"unavailable"}'}</code> with <code>retry-after: 60</code>: the database is unreachable. There is no stale fallback; try again in a minute.</li>
           </ul>
 
-          <h2 className="h2">Caching and staleness</h2>
+          <h2 className="h2">Caching</h2>
           <ul>
-            <li>Fresh responses: <code>cache-control: public, max-age=60, s-maxage=300, stale-while-revalidate=300</code>. A new event can take about 5 minutes to appear.</li>
-            <li>If the database is down, the last good copy (up to 6 hours old) is served with <code>stale: true</code>, the original <code>dataAt</code> and the header <code>x-tv-stale: 1</code>.</li>
+            <li>Fresh responses: <code>cache-control: public, max-age=60, s-maxage=300</code>. A new or removed event can take up to 5 minutes to show.</li>
+            <li>No stale fallback: if the database is down you get a <code>503</code>, never an older copy of the list, so a removed event never comes back. <code>stale</code> is always <code>false</code>.</li>
             <li>For <code>scope=lights</code>, <code>mirror.state</code> says whether the Truckee Lights list was last read cleanly (<code>confirmed</code>) or a large removal is waiting for review (<code>held</code>).</li>
           </ul>
 
