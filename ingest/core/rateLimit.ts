@@ -3,12 +3,18 @@ export interface Spacer {
   /** FIFO per host: waits for earlier callers on `host`, then until `gapMs` after the last start, then records this start. */
   acquire(host: string, gapMs: number): Promise<number>;
   lastStart(host: string): number | undefined;
+  /** Sets a sticky minimum gap for `host` (the max of all raises). Later acquires wait `max(gapMs, floor)` (A12 family floor). */
+  raise(host: string, gapMs: number): void;
 }
 
 export function createSpacer(deps: { now: () => number; sleep: (ms: number) => Promise<void> }): Spacer {
   const starts = new Map<string, number>();
   const tails = new Map<string, Promise<void>>();
+  const floors = new Map<string, number>();
   return {
+    raise(host, gapMs) {
+      if (Number.isFinite(gapMs) && gapMs > (floors.get(host) ?? 0)) floors.set(host, gapMs);
+    },
     async acquire(host, gapMs) {
       const prev = tails.get(host) ?? Promise.resolve();
       let release!: () => void;
@@ -18,7 +24,7 @@ export function createSpacer(deps: { now: () => number; sleep: (ms: number) => P
         await prev; // prev only ever resolves (never rejects)
         const last = starts.get(host);
         if (last !== undefined) {
-          const wait = last + gapMs - deps.now();
+          const wait = last + Math.max(gapMs, floors.get(host) ?? 0) - deps.now();
           if (wait > 0) await deps.sleep(wait);
         }
         const at = deps.now();

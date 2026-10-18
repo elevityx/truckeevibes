@@ -4,7 +4,7 @@ import { realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { adapters as defaultAdapters } from './adapters/index';
 import { callIngest, IngestHttpError } from './core/hmacClient';
-import { createPoliteFetch, FetchError } from './core/politeFetch';
+import { createPoliteFetch, FetchError, spacingKey } from './core/politeFetch';
 import { createSpacer } from './core/rateLimit';
 import { validateSourceEvent } from './core/normalize';
 import { applyNotices } from './core/notices';
@@ -168,7 +168,7 @@ export async function main(deps: RunDeps): Promise<number> {
   // 3 sources at a time, never two on the same host
   const pending = [...grants];
   const activeHosts = new Set<string>();
-  const hostOf = (g: GrantOut) => (g.source.allowed_hosts[0] ?? g.source.slug).toLowerCase();
+  const hostOf = (g: GrantOut) => spacingKey(g.source.allowed_hosts[0] ?? g.source.slug); // a host family (TTUSD) counts as one host
   await new Promise<void>((resolve) => {
     let running = 0;
     const pump = () => {
