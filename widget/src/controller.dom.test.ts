@@ -73,6 +73,31 @@ describe('AC-W2-05 staleness (first match wins)', () => {
     else expect(c.events.map((e) => e.id)).toEqual([uuid(1)]);
   });
 
+  it.each([
+    ['held', { state: 'held', confirmedAt: iso(NOW - 10 * MIN), heldSince: iso(NOW - 5 * MIN), heldCount: 2 }],
+    ['none', { state: 'none', confirmedAt: null, heldSince: null, heldCount: 0 }],
+    ['an expired confirmation', { state: 'confirmed', confirmedAt: iso(NOW - 361 * MIN), heldSince: null, heldCount: 0 }],
+  ])('multi-page: page 2 reporting %s -> failed, no events (W2 review P1)', async (_n, m2) => {
+    const p1 = confirmedEnv([upcoming(1)], 10, { nextCursor: 'p2' });
+    const p2 = confirmedEnv([upcoming(2)], 10, { mirror: m2 });
+    const fn = (async (u: RequestInfo | URL) => jsonResponse(new URL(String(u)).searchParams.get('cursor') ? p2 : p1)) as typeof fetch;
+    const c = make(fn);
+    await settle();
+    expect(c.state).toBe('failed');
+    expect(c.events).toEqual([]);
+  });
+
+  it('multi-page: both pages held -> held with all events', async () => {
+    const m = { state: 'held', confirmedAt: iso(NOW - 10 * MIN), heldSince: iso(NOW - 5 * MIN), heldCount: 2 };
+    const p1 = confirmedEnv([upcoming(1)], 10, { nextCursor: 'p2', mirror: m });
+    const p2 = confirmedEnv([upcoming(2)], 10, { mirror: m });
+    const fn = (async (u: RequestInfo | URL) => jsonResponse(new URL(String(u)).searchParams.get('cursor') ? p2 : p1)) as typeof fetch;
+    const c = make(fn);
+    await settle();
+    expect(c.state).toBe('held');
+    expect(c.events.map((e) => e.id)).toEqual([uuid(1), uuid(2)]);
+  });
+
   it('the state info carries the note and the times', async () => {
     const c = make(serve(confirmedEnv([upcoming(1)], 91)).fn);
     const infos: unknown[] = [];
@@ -289,6 +314,79 @@ describe('AC-W2-06 lifecycle', () => {
     expect(got).toEqual([[uuid(1), uuid(2), uuid(3)], [uuid(7), uuid(8)]]);
     expect(el.shadowRoot!.querySelectorAll('.erow')).toHaveLength(2);
     expect(c.events.map((e) => e.id)).toEqual([uuid(7), uuid(8)]);
+  });
+
+  it('a successful refresh that removes the open event closes the sheet and emits close (W2 review P2)', async () => {
+    const c = make(serve(base(), confirmedEnv([upcoming(3)])).fn);
+    await settle();
+    const closed: string[] = [];
+    c.on('close', (id) => closed.push(id));
+    c.open(uuid(1));
+    await c.refresh();
+    expect(c.isOpen()).toBe(false);
+    expect(closed).toEqual([uuid(1)]);
+    expect(panel()).toBeNull();
+  });
+
+  it('a successful refresh that changes the open event redraws the sheet from the new data', async () => {
+    const c = make(serve(base(), confirmedEnv([upcoming(1, { title: 'Renamed' }), upcoming(3)])).fn);
+    await settle();
+    c.open(uuid(1));
+    await c.refresh();
+    expect(c.openId()).toBe(uuid(1));
+    expect(overlay()!.shadowRoot!.querySelector('h2.etitle')!.textContent).toBe('Renamed');
+  });
+
+  it('a failed refresh leaves the open sheet to the host (handoff contract)', async () => {
+    const c = make(serve(base(), () => jsonResponse({ error: 'unavailable' }, 503)).fn);
+    await settle();
+    const closed: string[] = [];
+    c.on('close', (id) => closed.push(id));
+    c.open(uuid(1));
+    await c.refresh();
+    expect(c.state).toBe('failed');
+    expect(c.isOpen()).toBe(true);
+    expect(closed).toEqual([]);
+  });
+
+  it('the tick that expires the open event closes the sheet', async () => {
+    const ending = upcoming(1, { startsAt: iso(NOW - 120 * MIN), endsAt: iso(NOW - 58 * MIN) });
+    const c = make(serve(confirmedEnv([ending, upcoming(5)])).fn);
+    await settle();
+    c.open(uuid(1));
+    await vi.advanceTimersByTimeAsync(3 * MIN);
+    expect(c.isOpen()).toBe(false);
+  });
+
+  it('an identical refresh keeps the focused row node (W2 review P2)', async () => {
+    const c = make(serve(base()).fn);
+    const el = document.body.appendChild(document.createElement('div'));
+    c.mountList(el);
+    await settle();
+    const row = el.shadowRoot!.querySelectorAll<HTMLElement>('.erow')[1];
+    row.focus();
+    await c.refresh();
+    expect(row.isConnected).toBe(true);
+    expect(el.shadowRoot!.activeElement).toBe(row);
+  });
+
+  it('a changed refresh moves focus to the same event row, and close returns focus to the replacement row', async () => {
+    const s = serve(base(), confirmedEnv([lightsEv, vibesEv, upcoming(3), upcoming(4)]), confirmedEnv([lightsEv, vibesEv, upcoming(3), upcoming(6)]));
+    const c = make(s.fn);
+    const el = document.body.appendChild(document.createElement('div'));
+    c.mountList(el);
+    await settle();
+    const row = () => el.shadowRoot!.querySelector<HTMLElement>(`.erow[data-id="${uuid(2)}"]`)!;
+    row().focus();
+    await c.refresh();
+    expect(el.shadowRoot!.activeElement).toBe(row());
+    row().click();
+    expect(c.openId()).toBe(uuid(2));
+    const opener = row();
+    await c.refresh();
+    expect(opener.isConnected).toBe(false);
+    c.close();
+    expect(el.shadowRoot!.activeElement).toBe(row());
   });
 
   it('emits events before state on every load', async () => {

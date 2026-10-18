@@ -83,3 +83,24 @@ describe('fetchAll', () => {
     expect(r.env.stale).toBe(true);
   });
 });
+
+describe('mirror status across pages (W2 review P1)', () => {
+  const held = { state: 'held', confirmedAt: '2026-10-15T14:48:00.000000Z', heldSince: '2026-10-15T14:49:00.000000Z', heldCount: 2 };
+  const two = (m2: Record<string, unknown>, m1?: Record<string, unknown>) => {
+    const p1 = page(1, 1, 'a');
+    if (m1) p1.mirror = m1;
+    const p2 = { ...page(2, 1, null), mirror: m2 };
+    return pagedFetch({ '': () => jsonResponse(p1), a: () => jsonResponse(p2) }).fn;
+  };
+  it('a later page that disagrees on the mirror snapshot -> inconsistent', async () => {
+    expect(await fetchAll(opts(two(held)))).toEqual({ error: 'inconsistent' });
+    expect(await fetchAll(opts(two({ state: 'none', confirmedAt: null, heldSince: null, heldCount: 0 })))).toEqual({ error: 'inconsistent' });
+    expect(await fetchAll(opts(two({ state: 'confirmed', confirmedAt: '2026-10-15T07:00:00.000000Z', heldSince: null, heldCount: 0 })))).toEqual({ error: 'inconsistent' });
+  });
+  it('pages that agree keep their (held) mirror state', async () => {
+    const r = await fetchAll(opts(two(held, held)));
+    if ('error' in r) throw new Error(r.error);
+    expect(r.env.mirror.state).toBe('held');
+    expect(r.events).toHaveLength(2);
+  });
+});
