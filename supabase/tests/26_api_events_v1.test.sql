@@ -290,7 +290,7 @@ end $$;
 create function pg_temp.vibes(p_extra text default '') returns text language sql as $$
   select $q$p_scope => 'vibes', p_areas => array['truckee'], p_limit => 500$q$ || p_extra $$;
 create function pg_temp.lights(p_season text, p_year int, p_extra text default '') returns text language sql as $$
-  select format('p_scope => %L, p_season => %L, p_year => %s', p_season, p_year, p_year) || p_extra $$;
+  select format('p_scope => ''lights'', p_season => %L, p_year => %s', p_season, p_year) || p_extra $$;
 create function pg_temp.lights_s(p_season text default null) returns text language sql as $$
   select pg_temp.lights(coalesce(p_season, pg_temp.sseason()), pg_temp.syear(),
                         format(', p_from => %L::date, p_to => %L::date', pg_temp.sday(), pg_temp.sday())) $$;
@@ -432,7 +432,7 @@ select is(pg_temp.keys((select j -> 'region' from env_keys)), 'localBox,tz', 'AC
 select is(pg_temp.keys((select j #> '{region,localBox}' from env_keys)), 'maxLat,maxLng,minLat,minLng', 'AC-W1-09 localBox keys');
 select is((select j #>> '{region,tz}' from env_keys), 'America/Los_Angeles', 'region.tz from public.regions');
 select is((select array_agg(distinct pg_temp.keys(x)) from env_keys, jsonb_array_elements(j -> 'events') x),
-  array['address,adultsOnly,age,allDay,categories,description,endDate,endsAt,formerIds,id,lat,lng,origin,pageUrl,startDate,startsAt,summary,timeKnown,ticketUrl,title,town,url,venue'],
+  array['address,adultsOnly,age,allDay,categories,description,endDate,endsAt,formerIds,id,lat,lng,origin,pageUrl,startDate,startsAt,summary,ticketUrl,timeKnown,title,town,url,venue'],
   'AC-W1-09 every vibes row has exactly the schema keys (a title containing status/confidence/lights changes nothing)');
 select ok(not exists (select 1 from env_keys, jsonb_array_elements(j -> 'events') x, jsonb_object_keys(x) k
                        where k in ('confidence','field_sources','locked_fields','lights_include','lights_season','lights_override_at',
@@ -469,7 +469,7 @@ select is((select x - 'id' from env_l10, jsonb_array_elements(j -> 'events') x w
 select is((select count(*)::int from env_l10, jsonb_array_elements(j -> 'events') x where x ->> 'title' = 'Lights House Tour'), 2,
   'AC-W1-10 two mirror rows with identical titles at one venue 10 min apart stay two rows');
 select is((select array_agg(distinct pg_temp.keys(x)) from env_l10, jsonb_array_elements(j -> 'events') x),
-  array['address,adultsOnly,age,allDay,categories,description,endDate,endsAt,formerIds,id,lat,lng,origin,pageUrl,startDate,startsAt,summary,timeKnown,ticketUrl,title,town,url,venue'],
+  array['address,adultsOnly,age,allDay,categories,description,endDate,endsAt,formerIds,id,lat,lng,origin,pageUrl,startDate,startsAt,summary,ticketUrl,timeKnown,title,town,url,venue'],
   'AC-W1-09 every lights row has exactly the schema keys');
 
 -- ---------------------------------------------------------------------------------------------------------------------
