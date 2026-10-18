@@ -371,9 +371,8 @@ select pg_temp.eq($$(select (select url from public.source_events where external
   'review P2: in an all-day-only cluster the organizer school copy still outranks the district copy');
 -- (b) a non-TTUSD organizer all-day and a TTUSD all-day at one venue keep source priority (no demotion without a timed TTUSD item)
 select pg_temp.arrive('ttusd-te', pg_temp.tad('pn2', 'Autumn Fair', 53, 'Truckee Elementary School', '{"categoriesHint":["schools"]}'));
-select pg_temp.rb('pn', 'x-b', (select jsonb_agg(item order by k) from (
-  select 'xb1' as k, jsonb_set(pg_temp.item('xb1', 'Oktoberfest Truckee 2026', 40, 18, '{"venueName":"Cluster Hall"}'), '{startsAt}', to_jsonb(pg_temp.ts(40, 18, 20))) as item
-  union all select 'pn1', pg_temp.tad('pn1', 'Autumn Fair', 53, 'Truckee Elementary School', '{"categoriesHint":["community"],"url":"https://example.test/e/pn1"}')) q));
+select pg_temp.mk_source('x-dmo', 'dmo', 'review');
+select pg_temp.rb('pn', 'x-dmo', jsonb_build_array(pg_temp.tad('pn1', 'Autumn Fair', 53, 'Truckee Elementary School', '{"categoriesHint":["community"],"url":"https://example.test/e/pn1"}')));
 select pg_temp.cluster_all();
 select pg_temp.eq($$(select count(distinct cluster_id) from public.source_events where external_key in ('pn1', 'pn2'))$$, '1', 'review P2: fixture, the non-TTUSD copy joined the school event by the unchanged rule');
 select pg_temp.eq($$(select e.organizer_url from public.events e where e.id = pg_temp.ev_id('pn2'))$$, 'https://te.ttusd.org/calendar', 'review P2: a TTUSD organizer all-day copy keeps source authority over a lower-priority non-TTUSD copy');
