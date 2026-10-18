@@ -357,7 +357,7 @@ select pg_temp.eq($$(select count(*) from public.list_events() where title = 'Th
 select is(pg_temp.q($$(select count(*) from public.list_events() where 'schools' = any (categories))$$),
   pg_temp.q($$(select count(*) from public.events e join public.event_categories c on c.event_id = e.id where c.category = 'schools' and e.status = 'published' and e.merged_into is null)$$),
   'AC-M1-118 school items are readable through list_events');
-select pg_temp.eq($$(select count(*) from public.list_events() where title = 'Oktoberfest Truckee 2026' and not ('schools' = any (categories)))$$, '1', 'AC-M1-118 a non-school (Chamber-style) event is listed without the schools category');
+select pg_temp.eq($$(select count(*) from public.list_events() l where l.id = pg_temp.ev_id('xa1') and not ('schools' = any (l.categories)))$$, '1', 'AC-M1-118 a non-school (Chamber-style) event is listed without the schools category');
 
 select * from finish();
 rollback;
