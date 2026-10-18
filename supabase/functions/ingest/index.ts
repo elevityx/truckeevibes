@@ -6,10 +6,12 @@
 import { type BatchOut, type ClusterOut, type GeocodeRequest, type GrantOut, ingestDb, serviceClient, type IngestDb, type RunMeta } from '../_shared/db.ts';
 import { json, timingSafeEqual, UUID } from '../_shared/http.ts';
 
+export interface GeoOut { hit: { lat: number; lng: number } | null; status: number }
 export interface IngestEnv { hmacKey: string }
 export interface IngestDeps {
   db: IngestDb;
-  geocode(query: string): Promise<{ lat: number; lng: number } | null>;   // Nominatim, 1 req/s, UA, 10 s timeout
+  geocode(query: string): Promise<GeoOut>;   // Nominatim, 1 req/s, UA, 10 s timeout
+  census(address: string): Promise<GeoOut>;  // A11: US Census one-line geocoder, UA, 10 s timeout
   now(): number;                                                           // epoch milliseconds
   sleep?(ms: number): Promise<void>;
   log(line: string): void;
@@ -157,11 +159,35 @@ async function geocodeAll(entries: GeocodeRequest[], deps: IngestDeps): Promise<
       await sleep(wait);
       if (deps.now() - t0 >= GEOCODE_BUDGET_MS) break;          // the clock moved further than asked
     }
-    last = deps.now();
+    // A11: a street address tries Census first, then Nominatim with the address alone, then with the full query.
+    const addr = typeof entry.address === 'string' && /^\d/.test(entry.address.trim()) ? entry.address.trim() : null;
+    const steps: { src: 'census' | 'nominatim'; q: string }[] = [];
+    if (addr) { steps.push({ src: 'census', q: addr }, { src: 'nominatim', q: addr }); }
+    if (!addr || entry.query !== addr) steps.push({ src: 'nominatim', q: entry.query });
     let hit: { lat: number; lng: number } | null = null;
-    try { hit = await deps.geocode(entry.query); } catch { hit = null; }
+    let src: 'census' | 'nominatim' = 'nominatim';
+    let first = true;
+    let status = 0;
+    for (const step of steps) {
+      if (!first) {
+        const w = last + GEOCODE_GAP_MS - deps.now();
+        if (w > 0) {
+          if (deps.now() + w - t0 >= GEOCODE_BUDGET_MS) break;
+          await sleep(w);
+        }
+        if (deps.now() - t0 >= GEOCODE_BUDGET_MS) break;
+      }
+      first = false;
+      last = deps.now();
+      let out: GeoOut;
+      try { out = await (step.src === 'census' ? deps.census(step.q) : deps.geocode(step.q)); } catch { out = { hit: null, status: 0 }; }
+      src = step.src;
+      status = out.status;
+      if (out.hit) { hit = out.hit; break; }
+    }
+    if (!first) deps.log(`geocode src=${src} status=${status} hit=${hit ? 1 : 0}`);   // one line per request, never the query
     try {
-      await deps.db.setGeocode(entry.venue_id, hit ? hit.lat : null, hit ? hit.lng : null, 'nominatim');
+      await deps.db.setGeocode(entry.venue_id, hit ? hit.lat : null, hit ? hit.lng : null, src);
       stored++;
     } catch (e) {
       deps.log(`ingest geocode_store_failed code=${codeOf(e) ?? 'none'}`);
@@ -194,15 +220,31 @@ async function finish(deps: IngestDeps): Promise<Response> {
 }
 
 /** Nominatim: usage policy needs a descriptive User-Agent and at most one request per second (the caller paces). */
-export async function nominatim(query: string, doFetch: typeof fetch = fetch): Promise<{ lat: number; lng: number } | null> {
+export async function nominatim(query: string, doFetch: typeof fetch = fetch): Promise<GeoOut> {
   const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=us&q=${encodeURIComponent(query)}`;
-  const res = await doFetch(url, { headers: { 'User-Agent': USER_AGENT, 'Accept': 'application/json' }, signal: AbortSignal.timeout(10_000) });
-  if (!res.ok) { await res.body?.cancel(); return null; }
-  const rows = await res.json() as { lat?: string; lon?: string }[];
-  const first = Array.isArray(rows) ? rows[0] : undefined;
-  const lat = Number(first?.lat);
-  const lng = Number(first?.lon);
-  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+  try {
+    const res = await doFetch(url, { headers: { 'User-Agent': USER_AGENT, 'Accept': 'application/json' }, signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) { await res.body?.cancel(); return { hit: null, status: res.status }; }
+    const rows = await res.json() as { lat?: string; lon?: string }[];
+    const first = Array.isArray(rows) ? rows[0] : undefined;
+    const lat = Number(first?.lat);
+    const lng = Number(first?.lon);
+    return { hit: Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null, status: res.status };
+  } catch { return { hit: null, status: 0 }; }
+}
+
+/** A11: US Census one-line address geocoder (no key). Nominatim refuses the Supabase Edge egress; Census does not. */
+export async function census(address: string, doFetch: typeof fetch = fetch): Promise<GeoOut> {
+  const url = `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=${encodeURIComponent(address)}&benchmark=Public_AR_Current&format=json`;
+  try {
+    const res = await doFetch(url, { headers: { 'User-Agent': USER_AGENT, 'Accept': 'application/json' }, signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) { await res.body?.cancel(); return { hit: null, status: res.status }; }
+    const body = await res.json() as { result?: { addressMatches?: { coordinates?: { x?: number; y?: number } }[] } };
+    const c = body?.result?.addressMatches?.[0]?.coordinates;
+    const lat = Number(c?.y);
+    const lng = Number(c?.x);
+    return { hit: c && Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null, status: res.status };
+  } catch { return { hit: null, status: 0 }; }
 }
 
 export function readEnv(): IngestEnv | null {
@@ -216,7 +258,7 @@ if (import.meta.main) {
   Deno.serve((req) => {
     if (!sb) { console.error('500 not configured'); return Promise.resolve(json(500, { error: 'unavailable' })); }
     return handle(req, env, {
-      db: ingestDb(sb), geocode: (q) => nominatim(q), now: () => Date.now(), log: (l) => console.log(l),
+      db: ingestDb(sb), geocode: (q) => nominatim(q), census: (a) => census(a), now: () => Date.now(), log: (l) => console.log(l),
     });
   });
 }

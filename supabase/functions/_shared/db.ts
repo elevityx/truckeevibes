@@ -17,7 +17,7 @@ export interface GrantOut {
 }
 /** The run metadata the runner sends with a batch (`p_run`); the database reads only the documented keys. */
 export type RunMeta = Record<string, unknown>
-export interface GeocodeRequest { venue_id: string; query: string }
+export interface GeocodeRequest { venue_id: string; query: string; address?: string }
 /** `svc_ingest_batch` result. `reasons` is present for an anomaly run. */
 export interface BatchOut {
   run_id: string; status: string; new?: number; changed?: number; gone?: number; reasons?: string[]; geocode?: GeocodeRequest[];
@@ -30,7 +30,7 @@ export interface IngestDb {
   nonce(n: string): Promise<boolean>;
   grants(): Promise<GrantOut[]>;
   batch(grant: string, run: RunMeta, items: unknown[]): Promise<BatchOut>;
-  setGeocode(venueId: string, lat: number | null, lng: number | null, geocoder: 'nominatim'): Promise<void>;
+  setGeocode(venueId: string, lat: number | null, lng: number | null, geocoder: 'nominatim' | 'census'): Promise<void>;
   cluster(limit: number): Promise<ClusterOut>;
 }
 
