@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import Footer from '@/components/layout/Footer';
 import Header from '@/components/layout/Header';
 import schema from '../../../functions/_lib/events.v1.schema.json';
+import widgetManifest from '../../../public/widget/manifest.json';
+import { WIDGET_VERSION } from '../../../widget/src/version';
 
 export const metadata: Metadata = {
   title: 'TruckeeVibes events API',
@@ -13,6 +15,7 @@ type Prop = { type?: string | string[]; enum?: unknown[]; const?: unknown; descr
 type Obj = { properties: Record<string, Prop>; required?: string[] };
 
 const ENDPOINT = 'https://truckeevibes.com/api/v1/events';
+const WIDGET = widgetManifest.versions.find((v) => v.version === WIDGET_VERSION);
 
 const PARAMS: Array<[string, string, string]> = [
   ['scope', 'vibes (default) or lights', 'vibes = the TruckeeVibes list. lights = the events shown on Truckee Lights and Truckee Frights for one season.'],
@@ -138,6 +141,17 @@ curl '${ENDPOINT}?scope=lights&season=christmas&year=2026'`}</code></pre>
           <pre style={pre}><code>{`const res = await fetch('${ENDPOINT}?scope=vibes&limit=20');
 const { events, attribution } = await res.json();
 // show attribution.name linked to attribution.url with the list`}</code></pre>
+          {WIDGET && (
+            <>
+              <p>
+                The Truckee Lights event list runs on the TruckeeVibes widget: one script, pinned with Subresource Integrity. Released files never change; a
+                new version gets a new file name.
+              </p>
+              <pre style={pre}><code>{`<script src="https://truckeevibes.com${WIDGET.file}"
+        integrity="${WIDGET.integrity}"
+        crossorigin="anonymous" async></script>`}</code></pre>
+            </>
+          )}
         </div>
       </main>
       <Footer />

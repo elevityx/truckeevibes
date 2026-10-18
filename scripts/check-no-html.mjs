@@ -1,4 +1,4 @@
-// V6: data is rendered as React text only. Fails when a tracked .ts/.tsx under src/ or ingest/ contains
+// V6: data is rendered as React text only. Fails when a tracked .ts/.tsx under src/, ingest/, widget/ or functions/ contains
 // the React raw-HTML prop or an innerHTML assignment.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -8,7 +8,7 @@ const BAD = [['dangerously', 'SetInnerHTML'].join(''), ['.inner', 'HTML'].join('
 const files = execFileSync('git', ['ls-files', '-z'], { maxBuffer: 1 << 28 })
   .toString('utf8')
   .split('\0')
-  .filter((f) => /^(src|ingest)\/.*\.tsx?$/.test(f));
+  .filter((f) => /^(src|ingest|widget|functions)\/.*\.tsx?$/.test(f));
 
 let bad = 0;
 for (const f of files) {

@@ -1,0 +1,96 @@
+/* TruckeeVibes events widget v1: the shadow stylesheet. Ported selector for selector from Truckee Lights events.css (list + sheet),
+   the globals.css rules the list and sheet use, and Sheet.tsx's Tailwind classes. Every Lights token is var(--token, fallback): on
+   Lights the page's own tokens win (custom properties inherit into shadow roots); elsewhere the season fallbacks below apply. */
+:host{display:block; color:var(--text, var(--tv-text)); font-family:var(--body, system-ui, -apple-system, "Segoe UI", sans-serif)}
+:host([data-season=halloween]){--tv-bg:#140A1F; --tv-surface:#24143A; --tv-surface-2:#2F1B4A; --tv-line:#4a2f6e; --tv-text:#F3ECDA; --tv-muted:#B8A9CF;
+  --tv-accent:#8AE234; --tv-on-accent:#140A1F; --tv-focus:#8AE234; --tv-radius:14px; --tv-ev:#FF7A1A; --tv-on-ev:#140A1F; --tv-drive:#8FD3FF; --tv-display:cursive}
+:host([data-season=christmas]){--tv-bg:#0B1626; --tv-surface:#13233A; --tv-surface-2:#1B2F4B; --tv-line:#2c4466; --tv-text:#F7F5EF; --tv-muted:#AFC0D6;
+  --tv-accent:#F2C14E; --tv-on-accent:#0B1626; --tv-focus:#F2C14E; --tv-radius:16px; --tv-ev:#E0393E; --tv-on-ev:#FFFFFF; --tv-drive:#7FD6A0; --tv-display:serif}
+
+/* Preflight subset (Lights gets these from Tailwind's base layer, which does not reach a shadow root). */
+*,*::before,*::after{box-sizing:border-box; margin:0; padding:0; border:0 solid}
+h2,h3{font-size:inherit; font-weight:inherit}
+a{color:inherit; text-decoration:inherit}
+b,strong{font-weight:bolder}
+button{font:inherit; color:inherit; letter-spacing:inherit; background-color:transparent; border-radius:0; opacity:1; cursor:pointer}
+svg{display:block; vertical-align:middle}
+ul{list-style:none}
+
+/* globals.css */
+:focus-visible{outline:3px solid var(--focus, var(--tv-focus)); outline-offset:2px}
+.disp{font-family:var(--font-display, var(--tv-display)); font-weight:400; letter-spacing:.01em}
+.btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:44px; padding:0 18px; border-radius:999px; border:2px solid transparent;
+  font-weight:700; font-size:15px; cursor:pointer; text-decoration:none; white-space:nowrap}
+.btn.primary{background:var(--accent, var(--tv-accent)); color:var(--on-accent, var(--tv-on-accent))}
+.btn.ghost{background:transparent; color:var(--text, var(--tv-text)); border-color:var(--line, var(--tv-line))}
+.btn.ghost:hover{border-color:var(--muted, var(--tv-muted))}
+.btn svg{width:18px; height:18px; flex:none}
+.iconbtn{width:44px; height:44px; display:grid; place-items:center; border-radius:50%; border:1px solid var(--line, var(--tv-line)); background:var(--surface, var(--tv-surface)); color:var(--text, var(--tv-text)); cursor:pointer}
+.iconbtn svg{width:20px; height:20px}
+.linkbtn{border:0; background:none; color:var(--accent, var(--tv-accent)); font:inherit; font-weight:700; text-decoration:underline; cursor:pointer; min-height:44px; padding:0 8px}
+.list-head{display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap}
+.list-head h2{margin:0; font-size:clamp(26px,6vw,36px); color:var(--accent, var(--tv-accent)); line-height:1.1}
+.list-head p{margin:0; color:var(--muted, var(--tv-muted)); font-size:14px}
+.grp h3{margin:0 0 8px; font-size:12.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted, var(--tv-muted))}
+.grp ul{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px}
+.sheet-h{display:flex; gap:12px; align-items:flex-start; justify-content:space-between}
+.sheet-h > div{min-width:0}
+.eyebrow{margin:0; font-size:12.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted, var(--tv-muted)); font-weight:700}
+.sec{margin-top:16px; display:flex; flex-direction:column; gap:10px}
+.fine{margin:0; font-size:13.5px; color:var(--muted, var(--tv-muted))}
+.sheet-in{padding:4px 6px 14px}
+
+/* The list root (Lights .list-in without its width cap: the host page sizes the mount). */
+.tv-list{display:flex; flex-direction:column; gap:22px}
+
+/* events.css: list */
+.upcoming{display:flex; flex-direction:column; gap:12px; padding-bottom:18px; border-bottom:1px solid var(--line, var(--tv-line))}
+.erows,.grp ul{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px}
+.grp h3 .gn{opacity:.7; font-variant-numeric:tabular-nums; margin-left:4px}
+.erow{width:100%; display:grid; grid-template-columns:52px minmax(0,1fr) auto; gap:12px; align-items:center; text-align:left; padding:10px 12px; min-height:60px;
+  background:var(--surface, var(--tv-surface)); border:1px solid var(--line, var(--tv-line)); border-radius:var(--radius, var(--tv-radius)); cursor:pointer; color:var(--text, var(--tv-text)); font:inherit}
+.erow:hover{border-color:var(--muted, var(--tv-muted))}
+.erow .info{min-width:0; display:flex; flex-direction:column; gap:3px}
+.erow .info strong{font-size:16px; line-height:1.25; overflow-wrap:anywhere}
+.erow .meta{font-size:13.5px; color:var(--muted, var(--tv-muted)); display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center}
+.erow .chev{color:var(--muted, var(--tv-muted)); width:18px; height:18px}
+.erow .chev svg{width:100%; height:100%; display:block}
+.dchip{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; width:52px; height:56px; border-radius:10px; background:var(--surface-2, var(--tv-surface-2)); border:1px solid var(--line, var(--tv-line)); line-height:1; font-variant-numeric:tabular-nums; flex:none}
+.dchip .mo{font-size:11px; font-weight:700; letter-spacing:.1em; color:var(--ev, var(--tv-ev))}
+.dchip .dd{font-size:21px; font-weight:700; color:var(--text, var(--tv-text))}
+.dchip .wd{font-size:10.5px; color:var(--muted, var(--tv-muted)); letter-spacing:.08em; text-transform:uppercase}
+.t21{display:inline-block; font-size:11.5px; font-weight:700; letter-spacing:.04em; color:var(--ev, var(--tv-ev)); border:1px solid var(--ev, var(--tv-ev)); border-radius:4px; padding:0 5px; line-height:1.5}
+.t21.big{margin:8px 0 0; font-size:12.5px; padding:1px 7px}
+.tdrive{display:inline-block; font-size:11.5px; font-weight:700; letter-spacing:.04em; color:var(--drive, var(--tv-drive)); border:1px solid var(--drive, var(--tv-drive)); border-radius:4px; padding:0 5px; line-height:1.5; white-space:nowrap}
+.tdrive.big{font-size:12.5px; padding:1px 7px}
+.etags{margin:8px 0 0; display:flex; flex-wrap:wrap; gap:6px}
+.etags .t21.big{margin:0}
+.eempty{border:1px dashed var(--line, var(--tv-line)); border-radius:var(--radius, var(--tv-radius)); padding:22px 16px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:10px; color:var(--muted, var(--tv-muted))}
+.eempty p{margin:0; font-size:16px; color:var(--text, var(--tv-text))}
+.eempty svg{width:46px; height:46px}
+
+/* events.css: event sheet */
+.etitle{font-size:24px; font-weight:700; line-height:1.2; overflow-wrap:anywhere; text-wrap:balance}
+.ewhen{display:flex; gap:12px; align-items:center}
+.ewhen p{margin:0; display:flex; flex-direction:column}
+.ewhen b{font-size:16.5px}
+.ewhen span{color:var(--muted, var(--tv-muted)); font-size:14px}
+.eplace{margin:0; display:flex; flex-direction:column; gap:1px; padding:10px 14px; border-radius:12px; background:var(--surface-2, var(--tv-surface-2)); border:1px solid var(--line, var(--tv-line)); font-size:14.5px; overflow-wrap:anywhere}
+.eplace b{font-size:15.5px}
+.eplace span{color:var(--muted, var(--tv-muted))}
+.edesc{margin:0; white-space:pre-line; font-size:15.5px; line-height:1.55; overflow-wrap:anywhere}
+.eacts{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+.eacts .btn{padding:0 10px; white-space:normal; text-align:center; line-height:1.15}
+
+/* Sheet.tsx: scrim + panel. Bottom sheet below 760px, 400px right panel at 760px and up. */
+.tv-scrim{position:fixed; inset:0; z-index:40; background:rgba(0,0,0,.6)}
+.tv-panel{position:fixed; z-index:50; overflow-y:auto; overscroll-behavior:contain; background:var(--panel,#17121f); color:var(--text,#f3eefa);
+  box-shadow:0 25px 50px -12px rgba(0,0,0,.25); left:0; right:0; bottom:0; max-height:85dvh; border-radius:16px 16px 0 0; padding:16px}
+@media (min-width:760px){
+  .tv-scrim{display:none}
+  .tv-panel{top:0; right:0; bottom:0; left:auto; width:400px; max-height:none; border-radius:0}
+}
+
+/* Widget-only: the credit and the state notes, in the muted footnote style. */
+.tv-credit a,.tv-note a{color:var(--muted, var(--tv-muted)); text-decoration:underline}
+.tv-note{margin:0; font-size:13.5px; color:var(--muted, var(--tv-muted))}

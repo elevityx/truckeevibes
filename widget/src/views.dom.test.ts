@@ -116,7 +116,7 @@ describe('AC-W2-08 markup parity with Lights', () => {
     const c = make(rawEnvelope([ev, plain]));
     await settle();
     const root = mount(c);
-    const [rowA, rowB] = [...root.querySelectorAll('button.erow')];
+    const [rowB, rowA] = [...root.querySelectorAll('button.erow')]; // sorted by start: Oct 27 before Oct 30
     expect(rowA.getAttribute('type')).toBe('button');
     expect(rowB.getAttribute('aria-label')).toBe('Pumpkin Walk, Tue, Oct 27 · 6:30 pm, Tahoe City');
     expect(rowA.getAttribute('aria-label')).toBe('Halloween in the Park & more, Fri, Oct 30 · 4–6 pm, Truckee, adults only, 21 and over, worth the drive');
@@ -168,7 +168,7 @@ describe('AC-W2-08 markup parity with Lights', () => {
     const c = make(rawEnvelope([ev, plain]));
     await settle();
     const root = mount(c);
-    (root.querySelector('button.erow') as HTMLButtonElement).click();
+    (root.querySelectorAll('button.erow')[1] as HTMLButtonElement).click();
     expect(c.openId()).toBe(uuid(1));
     const o = overlayRoot();
     const aside = o.querySelector('aside.tv-panel')!;
@@ -259,7 +259,7 @@ describe('AC-W2-09 credit', () => {
 });
 
 describe('state notes (W2.2 views/states.ts)', () => {
-  const note = (r: ParentNode) => texts(r.querySelector('.tv-note') ?? document.createElement('p')).join(' ');
+  const note = (r: ParentNode) => r.querySelector('.tv-note')?.textContent ?? '';
   it('held', async () => {
     const c = make(fixture('halloween-held'));
     await settle();

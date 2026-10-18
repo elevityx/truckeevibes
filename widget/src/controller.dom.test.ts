@@ -255,16 +255,24 @@ describe('AC-W2-06 lifecycle', () => {
   });
 
   it('(j) the 60 s tick drops an event 1 h after its end and emits only on change', async () => {
-    const ending = upcoming(1, { startsAt: iso(NOW - 120 * MIN), endsAt: iso(NOW - 30 * MIN) }); // ended 30 min ago
+    // ended 29.5 min ago: listed until NOW + 30.5 min, so the 5-min refresh at 30 min still has it and the tick at 31 min drops it
+    const ending = upcoming(1, { startsAt: iso(NOW - 120 * MIN), endsAt: iso(NOW - 29.5 * MIN) });
     const c = make(serve(confirmedEnv([ending, upcoming(5)])).fn);
     const got: string[][] = [];
     c.on('events', (e) => got.push(e.map((x) => x.id)));
     await settle();
     expect(got).toEqual([[uuid(1), uuid(5)]]);
-    await vi.advanceTimersByTimeAsync(29 * MIN);
-    expect(got).toHaveLength(1);
-    await vi.advanceTimersByTimeAsync(2 * MIN); // now 1 h 1 min after the end
-    expect(got).toEqual([[uuid(1), uuid(5)], [uuid(5)]]);
+    await vi.advanceTimersByTimeAsync(25.5 * MIN);
+    const n0 = got.length; // one emit per 5-min refresh so far
+    await vi.advanceTimersByTimeAsync(4 * MIN); // ticks at 26..29 min, no refresh, nothing changed
+    expect(got).toHaveLength(n0);
+    await vi.advanceTimersByTimeAsync(1 * MIN); // the refresh at 30 min
+    expect(got).toHaveLength(n0 + 1);
+    expect(got.at(-1)).toEqual([uuid(1), uuid(5)]);
+    await vi.advanceTimersByTimeAsync(1 * MIN); // the tick at 31 min
+    expect(got).toHaveLength(n0 + 2);
+    expect(got.at(-1)).toEqual([uuid(5)]);
+    expect(c.events.map((e) => e.id)).toEqual([uuid(5)]);
   });
 
   it('(k) a refresh 5 min later swaps the data atomically', async () => {

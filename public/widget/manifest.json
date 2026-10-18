@@ -1,0 +1,11 @@
+{
+  "versions": [
+    {
+      "version": "1.0.0",
+      "file": "/widget/v1/tv-events.1.0.0.js",
+      "integrity": "sha384-f2u57Eve6DuSqtajCkGQVBBJoi4yg7soRR2j54SLHkI1JcTtcNASVvDmOmJw+7lL",
+      "bytes": 31566,
+      "gzipBytes": 11594
+    }
+  ]
+}
