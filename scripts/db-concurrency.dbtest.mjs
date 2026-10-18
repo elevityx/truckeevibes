@@ -281,10 +281,10 @@ test('AC-M1-64(c) a drain that cannot get the lock within its timeout returns bu
 // ----------------------------------------------------------------------------------------------------------------------
 // AC-M1-65 (A5-3): held-run accept under the source lock
 // ----------------------------------------------------------------------------------------------------------------------
-/** An enabled, permitted `auto` source with a pending held run, its open card, and two baseline occurrences. */
+/** An enabled, permitted `review` source (A10: auto sources apply surges, so the hold needs review) with a pending held run, its open card, and two baseline occurrences. */
 async function mkHeld(tag) {
   const slug = `conc-${tag}-${sfx}`;
-  const sid = await mkSource(slug, 'organizer', 'auto');
+  const sid = await mkSource(slug, 'organizer', 'review');
   const ka = `${tag}-a-${sfx}`; const kb = `${tag}-b-${sfx}`;
   const baseTitle = `Held Base Alpha ${tag}${sfx}`;
   await ingestCommitted(slug, [item(ka, baseTitle, { days: 15 }), item(kb, `Held Base Bravo ${tag}${sfx}`, { days: 16 })]);
