@@ -23,8 +23,6 @@ async function inTx(fn) {
   await c.connect();
   try {
     await c.query('begin');
-    // A14: later migrations add families (wprest_crystalbay, curated_dates) that the A13 CHECK predates; park those rows on 'html' inside this rolled-back transaction.
-    await c.query(`update public.sources set family = 'html' where family in ('wprest_crystalbay', 'curated_dates')`);
     await fn(c);
   } finally {
     try { await c.query('rollback'); } finally { await c.end(); }
@@ -49,6 +47,10 @@ after(() => {});
 
 test('(a) applying the migration body twice on the reset DB succeeds and leaves one members-only row', async () => {
   await inTx(async (c) => {
+    // Precondition: 0 A14-family rows on the A13 branch, 2 once the A14 migration exists.
+    const hasA14 = readdirSync(dir).some((f) => f.endsWith('_bars_aviation.sql'));
+    const pre = await c.query(`select count(*)::int n from public.sources where family in ('wprest_crystalbay','curated_dates')`);
+    assert.equal(pre.rows[0].n, hasA14 ? 2 : 0);
     await c.query(SQL);
     await c.query(SQL);
     await rowChecks(c);
@@ -100,7 +102,8 @@ test('(d) reapplies over a post-A14 database (widen-only CHECK, A14 rows kept) (
 
 test('(e) widens a narrower CHECK to include html_tahoedonner (AC-M1-157)', async () => {
   await inTx(async (c) => {
-    await c.query(`update public.sources set family = 'html' where slug = 'tahoe-donner'`);
+    // This case's own setup: park the tahoe-donner row (and any later amendment's family rows) on 'html' so the narrower CHECK can be built.
+    await c.query(`update public.sources set family = 'html' where slug = 'tahoe-donner' or family in ('wprest_crystalbay', 'curated_dates')`);
     await setCheck(c, A13_FAMILIES.filter((f) => f !== 'html_tahoedonner'));
     assert.ok(!(await famDef(c)).includes('html_tahoedonner'));
     await c.query(SQL);

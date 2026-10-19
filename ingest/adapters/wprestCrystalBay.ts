@@ -1,6 +1,6 @@
 // Crystal Bay Casino adapter (A14). Reads one WP REST route (`wp/v2/event`); the date, doors/show times, room and an age statement live in
 // free text, so every grammar here is strict and fails closed: an event with anything ambiguous is dropped and counted, never guessed.
-// Facts only: no description text or images are kept, the link goes to the casino's own event page, and Tixr is never fetched or emitted.
+// Facts only: no description text or images are kept, the link goes to the casino's own event page, and Tixr is never fetched or emitted. Trust ships at review (A14 r3-1).
 import type { Adapter, AdapterCtx, AdapterResult, SourceEvent } from '../types';
 import { decodeUtf8, dedupe, makeEvent, sha256Hex, tzOf } from './common';
 import { decodeEntities, plainText, toUtcFromLocal } from '../core/normalize';

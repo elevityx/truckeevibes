@@ -258,8 +258,10 @@ create function pg_temp.vlt(p_key text, p_title text, p_day int, p_hh int) retur
 -- AC-M1-140 migration ---------------------------------------------------------------------------------------------------
 select pg_temp.eq($$(select string_agg(slug || ':' || enabled || ':' || trust || ':' || ingest_disposition || ':' || array_to_string(allowed_methods, ',') || ':' || family || ':' || class || ':'
     || (terms_recheck_at at time zone 'UTC')::date, ';' order by slug) from public.sources where slug in ('crystal-bay-casino', 'moodys-bistro', 'eaa-1073-breakfast'))$$,
-  'crystal-bay-casino:true:auto:permitted:api:wprest_crystalbay:venue:2027-10-18;eaa-1073-breakfast:true:auto:permitted:feed:curated_dates:community:2027-01-10;moodys-bistro:true:auto:permitted:api:tribe:venue:2027-10-18',
-  'AC-M1-140 the three sources: enabled, auto, permitted, methods, family, class, recheck dates');
+  'crystal-bay-casino:true:review:permitted:api:wprest_crystalbay:venue:2027-10-18;eaa-1073-breakfast:true:auto:permitted:feed:curated_dates:community:2027-01-10;moodys-bistro:true:auto:permitted:api:tribe:venue:2027-10-18',
+  'AC-M1-151 the three sources: enabled, Crystal Bay at review, Moody''s and EAA auto, permitted, methods, family, class, recheck dates');
+select pg_temp.eq($$(select count(*) from public.sources where slug in ('crystal-bay-casino', 'moodys-bistro', 'eaa-1073-breakfast') and strict_auto)$$, '0', 'AC-M1-151 none of the three has strict_auto');
+select pg_temp.eq($$(select count(*) from public.sources where slug in ('crystal-bay-casino', 'moodys-bistro', 'eaa-1073-breakfast') and char_length(terms_note) <= 200)$$, '3', 'AC-M1-160 each of the three terms notes is at most 200 characters');
 select pg_temp.eq($$(select robots_hash || '|' || robots_checked_at::date || '|' || ai_bots_blocked from public.sources where slug = 'crystal-bay-casino')$$,
   '10160cb7c27e8ca5c7093db5b863178da9dd3c46fd400c7b3922f64cb67dc985|2026-10-19|false', 'AC-M1-140 crystal-bay-casino robots evidence as recorded');
 select pg_temp.eq($$(select terms_hash from public.sources where slug = 'crystal-bay-casino')$$, '8ed6935355e9abc25e1b4a6876bc89051ca97274c877964c3f1e10c6bbe68b28', 'AC-M1-140 crystal-bay-casino terms hash');
@@ -280,13 +282,14 @@ insert into manifest values
   ('rmu-truckee', 'https://rmumtnculture.com/pages/rmu-truckee'),
   ('tourist-club', 'https://chamber.truckee.com/list/member/tourist-club-3936'),
   ('cottonwood-truckee', 'https://www.cottonwoodrestaurant.com/music'),
-  ('fiftyfifty-brewing', 'https://fiftyfiftybrewing.com/pages/events'),
+  ('fiftyfifty-brewing', 'https://www.fiftyfiftybrewing.com/pages/events'),
   ('glasses-wine-bar', 'https://www.glasseswinebar.com/events'),
   ('the-grid-kings-beach', 'https://www.thegridbarandgrill.com/'),
   ('gar-woods', 'https://www.garwoods.com/calendar.html');
 select pg_temp.eq($$(select count(*) from public.sources s join manifest m on m.slug = s.slug and m.url = s.homepage_url
     where not s.enabled and s.trust = 'link_only' and s.ingest_disposition = 'unknown' and s.family = 'html' and s.class = 'venue' and s.allowed_methods = '{}')$$,
-  '8', 'AC-M1-140 the manifest rows exist: link_only, unknown, html, venue, never enabled, homepage_url = manifest URL');
+  '8', 'AC-M1-158 the manifest rows exist: link_only, unknown, html, venue, never enabled, homepage_url = manifest URL');
+select pg_temp.eq($$(select allowed_hosts[1] from public.sources where slug = 'fiftyfifty-brewing')$$, 'www.fiftyfiftybrewing.com', 'AC-M1-158 FiftyFifty allowed host is the www host');
 select pg_temp.eq($$(select count(*) from public.sources where trust = 'link_only')$$, '16', 'AC-M1-140 link_only sources: the 8 earlier + the manifest of 8');
 select pg_temp.eq($$(select count(*) from public.list_sources_public() p where p.status = 'link_only' and p.homepage_url in (select url from manifest))$$, '8', 'AC-M1-140 the manifest rows show as link_only on the public sources list');
 select pg_temp.t($$(select pg_temp.x('postgres', $s$insert into public.sources (slug, name, homepage_url, allowed_hosts, family, class) values ('bars-bogus', 'Bogus Family', 'https://example.test/', array['example.test'], 'html_bogus', 'venue')$s$) like 'ERR:23514%')$$, 'AC-M1-140 family html_bogus fails the CHECK');
@@ -303,7 +306,12 @@ select pg_temp.eq($$private.area_for(39.3180851::double precision, -120.1381025:
 -- publish ---------------------------------------------------------------------------------------------------------------
 select pg_temp.rb('cb1', 'crystal-bay-casino', jsonb_build_array(pg_temp.cbc('steely-dead-a', 'Steely Dead', 30, 20)));
 select pg_temp.cluster_all();
-select pg_temp.eq($$pg_temp.ev_status('steely-dead-a')$$, 'published', 'AC-M1-140 a Crystal Bay timed 21+ item with coordinates and a URL publishes');
+select pg_temp.eq($$pg_temp.ev_status('steely-dead-a')$$, 'pending', 'AC-M1-151 at review a Crystal Bay-only item is pending');
+select pg_temp.eq($$pg_temp.open_cards('steely-dead-a')$$, '1', 'AC-M1-151 ... with exactly one open event card');
+-- simulate the follow-up migration (A14 r3-3): the trust flip re-queues, then the item publishes under auto
+update public.sources set trust = 'auto' where slug = 'crystal-bay-casino';
+select pg_temp.cluster_all();
+select pg_temp.eq($$pg_temp.ev_status('steely-dead-a')$$, 'published', 'AC-M1-140 after the flip to auto, a Crystal Bay timed 21+ item with coordinates and a URL publishes (DB path with an injected age, not the adapter; A14 r3-6)');
 select pg_temp.eq($$pg_temp.ev_col('steely-dead-a', 'area')$$, 'incline_crystal_bay', 'AC-M1-140 ... in area incline_crystal_bay');
 select pg_temp.t($$(select pg_temp.ev_col('steely-dead-a', 'summary') like '%21+. Details and tickets on the organizer''s site.')$$, 'AC-M1-140 ... summary ends "21+. Details and tickets on the organizer''s site."');
 select pg_temp.eq($$pg_temp.ev_col('steely-dead-a', 'age')$$, '21_plus', 'AC-M1-140 ... age 21_plus');
