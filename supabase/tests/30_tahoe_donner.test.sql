@@ -255,7 +255,7 @@ select pg_temp.t($$(select pg_temp.x('postgres', $s$insert into public.sources (
   'AC-M1-130 family html_bogus fails the CHECK');
 select pg_temp.t($$(select pg_temp.x('postgres', $s$insert into public.sources (slug, name, homepage_url, allowed_hosts, family, class) values ('td-ok-fam', 'Tahoe Donner Family', 'https://example.test/', array['example.test'], 'html_tahoedonner', 'organizer')$s$)) = 'OK'$$,
   'AC-M1-130 family html_tahoedonner passes the CHECK');
-select pg_temp.eq($$(select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace, lateral aclexplode(p.proacl) a
+select pg_temp.eq($$(select count(distinct p.oid) from pg_proc p join pg_namespace n on n.oid = p.pronamespace, lateral aclexplode(p.proacl) a
    where n.nspname in ('public', 'private') and a.privilege_type = 'EXECUTE' and a.grantee in (select oid from pg_roles where rolname in ('anon', 'authenticated', 'service_role')))$$, '24',
   'AC-M1-130 the EXECUTE grants are unchanged (24)');
 

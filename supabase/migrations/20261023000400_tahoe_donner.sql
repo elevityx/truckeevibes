@@ -13,8 +13,8 @@ update public.sources set family = 'html_tahoedonner', allowed_hosts = array['ww
   config = '{"listUrl":"https://www.tahoedonner.com/events/","tz":"America/Los_Angeles"}'::jsonb
  where slug = 'tahoe-donner';
 
--- Terms evidence through the gate (sets allowed_methods = {html}). The hash is the robots.txt of 2026-10-19 (unchanged since A2); re-hash at the first hosted run.
-select private.record_source_terms('tahoe-donner', 'permitted', array['html']::text[], 'https://www.tahoedonner.com/robots.txt', '0fe5c745546c76471ae5c41caeede4f3e6bf08a51c87aaf8bc6fd22b0ad11eb9', 'conductor', '2026-10-18', '2027-10-17', 'Terms review 2026-10-18: permitted (no terms-of-use page found; robots allows /events/ and event pages; calendar action views and the ai1ec ICS exporter are disallowed and not used).');
+-- Terms evidence through the gate (sets allowed_methods = {html}). The note stays in the neutral form 16_sources_seed.test.sql enforces (A5-10); the evidence: no terms-of-use page found, robots allows /events/ and event pages, calendar action views and the ai1ec ICS exporter are disallowed and not used. The hash is the robots.txt of 2026-10-19 (unchanged since A2); re-hash at the first hosted run.
+select private.record_source_terms('tahoe-donner', 'permitted', array['html']::text[], 'https://www.tahoedonner.com/robots.txt', '0fe5c745546c76471ae5c41caeede4f3e6bf08a51c87aaf8bc6fd22b0ad11eb9', 'conductor', '2026-10-18', '2027-10-17', 'Terms review 2026-10-18: permitted.');
 update public.sources set robots_checked_at = '2026-10-19', robots_hash = '0fe5c745546c76471ae5c41caeede4f3e6bf08a51c87aaf8bc6fd22b0ad11eb9', ai_bots_blocked = false where slug = 'tahoe-donner';
 
 update public.sources set enabled = true, trust = 'auto' where slug = 'tahoe-donner';
