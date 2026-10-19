@@ -44,6 +44,12 @@ export function applySourceDefaults(item: SourceEvent, config: Record<string, un
   return { ...item, categoriesHint: slugs, tagReasons: capReasons([...(item.tagReasons ?? []), 'cat:default']) };
 }
 
+/** A13: `members-only` is a Tahoe Donner label set only by that adapter; every other source family loses it before submit. */
+export function stripMembersOnly(item: SourceEvent, family: string): SourceEvent {
+  if (family === 'html_tahoedonner' || !item.categoriesHint.includes('members-only')) return item;
+  return { ...item, categoriesHint: item.categoriesHint.filter((c) => c !== 'members-only') };
+}
+
 /** ` tags=<slug>:<n>,… free:<n> age_ambiguous=<n> conflicts=<n> notices=<dropped>/<cancelled>`: counts only (V11). */
 function tagStats(o: Pick<Outcome, 'items' | 'dropped' | 'cancelled'>): string {
   const by: Record<string, number> = {};
@@ -161,7 +167,7 @@ export async function main(deps: RunDeps): Promise<number> {
       else valid.push(v);
     }
     const noticed = applyNotices(valid);
-    const items = noticed.items.map((i) => applySourceDefaults(i, g.source.config));
+    const items = noticed.items.map((i) => applySourceDefaults(stripMembersOnly(i, g.source.family), g.source.config));
     return { status: 'ok', items, result: base, invalid, dropped: noticed.dropped, cancelled: noticed.cancelled };
   }
 

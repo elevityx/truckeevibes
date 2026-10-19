@@ -71,6 +71,7 @@ export function fakePolite(handler: PolitHandler) {
       headers: new Headers(r.headers ?? {}),
       body: new TextEncoder().encode(r.body ?? ''),
       notModified: r.notModified ?? false,
+      finalUrl: url,
     };
   };
   return { fetch: fn, calls, urls: () => calls.map((c) => c.url) };
