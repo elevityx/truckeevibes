@@ -809,3 +809,49 @@ describe('W1 api_events_v1 migration: canonical block, cumulative allowlist + ap
     for (const h of headers) expect(h, h.slice(0, 80)).toMatch(/set\s+search_path\s*=\s*''/i);
   });
 });
+
+// A13 r7 (AC-M1-143, AC-M1-148): the Tahoe Donner migration ships at trust review and its self-check is scoped to its own rows.
+describe('tahoe_donner (A13 r7)', () => {
+  const sql = () => read('tahoe_donner');
+  it('is idempotent in text: on conflict do nothing, drop constraint if exists', () => {
+    expect(sql()).toContain('on conflict (slug) do nothing');
+    expect(sql()).toContain('drop constraint if exists sources_family_check');
+  });
+  it('the family CHECK only widens from the live constraint (A13 r7-3 / A14 r3-7)', () => {
+    expect(sql()).toContain('pg_get_constraintdef');
+    expect(sql()).toContain('want <@ cur');
+    expect(sql()).toContain('family_check_unparsed');
+    expect(sql()).not.toMatch(/^alter table public\.sources add constraint sources_family_check check \(family in \('/m);
+  });
+  it("ships at trust 'review' and never sets trust = 'auto' (AC-M1-143)", () => {
+    expect(sql()).toContain("trust = 'review'");
+    expect(sql()).not.toMatch(/trust\s*=\s*'auto'/);
+  });
+  it('the self-check has no global source or category count (AC-M1-148)', () => {
+    expect(sql()).not.toMatch(/count\(\*\)\s+from\s+public\.sources\s+where\s+enabled/i);
+    expect(sql()).not.toMatch(/count\(\*\)\s+from\s+public\.categories\s*\)/i);
+    expect(sql()).toContain('tahoe_donner_state');
+  });
+});
+
+// A14 r3 (AC-M1-151, AC-M1-159): Crystal Bay ships at review; the migration is idempotent and validates what it didn't write.
+describe('bars_aviation (A14 r3)', () => {
+  const sql = () => read('bars_aviation');
+  it('is idempotent in text: on conflict (slug) do nothing twice, widen-only CHECK, scoped self-check', () => {
+    expect(sql().match(/on conflict \(slug\) do nothing/g)).toHaveLength(2);
+    expect(sql()).toContain('pg_get_constraintdef');
+    expect(sql()).toContain('want <@ cur');
+    expect(sql()).toContain('family_check_unparsed');
+    expect(sql()).toContain('bars_aviation_state');
+    expect(sql()).not.toMatch(/^alter table public\.sources add constraint sources_family_check check \(family in \('/m);
+  });
+  it("Crystal Bay is enabled at 'review' and never set to 'auto' here (AC-M1-151)", () => {
+    expect(sql()).toMatch(/set enabled = true, trust = 'review' where slug = 'crystal-bay-casino'/);
+    expect(sql()).not.toMatch(/trust\s*=\s*'auto'\s+where\s+slug\s*(?:=\s*'crystal-bay-casino'|in\s*\([^)]*crystal-bay-casino)/);
+  });
+  it('has no global enabled count and no UNVERIFIED marker (AC-M1-158)', () => {
+    expect(sql()).not.toMatch(/count\(\*\) from public\.sources where enabled/);
+    expect(sql()).not.toContain('UNVERIFIED');
+    expect(sql()).toContain("'https://www.fiftyfiftybrewing.com/pages/events'");
+  });
+});

@@ -4,7 +4,7 @@ import { adapters } from './index';
 
 describe('adapter registry', () => {
   it('registers the M1 families, each with family, version and fetch', () => {
-    for (const f of ['tribe', 'ics_chambermaster', 'ics_civicplus', 'ics_eventsmanager', 'html_finalsite']) {
+    for (const f of ['tribe', 'ics_chambermaster', 'ics_civicplus', 'ics_eventsmanager', 'html_finalsite', 'html_tahoedonner', 'wprest_crystalbay', 'curated_dates']) {
       expect(adapters[f], f).toBeDefined();
       expect(adapters[f].family).toBe(f);
       expect(adapters[f].version).toMatch(/\S/);

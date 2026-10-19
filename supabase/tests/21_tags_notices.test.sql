@@ -260,7 +260,7 @@ insert into codes (n, code) select o, c from unnest(array[
 select pg_temp.eq($$(select label || '|' || sort || '|' || noun from public.categories where slug = 'kids')$$, 'Kids|5|kids'' event', 'AC-R4a-01 kids: label Kids, sort 5, noun kids'' event');
 select pg_temp.eq($$(select sort from public.categories where slug = 'arts')$$, '6', 'AC-R4a-01 arts now sorts 6');
 select pg_temp.eq($$(select string_agg(slug, ',' order by sort) from public.categories where sort between 4 and 7)$$, 'family,kids,arts,community', 'AC-R4a-01 sort order family, kids, arts, community');
-select pg_temp.eq($$(select max(sort) || '/' || count(*) || '/' || count(distinct sort) from public.categories)$$, '14/14/14', 'AC-R4a-01 14 categories (A12 adds schools), sorts 1..14 all distinct');
+select pg_temp.eq($$(select max(sort) || '/' || count(*) || '/' || count(distinct sort) from public.categories)$$, '15/15/15', 'AC-R4a-01 15 categories (A12 adds schools, A13 members-only), sorts 1..15 all distinct');
 select pg_temp.ing('k1', 'r4a-auto', jsonb_build_array(pg_temp.item('k-a', 'R4a Kids Craft Hour', 10, 11, '{"categoriesHint":["arts","kids","family"]}')));
 select pg_temp.eq($$(select categories::text from public.list_events(120) where title = 'R4a Kids Craft Hour')$$, '{family,kids,arts}', 'AC-R4a-01 list_events orders {family, kids, arts} as family, kids, arts');
 

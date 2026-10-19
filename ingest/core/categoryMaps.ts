@@ -35,6 +35,13 @@ export const CATEGORY_MAPS: Record<string, Record<string, string>> = {
   ics_civicplus: { ...COMMON },
   ics_eventsmanager: { ...COMMON },
   html_finalsite: { ...COMMON },
+  wprest_crystalbay: { ...COMMON },
+  curated_dates: { ...COMMON },
+  // `family`/`kids` only from Tahoe Donner's own Family Events / Kids Programming lists; `dining` and `live music` resolve through COMMON.
+  html_tahoedonner: {
+    ...COMMON, snowshoe: 'outdoors', 'downhill ski resort': 'outdoors', 'cross country ski center': 'outdoors', 'tahoe donner trails': 'outdoors',
+    'family events': 'family', 'kids programming': 'kids',
+  },
 };
 
 const slugForm = (l: string) => l.replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');

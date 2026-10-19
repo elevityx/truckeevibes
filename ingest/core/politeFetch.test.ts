@@ -546,3 +546,118 @@ describe('AC-M1-114 TTUSD family: path guard and floor', () => {
     expect(t.net.calls[0].at - t0).toBeGreaterThanOrEqual(5000);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// A13 (AC-M1-129 r4): Tahoe Donner family guard, generalized host families, finalUrl
+// ---------------------------------------------------------------------------------------------------------------------
+describe('AC-M1-129 Tahoe Donner family: path guard, robots and floor', () => {
+  const TD_ROBOTS = fixture('tahoedonner/robots.txt');
+  const tdSrc = (host = 'www.tahoedonner.com') => source({ slug: 'tahoe-donner', allowed_hosts: [host], allowed_methods: ['html'], page_cap: 45 });
+  function td(handler: (u: URL) => Response | undefined, host = 'www.tahoedonner.com') {
+    const clock = makeClock();
+    const net = fakeNet((u) => handler(u) ?? (u.pathname === '/robots.txt' ? text(TD_ROBOTS) : text('<html>ok</html>')), clock.now);
+    const pf = createPoliteFetch(tdSrc(host), { fetch: net.fetch, now: clock.now, sleep: clock.sleep });
+    return { pf, net, clock };
+  }
+  const B = 'https://www.tahoedonner.com';
+  it('allowed: robots, /events/, the three hint lists, a detail', async () => {
+    const t = td(() => undefined);
+    for (const p of ['/events/', '/events/?categories%5B%5D=94', '/events/?categories%5B%5D=180', '/events/?categories%5B%5D=95', '/events/light-up-the-night/']) {
+      expect((await t.pf(`${B}${p}`, { kind: 'html' })).status, p).toBe(200);
+    }
+    await t.pf.fetchRobots('www.tahoedonner.com');
+  });
+  it('path_not_allowed: feed, calendar actions, the ai1ec exporter, category 126 and 999, keywords, wp-json, nested paths', async () => {
+    for (const p of ['/events/feed/', '/calendar/action~month/', '/?controller=ai1ec_exporter_controller', '/events/?categories%5B%5D=126', '/events/?categories%5B%5D=999',
+      '/events/?keywords=x', '/wp-json/wp/v2/types', '/events/a/b/', '/events', '/events/Upper/', `/events/${'a'.repeat(130)}/`]) {
+      const t = td(() => undefined);
+      expect(await code(t.pf(`${B}${p}`, { kind: 'html' })), p).toBe('path_not_allowed');
+      expect(t.net.calls).toHaveLength(0);
+    }
+  });
+  it('a detail 302 -> /calendar/action~agenda/ is path_not_allowed and that path is never requested', async () => {
+    const t = td((u) => (u.pathname === '/events/x-y/' ? redirect(`${B}/calendar/action~agenda/`, 302) : undefined));
+    expect(await code(t.pf(`${B}/events/x-y/`, { kind: 'html' }))).toBe('path_not_allowed');
+    expect(t.net.urls().some((u) => u.includes('action~'))).toBe(false);
+  });
+  it('robots Disallow: /events/ -> robots_blocked, 0 page fetches', async () => {
+    const t = td((u) => (u.pathname === '/robots.txt' ? text('User-agent: *\nDisallow: /events/\n') : undefined));
+    expect(await code(t.pf(`${B}/events/`, { kind: 'html' }))).toBe('robots_blocked');
+    expect(content(t.net)).toHaveLength(0);
+  });
+  it('the real robots.txt allows /events/ and the detail pages and blocks calendar actions', async () => {
+    const t = td(() => undefined);
+    expect((await t.pf(`${B}/events/`, { kind: 'html' })).status).toBe(200);
+    expect(await code(t.pf(`${B}/calendar/action~month/`, { kind: 'html' }))).toBe('path_not_allowed');
+  });
+  it('the first request on tahoedonner.com after one on www.tahoedonner.com waits >= 5000 ms; the spacing key is the apex', async () => {
+    expect(spacingKey('www.tahoedonner.com')).toBe('tahoedonner.com');
+    expect(familyOf('www.tahoedonner.com')).toBe('tahoedonner.com');
+    expect(HOST_FAMILIES['tahoedonner.com'].floorMs).toBe(5000);
+    const clock = makeClock();
+    const spacer = createSpacer({ now: clock.now, sleep: clock.sleep });
+    const mk = (host: string) => {
+      const net = fakeNet((u) => (u.pathname === '/robots.txt' ? text(TD_ROBOTS) : text('<html>ok</html>')), clock.now);
+      return { net, pf: createPoliteFetch(tdSrc(host), { fetch: net.fetch, now: clock.now, sleep: clock.sleep, spacer }) };
+    };
+    const a = mk('www.tahoedonner.com');
+    await a.pf(`${B}/events/`, { kind: 'html' });
+    const b = mk('tahoedonner.com');
+    await b.pf('https://tahoedonner.com/events/', { kind: 'html' });
+    expect(b.net.calls[0].at - a.net.calls[a.net.calls.length - 1].at).toBeGreaterThanOrEqual(5000);
+  });
+  it('FetchOut.finalUrl is the last hop; a same-host redirect to another allowed page reports that page', async () => {
+    const t = td((u) => (u.pathname === '/events/' && u.search ? redirect(`${B}/events/`, 302) : undefined));
+    const out = await t.pf(`${B}/events/?categories%5B%5D=94`, { kind: 'html' });
+    expect(out.finalUrl).toBe(`${B}/events/`);
+    const plain = await t.pf(`${B}/events/x-y/`, { kind: 'html' });
+    expect(plain.finalUrl).toBe(`${B}/events/x-y/`);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// A14 (AC-M1-138): Crystal Bay Casino family guard
+// ---------------------------------------------------------------------------------------------------------------------
+describe('AC-M1-138 Crystal Bay Casino family: path guard, robots and floor', () => {
+  const CB_ROBOTS = fixture('crystalbay/robots.txt');
+  const cbSrc = () => source({ slug: 'crystal-bay-casino', allowed_hosts: ['www.crystalbaycasino.com'], allowed_methods: ['api'], page_cap: 3 });
+  function cb(handler: (u: URL) => Response | undefined, robots = CB_ROBOTS) {
+    const clock = makeClock();
+    const net = fakeNet((u) => handler(u) ?? (u.pathname === '/robots.txt' ? text(robots) : text('[]')), clock.now);
+    const pf = createPoliteFetch(cbSrc(), { fetch: net.fetch, now: clock.now, sleep: clock.sleep });
+    return { pf, net, clock };
+  }
+  const B = 'https://www.crystalbaycasino.com';
+  it('allowed: robots and the one REST URL', async () => {
+    const t = cb(() => undefined);
+    expect((await t.pf(`${B}/wp-json/wp/v2/event?per_page=100`, { kind: 'api' })).status).toBe(200);
+    await t.pf.fetchRobots('www.crystalbaycasino.com');
+    expect(HOST_FAMILIES['crystalbaycasino.com'].floorMs).toBe(5000);
+    expect(familyOf('www.crystalbaycasino.com')).toBe('crystalbaycasino.com');
+  });
+  it('path_not_allowed: other REST routes, queries and pages; nothing is requested', async () => {
+    for (const p of ['/wp-json/wp/v2/event', '/wp-json/wp/v2/event?per_page=100&page=2', '/wp-json/wp/v2/event?per_page=10', '/wp-json/wp/v2/pages/2707',
+      '/wp-json/tribe/events/v1/events', '/wp-json/', '/entertainment/events/', '/event/steely-dead/']) {
+      const t = cb(() => undefined);
+      expect(await code(t.pf(`${B}${p}`, { kind: 'api' })), p).toBe('path_not_allowed');
+      expect(t.net.calls, p).toHaveLength(0);
+    }
+  });
+  it('a 302 to tixr.com is blocked with no request to tixr.com; a direct tixr.com request is host_not_allowed', async () => {
+    const t = cb((u) => (u.pathname === '/wp-json/wp/v2/event' ? redirect('https://tixr.com/e/211222', 302) : undefined));
+    const c = await code(t.pf(`${B}/wp-json/wp/v2/event?per_page=100`, { kind: 'api' }));
+    expect(['host_not_allowed', 'redirect_blocked']).toContain(c);
+    expect(t.net.urls().some((u) => u.includes('tixr.com'))).toBe(false);
+    expect(await code(cb(() => undefined).pf('https://tixr.com/e/211222', { kind: 'api' }))).toBe('host_not_allowed');
+  });
+  it('robots Disallow: /wp-json/ -> robots_blocked, 0 API fetches', async () => {
+    const t = cb(() => undefined, 'User-agent: *\nDisallow: /wp-json/\n');
+    expect(await code(t.pf(`${B}/wp-json/wp/v2/event?per_page=100`, { kind: 'api' }))).toBe('robots_blocked');
+    expect(content(t.net)).toHaveLength(0);
+  });
+  it('the second request waits >= 5000 ms after robots', async () => {
+    const t = cb(() => undefined);
+    await t.pf(`${B}/wp-json/wp/v2/event?per_page=100`, { kind: 'api' });
+    expect(t.net.calls[1].at - t.net.calls[0].at).toBeGreaterThanOrEqual(5000);
+  });
+});
