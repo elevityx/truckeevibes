@@ -497,6 +497,7 @@ Deno.test('census() parses addressMatches, sends the UA, and a miss or HTTP erro
   assertEquals(await mod.census('x', bad), { hit: null, status: 503 });
   const boom = (() => Promise.reject(new Error('net'))) as unknown as typeof fetch;
   assertEquals(await mod.census('x', boom), { hit: null, status: 0 });
+});
 
 // ---------------------------------------------------------------------------------------------------------------------
 // AC-W3-18 (Spec_Vibes_Widget W3.2): the Lights mirror ops ride the same HMAC + nonce + size checks.

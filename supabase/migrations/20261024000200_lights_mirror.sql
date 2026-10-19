@@ -5,7 +5,7 @@
 -- 1 The source family and the source row. The sources gate validates the insert (terms evidence, permitted disposition).
 alter table public.sources drop constraint sources_family_check;
 alter table public.sources add constraint sources_family_check check (family in ('tribe','ics','ics_chambermaster','ics_civicplus',
-  'ics_eventsmanager','rss','squarespace','jsonld','html','llm','lights_mirror'));
+  'ics_eventsmanager','rss','squarespace','jsonld','html','llm','html_finalsite','lights_mirror'));   -- W3 rebased on A12's family list (html_finalsite)
 -- terms_hash: the gate requires evidence; the sister site's terms are the owner's own, so the hash records the reviewed note.
 insert into public.sources (slug, name, homepage_url, allowed_hosts, family, class, trust, enabled, cadence, ingest_disposition,
     allowed_methods, terms_url, terms_hash, terms_reviewed_by, terms_reviewed_at, terms_recheck_at, terms_note)
