@@ -10,6 +10,7 @@ truckeevibes.com is a free, plain list of events in Truckee and North Lake Tahoe
 - TypeScript, Tailwind 4; design tokens generated from `src/styles/tokens.json` into `src/styles/tokens.css` (`node scripts/build-tokens.mjs`), Daylight + After dark by `prefers-color-scheme`.
 - Supabase: Postgres + Auth (admin password + TOTP MFA: `private.is_admin()` needs a non-anonymous `aal2` JWT whose `amr` has both a `password` and a `totp` entry, plus a row in `public.admins`). Edge Functions (Deno) arrive with the ingest work.
 - Cloudflare Pages hosts the static site **and Pages Functions under `functions/`** (GET/HEAD/OPTIONS only, V13): `functions/api/v1/events.ts` serves the public events API (`/api/v1/events`, contract `functions/_lib/events.v1.schema.json`, docs at `/developers/`), with a 5-minute edge cache in the Workers Cache API (`functions/_lib/cache.ts`; a best-effort generation guard, the RPC's `dataAt` in microseconds, keeps an older body from replacing a newer one). No stale fallback: an RPC failure or timeout is a `503` with `Retry-After: 60` and no event data (Amendment W1-2).
+- The events widget (W2, `widget/`): vanilla TypeScript, Shadow DOM, no runtime dependencies, bundled by esbuild into one immutable, SRI-pinned file per version (`public/widget/v1/tv-events.<version>.js`, listed with its sha384 in `public/widget/manifest.json`). A released file never changes and is never deleted: every change bumps `WIDGET_VERSION` (`widget/src/version.ts`). DOM is built with `createElement` + `textContent` only. Demo on synthetic fixtures at `/widget-demo/` (noindex).
 
 ## Commands
 ```bash
@@ -28,7 +29,9 @@ npm run db:test:rest # PostgREST-level manifest test (needs the running local st
 npm run test:visual # fixture build + Playwright visual checks (phone and desktop, light and dark; also builds the empty and error state variants into out-empty/ and out-error/; includes e2e/interactions.spec.ts); needs `npx playwright install chromium`
 npm run test:lhci  # Lighthouse (mobile, median of 3) on test:visual's out/; needs Chrome (set CHROME_PATH locally)
 npm run test:budget # 700-event fixture build: gzipped home HTML <= 100 KiB, <= 300 embedded rows; rebuilds out/
-npm run check:repo # secret scan, workflow rules, fixture size, no raw HTML, tokens up to date
+npm run check:repo # secret scan, workflow rules, fixture size, no raw HTML, tokens up to date, widget release files (check-widget)
+npm run widget:build # build public/widget/v1/tv-events.<WIDGET_VERSION>.js and its manifest entry (refuses to change a released file)
+npm run check:widget # manifest hashes, reproducible build, no HTML sinks, gzip budget, released versions kept (vs the merge base)
 npm run ingest     # ingest entry point
 npm run classify-report -- --sources <file>  # I3 report: adapters + notices + classifier over live feeds for permitted sources only; submits nothing, output may carry titles so keep it out of CI logs
 ```
@@ -37,6 +40,7 @@ Local env: copy `.env.example` to `.env.local`. It holds the `NEXT_PUBLIC_*` val
 ## Layout
 - `src/app` (pages: `/`, `/sources/`, `/bot/`, `/about/`, `/developers/`, and noindex `/admin/`), `src/components` (`layout/` Header and Footer, server-only; `home/` Hero, Tiles, FinderBar, PicksRow and PickCard; `filters/` WhenRow, FilterSheet; `ui/` Sheet; `list/` ListApp, Rail, DayGroup, EventRow, EventSheet, AlsoOn, states), `src/lib/lists.ts` (the lists SSOT), `src/lib/filters/` (six-key filter state and predicates), `src/lib/picks.ts` + `src/lib/picksFile.ts` and `src/content/picks.json` (Our picks: schema and lint, build-time read; a bad file fails the build, a pick outside its week is dropped with a warning; `"picks": []` hides the row), `src/lib/data/firstPaint.ts` (build counts and the first-paint rows), `src/config/public-env.ts`, `src/config/features.ts`
 - `src/lib/data` (the **only** Supabase caller: `admin.ts` auth, `sources.ts` RPC wrappers, `errors.ts`)
+- `widget/` (the events widget: `src/` controller, API reader, validator, Lights-ported time/links, views, `styles/widget.css`; `build.mjs`), `public/widget/` (released files + manifest), `public/widget-demo/` (synthetic fixtures for `/widget-demo/`)
 - `functions/` (Cloudflare Pages Functions: `api/v1/events.ts` and `_lib/` query parsing, RPC call, schema-driven shape, fresh cache, CORS; tests are `*.test.ts` next to them, run by `npm test`)
 - `supabase/migrations` (schema; never edited after merge), `supabase/tests` (pgTAP), `supabase/functions` (Edge Functions and `_shared/`), `supabase/seed.sql` (fake local data only)
 - `scripts` (repo checks and their tests), `ingest` (ingest code, `core/` classifier v2 (`classify`, `ageGrammar`, `negation`, `categoryMaps`, `reasonCodes`), `notices` and `ttusd` (the TTUSD school-calendar include grammar, SSOT; adapter family `html_finalsite` in `adapters/htmlFinalsite.ts`), `tools/classify-report.ts`, synthetic `fixtures/`)

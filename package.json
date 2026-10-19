@@ -23,7 +23,9 @@
     "test:visual": "npm run build:fixture && playwright test",
     "test:lhci": "lhci autorun",
     "test:budget": "node scripts/fixtures/make-big-fixture.mjs --events 700 --seed 1 && SNAPSHOT_FIXTURE=.build/fixture/snapshot-700.json MANIFEST_FIXTURE=.build/fixture/event-pages-700.json npm run build && node --test scripts/html-budget.budget.mjs",
-    "check:repo": "node scripts/secret-scan.mjs && node scripts/check-workflows.mjs && node scripts/check-fixtures.mjs && node scripts/check-no-html.mjs && node scripts/check-public-copy.mjs && node scripts/build-tokens.mjs --check"
+    "check:repo": "node scripts/secret-scan.mjs && node scripts/check-workflows.mjs && node scripts/check-fixtures.mjs && node scripts/check-no-html.mjs && node scripts/check-public-copy.mjs && node scripts/build-tokens.mjs --check && node scripts/check-widget.mjs",
+    "widget:build": "node widget/build.mjs",
+    "check:widget": "node scripts/check-widget.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
@@ -34,6 +36,7 @@
     "@types/node": "26.6.4",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "esbuild": "0.27.7",
     "eslint": "9.39.5",
     "eslint-config-next": "16.4.0",
     "happy-dom": "20.14.5",

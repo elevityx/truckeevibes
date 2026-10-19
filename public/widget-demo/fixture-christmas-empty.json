@@ -1,0 +1,31 @@
+{
+ "version": 1,
+ "scope": "lights",
+ "season": "christmas",
+ "year": 2026,
+ "dataAt": "2026-12-10T16:50:00.000000Z",
+ "stale": false,
+ "pageComplete": true,
+ "mirror": {
+  "state": "confirmed",
+  "confirmedAt": "2026-12-10T16:48:00.000000Z",
+  "heldSince": null,
+  "heldCount": 0
+ },
+ "region": {
+  "tz": "America/Los_Angeles",
+  "localBox": {
+   "minLat": 39.1,
+   "maxLat": 39.5,
+   "minLng": -120.47,
+   "maxLng": -119.88
+  }
+ },
+ "count": 0,
+ "nextCursor": null,
+ "attribution": {
+  "name": "TruckeeVibes",
+  "url": "https://truckeevibes.com/"
+ },
+ "events": []
+}

@@ -6,5 +6,5 @@ export default defineConfig([
   ...nextVitals,
   ...nextTs,
   { rules: { 'react/no-danger': 'error' } },
-  globalIgnores(['out/**', 'out-*/**', '.next/**', 'supabase/**', 'next-env.d.ts']),
+  globalIgnores(['out/**', 'out-*/**', '.next/**', 'supabase/**', 'next-env.d.ts', 'public/widget/**']),
 ]);
