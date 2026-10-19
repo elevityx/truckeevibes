@@ -45,10 +45,9 @@ insert into public.sources (slug, name, homepage_url, allowed_hosts, family, cla
   ('the-grid-kings-beach', 'The Grid Bar & Grill',   'https://www.thegridbarandgrill.com/',                   array['www.thegridbarandgrill.com'], 'html', 'venue', 'link_only'),
   ('gar-woods',            'Gar Woods Grill & Pier', 'https://www.garwoods.com/calendar.html',                array['www.garwoods.com'],           'html', 'venue', 'link_only');
 
--- Self-check (true on a fresh reset and on the hosted DB): the enabled set is the twelve of A13 plus the three of A14.
+-- Self-check (scoped to this migration's own rows; no global totals, which are asserted only in fresh-DB tests, A13 r7-6 / AC-M1-148).
 do $$ begin
-  if (select count(*) from public.sources where enabled) <> 15
-     or (select count(*) from public.sources
+  if (select count(*) from public.sources
           where slug in ('crystal-bay-casino', 'moodys-bistro', 'eaa-1073-breakfast') and enabled and trust = 'auto' and cadence = '24h'
             and ingest_disposition = 'permitted' and terms_recheck_at > now()) <> 3
      or (select count(*) from public.sources where trust = 'link_only' and not enabled and ingest_disposition = 'unknown' and family = 'html' and class = 'venue'
