@@ -7,7 +7,10 @@ import { decodeUtf8, dedupe, makeEvent, sha256Hex, tzOf } from './common';
 import { toUtcFromLocal } from '../core/normalize';
 import { expandTd, membersOnly, parseTdDate, parseTdTime, TD_MAX_DESCRIPTION, tdVenue, type TdDrop } from '../core/tahoeDonner';
 import { capReasons } from '../core/reasonCodes';
-import type { FetchOut } from '../core/politeFetch';
+import { FetchError, type FetchOut } from '../core/politeFetch';
+
+// A hint list that fails in transport is ignored (the hints are optional); every guard error still ends the run.
+const SOFT_HINT_ERRORS: ReadonlySet<string> = new Set(['network', 'timeout']);
 
 const LIST_URL = 'https://www.tahoedonner.com/events/';
 const DETAIL_URL = /^https:\/\/www\.tahoedonner\.com\/events\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/;
@@ -96,7 +99,9 @@ export const adapter: Adapter = {
       const hintOf = new Map<string, string[]>();
       for (const { id, hint } of HINT_LISTS) {
         const url = `${LIST_URL}?categories%5B%5D=${id}`;
-        const res = await ctx.fetch(url, { kind: 'html' });
+        let res: FetchOut;
+        try { res = await ctx.fetch(url, { kind: 'html' }); }
+        catch (e) { if (e instanceof FetchError && SOFT_HINT_ERRORS.has(e.code)) continue; throw e; }
         try {
           if (res.status !== 200 || res.finalUrl !== url) continue;
           const urls = parseList(pageHtml(res)).map((e) => e.url);

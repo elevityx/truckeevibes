@@ -12,7 +12,7 @@ export interface TdVenue { name: string; address: string; hints: string[] }
 const LODGE: TdVenue = { name: 'The Lodge Restaurant & Pub', address: '12850 Northwoods Blvd, Truckee, CA 96161', hints: [] };
 const DOWNHILL: TdVenue = { name: 'Tahoe Donner Downhill Ski Resort', address: '11603 Slalom Way, Truckee, CA 96161', hints: ['downhill ski resort'] };
 const XC: TdVenue = { name: 'Tahoe Donner Cross Country Ski Center', address: '15275 Alder Creek Rd, Truckee, CA 96161', hints: ['cross country ski center'] };
-// The Alder Creek address is unverified (spec step 9 gate): confirm it from one real Alder Creek event page before relying on it.
+// Unverified until the A13 r7-2 post-deploy gate; the source runs at trust review until then.
 const ALDER: TdVenue = { name: 'Alder Creek Adventure Center', address: '15275 Alder Creek Rd, Truckee, CA 96161', hints: [] };
 const NORTHWOODS: TdVenue = { name: 'Tahoe Donner Northwoods Clubhouse', address: '11509 Northwoods Blvd, Truckee, CA 96161', hints: [] };
 

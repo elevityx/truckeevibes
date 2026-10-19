@@ -1,6 +1,7 @@
 // A13 (AC-M1-127, 128, 128b, 133-adapter): the Tahoe Donner adapter over a fake network and the saved/derived fixtures.
 import { describe, expect, it } from 'vitest';
 import { adapter } from './htmlTahoeDonner';
+import { makeEvent } from './common';
 import { createPoliteFetch, FetchError } from '../core/politeFetch';
 import type { SourceEvent } from '../types';
 import { DESC_SENTINEL, fakeNet, fixture, makeClock, redirect, source, text } from '../testing/fakes';
@@ -11,7 +12,7 @@ const ROBOTS = fixture('tahoedonner/robots.txt');
 const html = (b: string, status = 200) => new Response(b, { status, headers: { 'content-type': 'text/html' } });
 const fx = (n: string) => fixture(`tahoedonner/${n}`);
 
-interface Over { list?: string; lists?: Record<string, string | Response>; details?: Record<string, string | Response>; config?: Record<string, unknown>; pageCap?: number }
+interface Over { list?: string; lists?: Record<string, string | Response>; details?: Record<string, string | Response>; config?: Record<string, unknown>; pageCap?: number; throwOn?: { cat: string; err: Error } }
 function setup(o: Over = {}) {
   const clock = makeClock(NOW);
   const lists: Record<string, string | Response> = { '94': fx('list_family.html'), '180': fx('list_kids.html'), '95': fx('list_music.html'), ...o.lists };
@@ -19,6 +20,7 @@ function setup(o: Over = {}) {
     if (u.pathname === '/robots.txt') return text(ROBOTS);
     if (u.pathname === '/events/') {
       const c = u.searchParams.get('categories[]');
+      if (o.throwOn && (c ?? '') === o.throwOn.cat) throw o.throwOn.err;
       if (c) { const r = lists[c]; return r === undefined ? text('nf', 404) : typeof r === 'string' ? html(r) : r.clone(); }
       return html(o.list ?? fx('list.html'));
     }
@@ -87,9 +89,11 @@ describe('AC-M1-127 (r6) happy path', () => {
       venueName: 'The Lodge Restaurant & Pub', address: '12850 Northwoods Blvd, Truckee, CA 96161', town: 'Truckee', tz: 'America/Los_Angeles',
     });
     expect(lun.endsAt).toBeUndefined();
-    // Deviation from the spec text (AC-M1-127 expects family here): the existing classifier reads "Night" in the title as nightlife and
-    // its adult-signal veto removes family, even though the page is on TD's Family Events list. The hint itself works (see the parade).
+    // AC-M1-127 (r7): family is removed by the shared adult veto, which fires on "Pub" in the directory venue name The Lodge Restaurant & Pub,
+    // not on "Night" (nightlife comes from the title keyword, which is not an adult signal).
     expect(lun.categoriesHint).toEqual(['food-drink', 'nightlife']);
+    expect(lun.tagReasons).toContain('conflict:adult_signal');
+    expect(lun.categoriesHint).not.toContain('family');
     expect(lun.seriesUid).toBeUndefined();
     const parade = m['New Year’s Eve Light Parade + Fireworks Show'];
     expect(parade).toMatchObject({ startsAt: '2027-01-01T02:15:00Z', address: '11603 Slalom Way, Truckee, CA 96161' });
@@ -277,5 +281,54 @@ describe('AC-M1-128b (r4) hint-list contract', () => {
   it('a kids list that is a valid strict subset adds the kids hint to its events', async () => {
     const r = await setup({ lists: { '180': fx('list_family.html') } }).run();
     expect(lun(r.items).categoriesHint).toContain('kids');
+  });
+});
+
+describe('AC-M1-146 hint-list transport failures', () => {
+  const parade = (items: SourceEvent[]) => items.find((i) => i.title.startsWith('New Year’s Eve Light Parade'))!;
+  it('(a) category 94 failing on network is skipped; status ok, 8 items, filtered 6, requests still spaced', async () => {
+    const t = setup({ throwOn: { cat: '94', err: new TypeError('fetch failed') } });
+    const r = await t.run();
+    expect(r.status).toBe('ok');
+    expect(r.items).toHaveLength(8);
+    expect(r.filtered).toBe(6);
+    expect(t.net.urls()).toHaveLength(5 + 14);
+    const at = t.net.calls.map((c) => c.at);
+    for (let i = 1; i < at.length; i++) expect(at[i] - at[i - 1]).toBeGreaterThanOrEqual(5000);
+    expect(parade(r.items).categoriesHint).not.toContain('family');
+  });
+  it('(b) category 180 failing on timeout is skipped', async () => {
+    const t = setup({ throwOn: { cat: '180', err: Object.assign(new Error('t'), { name: 'TimeoutError' }) } });
+    const r = await t.run();
+    expect(r.status).toBe('ok');
+    expect(r.items).toHaveLength(8);
+  });
+  it('(c) guards still propagate: page_cap counts the failed request, robots_blocked ends the run', async () => {
+    const t = setup({ pageCap: 3, throwOn: { cat: '94', err: new TypeError('fetch failed') } });
+    await expect(t.run()).rejects.toMatchObject({ name: 'FetchError', code: 'page_cap' });
+    expect(t.net.urls().at(-1)).toBe(`${BASE}/events/?categories%5B%5D=180`); // 94 failed softly and counted; 95 hit the cap
+    const clock = makeClock(NOW);
+    const net = fakeNet((u) => (u.pathname === '/robots.txt' ? text('User-agent: *\nDisallow: /events/?categories\n') : html(fx('list.html'))), clock.now);
+    const src = source({ slug: 'tahoe-donner', family: 'html_tahoedonner', allowed_hosts: ['www.tahoedonner.com'], allowed_methods: ['html'], page_cap: 45,
+      config: { listUrl: `${BASE}/events/`, tz: 'America/Los_Angeles' } });
+    const pf = createPoliteFetch(src, { fetch: net.fetch, now: clock.now, sleep: clock.sleep });
+    await expect(adapter.fetch({ source: src, fetch: pf, now: new Date(NOW) })).rejects.toMatchObject({ code: 'robots_blocked' });
+  });
+  it('(d) the main list failing on network still rejects', async () => {
+    const t = setup({ throwOn: { cat: '', err: new TypeError('fetch failed') } });
+    await expect(t.run()).rejects.toMatchObject({ name: 'FetchError', code: 'network' });
+  });
+});
+
+describe('AC-M1-149 the shared adult veto fires on the venue name, not the title', () => {
+  const mk = (venueName: string) => makeEvent({ externalKey: 'k', title: 'Light Up the Night', startsAt: '2026-11-29T01:00:00Z', allDay: false, tz: 'America/Los_Angeles',
+    venueName, hints: ['dining', 'family events'], family: 'html_tahoedonner' });
+  it('venue The Lodge Pavilion keeps family', () => {
+    expect(mk('The Lodge Pavilion').categoriesHint).toContain('family');
+  });
+  it('venue The Lodge Restaurant & Pub loses family with conflict:adult_signal', () => {
+    const e = mk('The Lodge Restaurant & Pub');
+    expect(e.categoriesHint).not.toContain('family');
+    expect(e.tagReasons).toContain('conflict:adult_signal');
   });
 });
