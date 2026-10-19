@@ -67,6 +67,18 @@ describe('AC-M1-155 date restatement (A14 r3-5)', () => {
   });
 });
 
+describe('AC-M1-161 explicit-year guard', () => {
+  const ok = (s: string) => parseCbcDate(T(s));
+  it('an explicit year outside 20xx is a complete date, never a restatement', () => {
+    expect(ok('<p>Sat. Nov. 7th 2026</p><p>Album released November 7, 1999.</p>')).toEqual({ drop: 'date_multiple' });
+    expect(ok('<p>Sat. Nov. 7th 2026</p><p>Next show November 7, 2100.</p>')).toEqual({ drop: 'date_multiple' });
+  });
+  it('r3-5 and date_multiple are unchanged', () => {
+    expect(ok('<p>Sat. Nov. 7th 2026</p><p>on November 7th</p>')).toEqual({ date: '2026-11-07' });
+    expect(ok('<p>Sat. Nov. 7th 2026</p><p>Sat. Dec. 5th 2027</p>')).toEqual({ drop: 'date_multiple' });
+  });
+});
+
 describe('AC-M1-135 time grammar', () => {
   const t = (s: string) => parseCbcTime(T(s));
   it('labelled show time wins over doors; minutes; a single unlabelled time', () => {
