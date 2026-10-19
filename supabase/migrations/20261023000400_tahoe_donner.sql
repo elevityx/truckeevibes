@@ -1,11 +1,12 @@
 -- A13: Tahoe Donner events as a source (spec Amendment 13 r6).
 -- 1. the `members-only` label category; 2. the `html_tahoedonner` family; 3. the tahoe-donner row (html, 24h, page_cap 45);
--- 4. the terms evidence for html only; 5. trust 'auto' (the adapter is the safeguard: strict date/time grammar, no weekly series).
+-- 4. the terms evidence for html only; 5. enabled at trust 'review'; 'auto' comes only from a separate follow-up migration after the conductor's post-deploy gate (A13 r7-2).
 -- No SQL function changes: svc_ingest_batch keeps only known category slugs and recompute_event already writes event_categories.
 
-insert into public.categories (slug, label, sort, noun) values ('members-only', 'Members only', 15, 'members-only event');
+insert into public.categories (slug, label, sort, noun) values ('members-only', 'Members only', 15, 'members-only event')
+  on conflict (slug) do nothing;
 
-alter table public.sources drop constraint sources_family_check;
+alter table public.sources drop constraint if exists sources_family_check;
 alter table public.sources add constraint sources_family_check check (family in ('tribe','ics','ics_chambermaster','ics_civicplus','ics_eventsmanager',
                                          'rss','squarespace','jsonld','html','llm','html_finalsite','html_tahoedonner'));
 
@@ -17,15 +18,15 @@ update public.sources set family = 'html_tahoedonner', allowed_hosts = array['ww
 select private.record_source_terms('tahoe-donner', 'permitted', array['html']::text[], 'https://www.tahoedonner.com/robots.txt', '0fe5c745546c76471ae5c41caeede4f3e6bf08a51c87aaf8bc6fd22b0ad11eb9', 'conductor', '2026-10-18', '2027-10-17', 'Terms review 2026-10-18: permitted.');
 update public.sources set robots_checked_at = '2026-10-19', robots_hash = '0fe5c745546c76471ae5c41caeede4f3e6bf08a51c87aaf8bc6fd22b0ad11eb9', ai_bots_blocked = false where slug = 'tahoe-donner';
 
-update public.sources set enabled = true, trust = 'auto' where slug = 'tahoe-donner';
+update public.sources set enabled = true, trust = 'review' where slug = 'tahoe-donner';
 
--- Self-check (true on a fresh reset and on the hosted DB): the enabled set is the eleven of A12 plus tahoe-donner.
+-- Self-check (scoped: the tahoe-donner row and the members-only category only; global totals are asserted only in fresh-DB tests).
 do $$ begin
-  if (select count(*) from public.sources where enabled) <> 12
-     or (select count(*) from public.sources
-          where slug = 'tahoe-donner' and enabled and trust = 'auto' and cadence = '24h' and family = 'html_tahoedonner'
-            and ingest_disposition = 'permitted' and allowed_methods = array['html']::text[] and terms_recheck_at > now() and page_cap = 45) <> 1
-     or (select count(*) from public.categories) <> 15 then
+  if (select count(*) from public.sources
+       where slug = 'tahoe-donner' and enabled and trust = 'review' and not strict_auto and cadence = '24h' and family = 'html_tahoedonner'
+         and ingest_disposition = 'permitted' and allowed_methods = array['html']::text[] and terms_recheck_at > now() and page_cap = 45) <> 1
+     or not exists (select 1 from public.categories
+                      where slug = 'members-only' and label = 'Members only' and sort = 15 and noun = 'members-only event') then
     raise exception 'tahoe_donner_state';
   end if;
 end $$;

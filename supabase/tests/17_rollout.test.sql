@@ -38,8 +38,8 @@ select is((select ingest_disposition::text from public.sources where slug = 'tdr
 select is((select count(*) from public.sources where enabled), 12::bigint, 'exactly twelve sources are enabled (four rollout sources + seven TTUSD sources + Tahoe Donner, A12, A13)');
 select is((select string_agg(slug, ',' order by slug) from public.sources where enabled), 'alibi-truckee,tahoe-donner,tdrpd,truckee-chamber,ttusd-acms,ttusd-district,ttusd-nths,ttusd-nts,ttusd-te,ttusd-ths,ttusd-tle,visit-lake-tahoe', 'the enabled sources are the four rollout sources, Tahoe Donner and the seven TTUSD sources');
 select is((select count(*) from public.sources where enabled and slug not in ('alibi-truckee','tahoe-donner','tdrpd','truckee-chamber','visit-lake-tahoe') and slug not like 'ttusd-%'), 0::bigint, 'every other source is still disabled');
-select is((select string_agg(slug, ',' order by slug) from public.sources where trust::text = 'auto'), 'alibi-truckee,tahoe-donner,tdrpd,truckee-chamber,ttusd-acms,ttusd-district,ttusd-nths,ttusd-nts,ttusd-te,ttusd-ths,ttusd-tle', 'alibi-truckee, tdrpd, truckee-chamber and the seven TTUSD sources are the only sources at trust auto (A10, A12)');
-select is((select count(*) from public.sources where trust::text = 'auto'), 11::bigint, 'exactly eleven sources are at trust auto (A10, A12, A13)');
+select is((select string_agg(slug, ',' order by slug) from public.sources where trust::text = 'auto'), 'alibi-truckee,tdrpd,truckee-chamber,ttusd-acms,ttusd-district,ttusd-nths,ttusd-nts,ttusd-te,ttusd-ths,ttusd-tle', 'alibi-truckee, tdrpd, truckee-chamber and the seven TTUSD sources are the only sources at trust auto (A10, A12)');
+select is((select count(*) from public.sources where trust::text = 'auto'), 10::bigint, 'exactly ten sources are at trust auto (A10, A12; A13 ships Tahoe Donner at review)');
 select is((select string_agg(slug, ',' order by slug) from public.sources where strict_auto), 'visit-lake-tahoe', 'visit-lake-tahoe is the only source with strict_auto');
 select is((select count(*) from public.sources where trust::text = 'auto' and class = 'aggregator'), 0::bigint, 'no aggregator is at trust auto');
 

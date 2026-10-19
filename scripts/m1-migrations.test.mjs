@@ -809,3 +809,21 @@ describe('W1 api_events_v1 migration: canonical block, cumulative allowlist + ap
     for (const h of headers) expect(h, h.slice(0, 80)).toMatch(/set\s+search_path\s*=\s*''/i);
   });
 });
+
+// A13 r7 (AC-M1-143, AC-M1-148): the Tahoe Donner migration ships at trust review and its self-check is scoped to its own rows.
+describe('tahoe_donner (A13 r7)', () => {
+  const sql = () => read('tahoe_donner');
+  it('is idempotent in text: on conflict do nothing, drop constraint if exists', () => {
+    expect(sql()).toContain('on conflict (slug) do nothing');
+    expect(sql()).toContain('drop constraint if exists sources_family_check');
+  });
+  it("ships at trust 'review' and never sets trust = 'auto' (AC-M1-143)", () => {
+    expect(sql()).toContain("trust = 'review'");
+    expect(sql()).not.toMatch(/trust\s*=\s*'auto'/);
+  });
+  it('the self-check has no global source or category count (AC-M1-148)', () => {
+    expect(sql()).not.toMatch(/count\(\*\)\s+from\s+public\.sources\s+where\s+enabled/i);
+    expect(sql()).not.toMatch(/count\(\*\)\s+from\s+public\.categories\s*\)/i);
+    expect(sql()).toContain('tahoe_donner_state');
+  });
+});

@@ -245,11 +245,11 @@ create function pg_temp.chamber(p_key text, p_title text, p_day int, p_hh int, p
            'categoriesHint', jsonb_build_array('community'))) $$;
 
 -- AC-M1-130 migration --------------------------------------------------------------------------------------------------
-select pg_temp.eq($$(select count(*) from public.sources where slug = 'tahoe-donner' and enabled and trust = 'auto' and cadence = '24h' and family = 'html_tahoedonner'
+select pg_temp.eq($$(select count(*) from public.sources where slug = 'tahoe-donner' and enabled and trust = 'review' and not strict_auto and cadence = '24h' and family = 'html_tahoedonner'
     and ingest_disposition = 'permitted' and allowed_methods = array['html']::text[] and page_cap = 45 and terms_recheck_at = '2027-10-17'::date
     and allowed_hosts = array['www.tahoedonner.com'] and class = 'organizer' and ai_bots_blocked = false and robots_checked_at = '2026-10-19'
     and robots_hash = '0fe5c745546c76471ae5c41caeede4f3e6bf08a51c87aaf8bc6fd22b0ad11eb9'
-    and config = '{"listUrl":"https://www.tahoedonner.com/events/","tz":"America/Los_Angeles"}'::jsonb)$$, '1', 'AC-M1-130 tahoe-donner row is enabled/auto/24h/html_tahoedonner/permitted/{html}/page_cap 45/recheck 2027-10-17/hosts/config');
+    and config = '{"listUrl":"https://www.tahoedonner.com/events/","tz":"America/Los_Angeles"}'::jsonb)$$, '1', 'AC-M1-130 tahoe-donner row is enabled/review/24h/html_tahoedonner/permitted/{html}/page_cap 45/recheck 2027-10-17/hosts/config');
 select pg_temp.eq($$(select count(*) from public.sources where enabled)$$, '12', 'AC-M1-130 twelve sources enabled');
 select pg_temp.t($$(select pg_temp.x('postgres', $s$insert into public.sources (slug, name, homepage_url, allowed_hosts, family, class) values ('td-bogus', 'Bogus Family', 'https://example.test/', array['example.test'], 'html_bogus', 'organizer')$s$)) like 'ERR:23514%'$$,
   'AC-M1-130 family html_bogus fails the CHECK');
@@ -307,6 +307,14 @@ select pg_temp.rb('td5', 'tahoe-donner', jsonb_build_array(pg_temp.td('light-up-
 select pg_temp.cluster_all();
 select pg_temp.eq($$(select count(*) from public.events where merged_into is null and start_day = (now() at time zone 'America/Los_Angeles')::date + 46 and title in ('Spring Social', 'Spring Social Night'))$$, '2',
   'AC-M1-131 delayed geocode, Chamber first -> two events');
+-- r7-1: while Tahoe Donner is at trust review, a TD-only event waits as pending with one open event card
+select pg_temp.eq($$(select status::text from public.events where title = 'Light Up the Night' and merged_into is null and start_day = (now() at time zone 'America/Los_Angeles')::date + 42 order by starts_at limit 1)$$, 'pending',
+  'AC-M1-143 at trust review a TD-only event is pending');
+select pg_temp.eq($$(select count(*) from public.review_cards c join public.events e on e.id = c.event_id where c.kind = 'event' and c.status = 'open' and e.title = 'Light Up the Night'
+    and e.start_day = (now() at time zone 'America/Los_Angeles')::date + 42)$$, '1', 'AC-M1-143 ... with exactly one open event card');
+-- simulate the follow-up migration (r7-3): the flip re-queues the live TD occurrences
+update public.sources set trust = 'auto' where slug = 'tahoe-donner';
+select pg_temp.cluster_all();
 -- publish: a TD timed item with a geocoded venue and URL is published with no open card; with venue lat null it waits as pending
 select pg_temp.eq($$(select status::text from public.events where title = 'Light Up the Night' and merged_into is null and start_day = (now() at time zone 'America/Los_Angeles')::date + 42 order by starts_at limit 1)$$, 'published',
   'AC-M1-131 a TD timed item with a geocoded venue and URL -> published');
