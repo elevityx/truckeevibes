@@ -23,6 +23,8 @@ async function inTx(fn) {
   await c.connect();
   try {
     await c.query('begin');
+    // A14: later migrations add families (wprest_crystalbay, curated_dates) that the A13 CHECK predates; park those rows on 'html' inside this rolled-back transaction.
+    await c.query(`update public.sources set family = 'html' where family in ('wprest_crystalbay', 'curated_dates')`);
     await fn(c);
   } finally {
     try { await c.query('rollback'); } finally { await c.end(); }
