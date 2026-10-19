@@ -3,7 +3,7 @@
 import Sheet from '@/components/ui/Sheet';
 import { publicEnv } from '@/config/public-env';
 import type { VibeEvent } from '@/lib/data/types';
-import { CATEGORY_LABELS } from '@/lib/categories';
+import { ACCESS_TAG_LABELS, CATEGORY_LABELS } from '@/lib/categories';
 import AlsoOn, { alsoOn } from './AlsoOn';
 import DateChip from './DateChip';
 import { buildIcs, icsFileName } from './ics';
@@ -82,6 +82,7 @@ export default function EventSheet({ event: e, events, now, tz, pickLine = null,
               {e.age === '21_plus' && <span className="tg t21">21+</span>}
               {e.age === '18_plus' && <span className="tg t21">18+</span>}
               {e.priceKind === 'free' && <span className="tg free">Free</span>}
+              {e.categories.includes('members-only') && <span className="tg members">{ACCESS_TAG_LABELS['members-only']}</span>}
               {isFar(e) && <span className="tg drive">Worth the drive</span>}
             </p>
           </div>

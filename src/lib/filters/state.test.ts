@@ -178,3 +178,14 @@ describe('AC-M1-119 the schools category (A12)', () => {
   });
   it('cat=schools parses to [schools]', () => expect(parseFilters('cat=schools').cats).toEqual(['schools']));
 });
+
+describe('AC-M1-133 (r4) members-only is a label, not a filter kind', () => {
+  it('CATEGORY_SLUGS still has 14 entries and omits members-only; cat=members-only is ignored', async () => {
+    const { ACCESS_TAG_LABELS } = await import('../categories');
+    expect(CATEGORY_SLUGS).toHaveLength(14);
+    expect(CATEGORY_SLUGS).not.toContain('members-only');
+    expect(ACCESS_TAG_LABELS).toEqual({ 'members-only': 'Members only' });
+    expect(parseFilters('cat=members-only').cats).toEqual([]);
+    expect(parseFilters('cat=music,members-only').cats).toEqual(['music']);
+  });
+});

@@ -2,6 +2,7 @@ import { memo } from 'react';
 import type { VibeEvent } from '@/lib/data/types';
 import EventGlyph from './EventGlyph';
 import { ChevIcon } from './icons';
+import { ACCESS_TAG_LABELS } from '@/lib/categories';
 import { townOf } from './links';
 import { isFar, timeText, whenLine } from './when';
 
@@ -28,6 +29,7 @@ export const EventRow = memo(function EventRow({ e, tz, picked = false, onOpen }
   const town = e.town ?? (e.address ? townOf(e.address) : '');
   const venue = shortVenue(e.venue);
   const free = e.priceKind === 'free';
+  const members = e.categories.includes('members-only');
   const far = isFar(e);
   const a21 = e.age === '21_plus';
   const a18 = e.age === '18_plus';
@@ -52,6 +54,7 @@ export const EventRow = memo(function EventRow({ e, tz, picked = false, onOpen }
           )}
           {picked && <span className="tg pick">Our pick</span>}
           {free && <span className="tg free">Free</span>}
+          {members && <span className="tg members">{ACCESS_TAG_LABELS['members-only']}</span>}
           {a21 && <span className="tg t21">21+</span>}
           {a18 && <span className="tg t21">18+</span>}
           {far && <span className="tg drive">Worth the drive</span>}

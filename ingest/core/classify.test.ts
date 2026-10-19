@@ -308,3 +308,20 @@ describe('line breaks are sentence breaks (AC-R4b-25)', () => {
     expect(c('Fall Fair', {}, d.replace(/\n/g, ' ')).categories).not.toContain('kids');
   });
 });
+
+describe('A13 html_tahoedonner map and members-only', () => {
+  it('maps the Tahoe Donner labels', () => {
+    const m = CATEGORY_MAPS.html_tahoedonner;
+    expect(m).toBeDefined();
+    for (const [k, v] of Object.entries({ snowshoe: 'outdoors', 'downhill ski resort': 'outdoors', 'cross country ski center': 'outdoors', 'tahoe donner trails': 'outdoors', 'family events': 'family', 'kids programming': 'kids', dining: 'food-drink' })) expect(m[k], k).toBe(v);
+    expect(m['recreation programs']).toBeUndefined();
+    const r = c('Sample Dinner', { categoriesHint: ['dining', 'recreation programs', 'live music'], family: 'html_tahoedonner' });
+    expect(r.categories).toEqual(expect.arrayContaining(['food-drink', 'music']));
+    expect(r.unmapped).toEqual(['recreation programs']);
+  });
+  it('members-only is no source label: no family maps it, and it is not one of OUR_SLUGS', () => {
+    for (const [f, m] of Object.entries(CATEGORY_MAPS)) expect(Object.values(m).includes('members-only'), f).toBe(false);
+    expect(c('Sample', { categoriesHint: ['members-only'], family: 'tribe' }).categories).not.toContain('members-only');
+    expect(c('Sample', { categoriesHint: ['members-only'], family: 'html_tahoedonner' }).categories).not.toContain('members-only');
+  });
+});

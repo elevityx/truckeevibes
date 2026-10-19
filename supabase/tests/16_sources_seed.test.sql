@@ -206,7 +206,7 @@ select pg_temp.t($$(select count(*) = 2 from information_schema.columns where ta
 create temp table expect (slug text, disp text, methods text[]);
 insert into expect values
   ('alibi-truckee', 'permitted', '{feed}'), ('truckee-chamber', 'permitted', '{feed,html}'), ('visit-lake-tahoe', 'permitted', '{api}'),
-  ('tdrpd', 'permitted', '{feed}'), ('tahoe-donner', 'permitted', '{feed,html}'), ('arts-for-the-schools', 'permitted', '{html}'),
+  ('tdrpd', 'permitted', '{feed}'), ('tahoe-donner', 'permitted', '{html}'), ('arts-for-the-schools', 'permitted', '{html}'),
   ('diamond-peak', 'permission_required', '{}'), ('ivgid', 'permission_required', '{}'), ('truckee-roundhouse', 'permission_required', '{}');
 select pg_temp.eq($$(select count(*) from expect e join public.sources s using (slug)
                       where s.ingest_disposition::text = e.disp and s.allowed_methods <@ e.methods and s.allowed_methods @> e.methods)$$, '9',
