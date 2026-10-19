@@ -40,7 +40,7 @@ select is(pg_temp.q($$(select count(*) from public.areas)$$), '7', 'seven areas 
 select is(pg_temp.q($$(select count(*) from public.regions where slug = 'truckee')$$), '1', 'truckee region is seeded');
 select is(pg_temp.q($$(select count(*) from public.categories)$$), '15', 'fifteen categories are seeded (twelve plus kids R4a, schools A12, members-only A13)');
 select is(pg_temp.q($$(select count(*) from private.blocked_terms)$$), '10', 'ten blocked terms are seeded');
-select is(pg_temp.q($$(select string_agg(slug, ',' order by slug) from public.sources where enabled)$$), 'alibi-truckee,tahoe-donner,tdrpd,truckee-chamber,ttusd-acms,ttusd-district,ttusd-nths,ttusd-nts,ttusd-te,ttusd-ths,ttusd-tle,visit-lake-tahoe', 'only the rollout sources are enabled');
+select is(pg_temp.q($$(select string_agg(slug, ',' order by slug) from public.sources where enabled)$$), 'alibi-truckee,crystal-bay-casino,eaa-1073-breakfast,moodys-bistro,tahoe-donner,tdrpd,truckee-chamber,ttusd-acms,ttusd-district,ttusd-nths,ttusd-nts,ttusd-te,ttusd-ths,ttusd-tle,visit-lake-tahoe', 'only the rollout sources are enabled');
 -- M1 (S1.13a) records the terms evidence of the nine M1 sources, so the M0 seed state now holds for the other five only.
 select is(pg_temp.q($$(select count(*) from public.sources where slug not in ('diamond-peak','ivgid','visit-lake-tahoe','truckee-chamber','tdrpd','alibi-truckee','tahoe-donner','truckee-roundhouse','arts-for-the-schools','crystal-bay-casino','moodys-bistro','eaa-1073-breakfast')
   and slug not like 'ttusd-%' and (ingest_disposition <> 'unknown' or trust <> 'link_only'))$$), '0',

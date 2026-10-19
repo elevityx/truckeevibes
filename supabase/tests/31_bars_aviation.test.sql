@@ -260,7 +260,7 @@ select pg_temp.eq($$(select string_agg(slug || ':' || enabled || ':' || trust ||
     || (terms_recheck_at at time zone 'UTC')::date, ';' order by slug) from public.sources where slug in ('crystal-bay-casino', 'moodys-bistro', 'eaa-1073-breakfast'))$$,
   'crystal-bay-casino:true:auto:permitted:api:wprest_crystalbay:venue:2027-10-18;eaa-1073-breakfast:true:auto:permitted:feed:curated_dates:community:2027-01-10;moodys-bistro:true:auto:permitted:api:tribe:venue:2027-10-18',
   'AC-M1-140 the three sources: enabled, auto, permitted, methods, family, class, recheck dates');
-select pg_temp.eq($$(select robots_hash || '|' || robots_checked_at || '|' || ai_bots_blocked from public.sources where slug = 'crystal-bay-casino')$$,
+select pg_temp.eq($$(select robots_hash || '|' || robots_checked_at::date || '|' || ai_bots_blocked from public.sources where slug = 'crystal-bay-casino')$$,
   '10160cb7c27e8ca5c7093db5b863178da9dd3c46fd400c7b3922f64cb67dc985|2026-10-19|false', 'AC-M1-140 crystal-bay-casino robots evidence as recorded');
 select pg_temp.eq($$(select terms_hash from public.sources where slug = 'crystal-bay-casino')$$, '8ed6935355e9abc25e1b4a6876bc89051ca97274c877964c3f1e10c6bbe68b28', 'AC-M1-140 crystal-bay-casino terms hash');
 select pg_temp.t($$(select terms_note like '%facts-only judgment, not affirmative permission%' from public.sources where slug = 'crystal-bay-casino')$$, 'AC-M1-140 the Crystal Bay terms note says facts-only, not permission');
@@ -269,7 +269,7 @@ select pg_temp.eq($$(select terms_hash from public.sources where slug = 'eaa-107
 select pg_temp.t($$(select terms_note like '%hash is of our config%' from public.sources where slug = 'eaa-1073-breakfast')$$, 'AC-M1-140 the EAA note says the hash is of our config');
 select pg_temp.eq($$(select config ->> 'apiUrl' from public.sources where slug = 'crystal-bay-casino')$$, 'https://www.crystalbaycasino.com/wp-json/wp/v2/event?per_page=100', 'AC-M1-140 crystal-bay-casino apiUrl');
 select pg_temp.eq($$(select page_cap::text || '|' || cadence || '|' || homepage_url from public.sources where slug = 'crystal-bay-casino')$$, '3|24h|https://www.crystalbaycasino.com/entertainment/events/', 'AC-M1-140 crystal-bay-casino page_cap, cadence, homepage');
-select pg_temp.eq($$(select config::text from public.sources where slug = 'moodys-bistro')$$, '{"base": "https://www.moodysbistro.com", "tz": "America/Los_Angeles", "defaultCategories": ["music"]}', 'AC-M1-140 moodys-bistro config');
+select pg_temp.eq($$(select config = '{"base":"https://www.moodysbistro.com","tz":"America/Los_Angeles","defaultCategories":["music"]}'::jsonb from public.sources where slug = 'moodys-bistro')$$, 'true', 'AC-M1-140 moodys-bistro config');
 select pg_temp.eq($$(select jsonb_array_length(config -> 'dates') || '|' || (config -> 'dates' -> 0 ->> 'date') || '|' || (config ->> 'provenance') from public.sources where slug = 'eaa-1073-breakfast')$$,
   '3|2026-11-14|listed on tahoe.com, checked 2026-10-19', 'AC-M1-140 the EAA config lists three dates with provenance');
 select pg_temp.eq($$(select count(*) from public.sources where enabled)$$, '15', 'AC-M1-140 fifteen sources enabled');

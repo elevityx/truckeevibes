@@ -559,3 +559,51 @@ describe('A13 members-only is ours alone (AC-M1-128b r4)', () => {
     expect(h.submits()[0].body.items).toHaveLength(8);
   });
 });
+
+describe('A14 21+ venues and aviation through the runner (AC-M1-142)', () => {
+  const EAA_CONFIG = {
+    tz: 'America/Los_Angeles', provenance: 'listed on tahoe.com, checked 2026-10-19', title: 'EAA Chapter 1073 Pancake Breakfast', venueName: 'Truckee Tahoe Airport',
+    address: '10356 Truckee Airport Rd, Truckee, CA 96161', town: 'Truckee', lat: 39.3180851, lng: -120.1381025, url: 'https://www.tahoe.com/business/eea-truckee/events',
+    priceText: '$5–$7', categories: ['family', 'kids', 'outdoors', 'learning'],
+    dates: [{ date: '2026-11-14', start: '08:00', end: '10:00' }, { date: '2026-12-12', start: '08:00' }, { date: '2027-01-09', start: '08:00' }],
+  };
+  const grants: GrantOut[] = [
+    { grant: 'g-cb', run_id: 'r-cb', source: source({ slug: 'crystal-bay-casino', family: 'wprest_crystalbay', allowed_hosts: ['www.crystalbaycasino.com'], allowed_methods: ['api'], page_cap: 3,
+      config: { apiUrl: 'https://www.crystalbaycasino.com/wp-json/wp/v2/event?per_page=100', tz: 'America/Los_Angeles', defaultCategories: ['nightlife'] } }) },
+    { grant: 'g-eaa', run_id: 'r-eaa', source: source({ slug: 'eaa-1073-breakfast', family: 'curated_dates', allowed_hosts: ['tahoe.com'], allowed_methods: ['feed'], page_cap: 1, config: EAA_CONFIG }) },
+    { grant: 'g-mo', run_id: 'r-mo', source: source({ slug: 'moodys-bistro', family: 'tribe', allowed_hosts: ['www.moodysbistro.com'], allowed_methods: ['api'], page_cap: 10,
+      config: { base: 'https://www.moodysbistro.com', tz: 'America/Los_Angeles', defaultCategories: ['music'] } }) },
+  ];
+  async function go() {
+    const h = harness({
+      grants,
+      other: (u) => {
+        if (u.pathname === '/robots.txt') return text(u.hostname.endsWith('crystalbaycasino.com') ? fixture('crystalbay/robots.txt') : 'User-agent: *\nDisallow: /wp-admin/\nAllow: /wp-admin/admin-ajax.php\n');
+        if (u.pathname === '/wp-json/wp/v2/event') return new Response(fixture('crystalbay/events.json'), { status: 200, headers: { 'content-type': 'application/json' } });
+        if (u.pathname === '/wp-json/tribe/events/v1/events') return json({ events: [], total: 0, total_pages: 0 });
+        return text('nf', 404);
+      },
+    });
+    expect(await h.run()).toBe(0);
+    return h;
+  }
+  it('crystal-bay-casino found=7 filtered=2, eaa found=3, moodys found=0; no title or URL text in any log line', async () => {
+    const h = await go();
+    const line = (s: string) => h.logs.find((l) => l.startsWith(`source=${s} `))!;
+    expect(line('crystal-bay-casino')).toMatch(/^source=crystal-bay-casino status=ok found=7 new=\d+ changed=\d+ invalid=0 filtered=2 /);
+    expect(line('eaa-1073-breakfast')).toMatch(/^source=eaa-1073-breakfast status=ok found=3 /);
+    expect(line('moodys-bistro')).toMatch(/^source=moodys-bistro status=ok found=0 /);
+    for (const s of ['crystal-bay-casino', 'eaa-1073-breakfast', 'moodys-bistro']) expect(line(s)).not.toMatch(/Steely|Easy Star|EAA Chapter|Pancake|https?:|crystalbaycasino|tahoe\.com|tixr/i);
+  });
+  it('the crystal batch carries the parser version, default category nightlife and no tixr', async () => {
+    const h = await go();
+    const b = h.submits().find((s) => s.body.grant === 'g-cb')!.body;
+    expect(b.run.parser_version).toBe('wprest_crystalbay.1-c2');
+    expect(b.items).toHaveLength(7);
+    expect(JSON.stringify(b.items).toLowerCase()).not.toContain('tixr');
+    for (const it of b.items) expect(it.categoriesHint).toContain('nightlife');
+    const eaa = h.submits().find((s) => s.body.grant === 'g-eaa')!.body;
+    expect(eaa.items).toHaveLength(3);
+    expect(h.net.urls().some((u) => u.includes('tahoe.com'))).toBe(false); // curated_dates never touches the network
+  });
+});
