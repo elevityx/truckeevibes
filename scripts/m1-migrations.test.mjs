@@ -788,12 +788,12 @@ describe('retag_activate: series rule, hide re-run, sources reset, unchanged 24 
 
 describe('W1 api_events_v1 migration: canonical block, cumulative allowlist + api_events_v1 (25)', () => {
   const sqlFiles = () => files.filter((x) => x.endsWith('.sql'));
-  it('is the newest migration and sorts after 20261023000100_realtime.sql', () => {
+  it('is the newest migration and sorts after 20261023000300_ttusd_schools.sql', () => {
     expect(sqlFiles().pop()).toBe('20261024000100_api_events_v1.sql');
-    expect('20261024000100_api_events_v1.sql' > '20261023000100_realtime.sql').toBe(true);
+    expect('20261024000100_api_events_v1.sql' > '20261023000300_ttusd_schools.sql').toBe(true);
   });
-  it('its grants are the realtime set plus api_events_v1(...)->anon,authenticated', () => {
-    const prev = canonicalGrants(readFileSync(join(DIR, '20261023000100_realtime.sql'), 'utf8'));
+  it('its grants are the ttusd_schools set plus api_events_v1(...)->anon,authenticated', () => {
+    const prev = canonicalGrants(readFileSync(join(DIR, '20261023000300_ttusd_schools.sql'), 'utf8'));
     const sql = read('api_events_v1');
     const cur = canonicalGrants(sql);
     expect(prev.size).toBe(24);
