@@ -35,11 +35,11 @@ select is((select enabled from public.sources where slug = 'tdrpd'), true, 'tdrp
 select is((select trust::text from public.sources where slug = 'tdrpd'), 'auto', 'tdrpd trust is auto');
 select is((select strict_auto from public.sources where slug = 'tdrpd'), false, 'tdrpd has no strict auto rule');
 select is((select ingest_disposition::text from public.sources where slug = 'tdrpd'), 'permitted', 'tdrpd is permitted');
-select is((select count(*) from public.sources where enabled), 11::bigint, 'exactly eleven sources are enabled (four rollout sources + seven TTUSD sources, A12)');
-select is((select string_agg(slug, ',' order by slug) from public.sources where enabled), 'alibi-truckee,tdrpd,truckee-chamber,ttusd-acms,ttusd-district,ttusd-nths,ttusd-nts,ttusd-te,ttusd-ths,ttusd-tle,visit-lake-tahoe', 'the enabled sources are the four rollout sources and the seven TTUSD sources');
-select is((select count(*) from public.sources where enabled and slug not in ('alibi-truckee','tdrpd','truckee-chamber','visit-lake-tahoe') and slug not like 'ttusd-%'), 0::bigint, 'every other source is still disabled');
-select is((select string_agg(slug, ',' order by slug) from public.sources where trust::text = 'auto'), 'alibi-truckee,tdrpd,truckee-chamber,ttusd-acms,ttusd-district,ttusd-nths,ttusd-nts,ttusd-te,ttusd-ths,ttusd-tle', 'alibi-truckee, tdrpd, truckee-chamber and the seven TTUSD sources are the only sources at trust auto (A10, A12)');
-select is((select count(*) from public.sources where trust::text = 'auto'), 10::bigint, 'exactly ten sources are at trust auto (A10, A12)');
+select is((select count(*) from public.sources where enabled), 12::bigint, 'exactly twelve sources are enabled (four rollout sources + seven TTUSD sources + Tahoe Donner, A12, A13)');
+select is((select string_agg(slug, ',' order by slug) from public.sources where enabled), 'alibi-truckee,tahoe-donner,tdrpd,truckee-chamber,ttusd-acms,ttusd-district,ttusd-nths,ttusd-nts,ttusd-te,ttusd-ths,ttusd-tle,visit-lake-tahoe', 'the enabled sources are the four rollout sources, Tahoe Donner and the seven TTUSD sources');
+select is((select count(*) from public.sources where enabled and slug not in ('alibi-truckee','tahoe-donner','tdrpd','truckee-chamber','visit-lake-tahoe') and slug not like 'ttusd-%'), 0::bigint, 'every other source is still disabled');
+select is((select string_agg(slug, ',' order by slug) from public.sources where trust::text = 'auto'), 'alibi-truckee,tahoe-donner,tdrpd,truckee-chamber,ttusd-acms,ttusd-district,ttusd-nths,ttusd-nts,ttusd-te,ttusd-ths,ttusd-tle', 'alibi-truckee, tdrpd, truckee-chamber and the seven TTUSD sources are the only sources at trust auto (A10, A12)');
+select is((select count(*) from public.sources where trust::text = 'auto'), 11::bigint, 'exactly eleven sources are at trust auto (A10, A12, A13)');
 select is((select string_agg(slug, ',' order by slug) from public.sources where strict_auto), 'visit-lake-tahoe', 'visit-lake-tahoe is the only source with strict_auto');
 select is((select count(*) from public.sources where trust::text = 'auto' and class = 'aggregator'), 0::bigint, 'no aggregator is at trust auto');
 
@@ -49,7 +49,7 @@ select is(
   pg_temp.x($q$update public.sources set enabled = true where slug = (select slug from public.sources where ingest_disposition = 'permission_required' order by slug limit 1)$q$),
   'ERR:23514|source_not_permitted',
   'the source gate refuses enabling a permission_required source');
-select is((select count(*) from public.sources where enabled), 11::bigint, 'still exactly eleven sources enabled after the refused attempt');
+select is((select count(*) from public.sources where enabled), 12::bigint, 'still exactly twelve sources enabled after the refused attempt');
 
 -- Fixture: a pending Alibi event with an open card is published, and the card closes auto_published, after a trust change + drain.
 create function pg_temp.ts(p_days int, p_hh int, p_plus int default 0) returns text language sql as $$
