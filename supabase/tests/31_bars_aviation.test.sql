@@ -297,7 +297,7 @@ select pg_temp.t($$(select pg_temp.x('postgres', $s$insert into public.sources (
 select pg_temp.t($$(select pg_temp.x('postgres', $s$insert into public.sources (slug, name, homepage_url, allowed_hosts, family, class) values ('bars-ok-2', 'OK Curated', 'https://example.test/', array['example.test'], 'curated_dates', 'community')$s$) = 'OK')$$, 'AC-M1-140 family curated_dates is accepted');
 select pg_temp.eq($$(select count(distinct p.oid) from pg_proc p join pg_namespace n on n.oid = p.pronamespace, lateral aclexplode(p.proacl) a
     where n.nspname in ('public', 'private') and a.grantee in (select oid from pg_roles where rolname in ('anon', 'authenticated', 'service_role')) and a.privilege_type = 'EXECUTE')$$,
-  '24', 'AC-M1-140 the EXECUTE allowlist still has 24 functions');
+  '25', 'AC-M1-140 the EXECUTE allowlist has 25 functions (A14 keeps A13''s 24; +1 is W1 api_events_v1, migration 20261024000100 sorts after A14)');
 
 -- area boundaries ----------------------------------------------------------------------------------------------------------
 select pg_temp.eq($$private.area_for(39.2275377::double precision, -120.0046979::double precision)$$, 'incline_crystal_bay', 'AC-M1-140 the casino coordinates fall in incline_crystal_bay');
