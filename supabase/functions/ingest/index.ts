@@ -1,9 +1,10 @@
 // ingest: the runner's only door to the database (spec S1.6). A signed POST (HMAC-SHA256 over ts, nonce and the body
-// hash, a 5-minute window, single-use nonces) with three ops: due_sources, submit_batch, finish. The runner holds no
+// hash, a 5-minute window, single-use nonces) with three ops: due_sources, submit_batch, finish; plus the two Lights mirror ops
+// (W3): mirror_grant, submit_lights_mirror. The runner holds no
 // Supabase key; this function holds the service key in its env and calls only svc_* routines through _shared/db.ts.
 // Modeled on TL:supabase/functions/send-digest/index.ts. Logs carry the op, counts and status codes only.
 // Env: INGEST_HMAC_KEY, SUPABASE_URL, SUPABASE_SECRET_KEYS or SUPABASE_SERVICE_ROLE_KEY.
-import { type BatchOut, type ClusterOut, type GeocodeRequest, type GrantOut, ingestDb, serviceClient, type IngestDb, type RunMeta } from '../_shared/db.ts';
+import { type BatchOut, type ClusterOut, type GeocodeRequest, type GrantOut, ingestDb, type MirrorApplyOut, type MirrorGrantOut, type MirrorRun, serviceClient, type IngestDb, type RunMeta } from '../_shared/db.ts';
 import { json, timingSafeEqual, UUID } from '../_shared/http.ts';
 
 export interface GeoOut { hit: { lat: number; lng: number } | null; status: number }
@@ -102,6 +103,8 @@ export async function handle(req: Request, env: IngestEnv | null, deps: IngestDe
     case 'due_sources': return await dueSources(deps);
     case 'submit_batch': return await submitBatch(msg, deps);
     case 'finish': return await finish(deps);
+    case 'mirror_grant': return await mirrorGrant(deps);
+    case 'submit_lights_mirror': return await submitLightsMirror(msg, deps);
     default:
       deps.log('ingest status=400 bad_op');
       return json(400, { error: 'bad_op' });
@@ -142,6 +145,46 @@ async function submitBatch(msg: Record<string, unknown>, deps: IngestDeps): Prom
   deps.log(`ingest op=submit_batch status=200 items=${items.length} run_status=${String(result.status)} new=${Number(result.new ?? 0)} ` +
            `changed=${Number(result.changed ?? 0)} gone=${Number(result.gone ?? 0)} geocoded=${geocoded}`);
   return json(200, { ...result, geocoded });
+}
+
+async function mirrorGrant(deps: IngestDeps): Promise<Response> {
+  let out: MirrorGrantOut;
+  try { out = await deps.db.mirrorGrant(); } catch (e) {
+    deps.log(`ingest op=mirror_grant status=500 code=${codeOf(e) ?? 'none'}`);
+    return json(500, { error: 'unavailable' });
+  }
+  deps.log(`ingest op=mirror_grant status=200 grant=${typeof out.grant === 'string' ? 1 : 0}`);
+  return json(200, out);
+}
+
+/** One Lights snapshot for svc_lights_mirror_apply. Logs counts only (V11): never a title, URL or the grant. */
+async function submitLightsMirror(msg: Record<string, unknown>, deps: IngestDeps): Promise<Response> {
+  const { grant, run, rows } = msg;
+  const n = Array.isArray(rows) ? rows.length : 0;
+  if (typeof grant !== 'string' || !isObject(run) || !Array.isArray(rows)) {
+    deps.log(`ingest op=submit_lights_mirror status=400 rows=${n} shape`);
+    return json(400, { error: 'bad_request' });
+  }
+  if (rows.length > MAX_ITEMS) {
+    deps.log(`ingest op=submit_lights_mirror status=413 rows=${n}`);
+    return json(413, { error: 'too_large' });
+  }
+  let r: MirrorApplyOut;
+  try {
+    r = await deps.db.mirrorApply(grant, run as MirrorRun, rows);
+  } catch (e) {
+    const code = codeOf(e);
+    const status = code === 'P0001' ? 403 : code === '22023' ? 400 : 500;
+    deps.log(`ingest op=submit_lights_mirror status=${status} rows=${n} code=${code ?? 'none'}`);
+    if (code === 'P0001') return json(403, { error: 'grant_rejected' });
+    if (code === '22023') return json(400, { error: 'invalid_input' });
+    return json(500, { error: 'unavailable' });
+  }
+  const c = (v: unknown) => (Number.isFinite(Number(v)) ? Math.trunc(Number(v)) : 0);
+  const st = typeof r.status === 'string' && /^[a-z]{1,20}$/.test(r.status) ? r.status : 'unknown';
+  deps.log(`ingest op=submit_lights_mirror status=200 rows=${n} run_status=${st} added=${c(r.added)} changed=${c(r.changed)} ` +
+           `removed=${c(r.removed)} held=${c(r.held)} invalid=${c(r.invalid)}`);
+  return json(200, r);
 }
 
 /** Sequential, >= 1 s apart, at most 20 lookups, none started after 60 s. Returns how many results were stored. */

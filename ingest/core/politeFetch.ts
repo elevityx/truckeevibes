@@ -96,6 +96,14 @@ function crawlDelayOf(text: string, parser: ReturnType<typeof robotsParser>): nu
   return Math.max(v(parser.getCrawlDelay(ROBOTS_TOKEN)), v(parser.getCrawlDelay('*')), pre);
 }
 
+/** The legal gate (V4): a permitted disposition, a terms re-check date in the future, and the request kind allowed. Shared with the Lights mirror client. */
+export function checkLegal(source: PoliteSource, kind: FetchKind, nowMs: number): void {
+  const ok = source.ingest_disposition === 'permitted' || source.ingest_disposition === 'official_api_only';
+  const recheck = source.terms_recheck_at ? Date.parse(source.terms_recheck_at) : Number.NaN;
+  if (!ok || !(recheck > nowMs)) throw new FetchError('terms_gate');
+  if (!source.allowed_methods.includes(kind)) throw new FetchError('method_gate');
+}
+
 interface RobotsEntry { blocked: boolean; parser?: ReturnType<typeof robotsParser>; delay: number; info?: RobotsInfo }
 
 export function createPoliteFetch(source: PoliteSource, deps: PoliteDeps): PoliteFetch {
@@ -106,12 +114,7 @@ export function createPoliteFetch(source: PoliteSource, deps: PoliteDeps): Polit
   const hostAllowed = (h: string) => source.allowed_hosts.some((a) => { const x = a.toLowerCase(); return h === x || h.endsWith(`.${x}`); });
   const signal = () => deps.timeoutSignal?.(TIMEOUT_MS) ?? AbortSignal.timeout(TIMEOUT_MS);
 
-  function legalGate(kind: FetchKind) {
-    const ok = source.ingest_disposition === 'permitted' || source.ingest_disposition === 'official_api_only';
-    const recheck = source.terms_recheck_at ? Date.parse(source.terms_recheck_at) : Number.NaN;
-    if (!ok || !(recheck > deps.now())) throw new FetchError('terms_gate');
-    if (!source.allowed_methods.includes(kind)) throw new FetchError('method_gate');
-  }
+  const legalGate = (kind: FetchKind) => checkLegal(source, kind, deps.now());
 
   /** One network request: headers, timeout and error mapping. Redirects are never followed here. */
   async function request(url: string, conditional: boolean): Promise<Response> {

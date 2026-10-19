@@ -54,6 +54,7 @@ function fake(over: {
   census?: (a: string) => Promise<{ lat: number; lng: number } | null>;
   cluster?: () => Promise<{ processed: number; remaining: number; public_changed: boolean; busy?: boolean }>;
   nonce?: (n: string) => Promise<boolean>;
+  mirrorApply?: (g: string, run: unknown, rows: unknown[]) => Promise<unknown>;
 } = {}): Fake {
   const f: Fake = { calls: [], logs: [], clock: { t: T0 }, geocodeCalls: [], censusCalls: [], geoSet: [], clusterCalls: [], deps: {} };
   const seen = new Set<string>();
@@ -72,6 +73,15 @@ function fake(over: {
         return over.batch ? over.batch(g, run, items) : Promise.resolve({ run_id: '99999999-0000-4000-8000-000000000002', status: 'ok', new: items.length, changed: 0, gone: 0, geocode: [] });
       },
       setGeocode: (...a: unknown[]) => { f.calls.push('setGeocode'); f.geoSet.push(a); return Promise.resolve(); },
+      mirrorGrant: () => {
+        f.calls.push('mirrorGrant');
+        return Promise.resolve({ grant: 'm'.repeat(64), run_id: '99999999-0000-4000-8000-000000000003', source: { slug: 'truckee-lights' } });
+      },
+      mirrorApply: (g: string, run: unknown, rows: unknown[]) => {
+        f.calls.push('mirrorApply');
+        return over.mirrorApply ? over.mirrorApply(g, run, rows)
+          : Promise.resolve({ status: 'ok', seen: rows.length, added: rows.length, changed: 0, removed: 0, held: 0, invalid: 0 });
+      },
       cluster: (limit: number) => {
         f.calls.push('cluster');
         f.clusterCalls.push(limit);
@@ -487,4 +497,89 @@ Deno.test('census() parses addressMatches, sends the UA, and a miss or HTTP erro
   assertEquals(await mod.census('x', bad), { hit: null, status: 503 });
   const boom = (() => Promise.reject(new Error('net'))) as unknown as typeof fetch;
   assertEquals(await mod.census('x', boom), { hit: null, status: 0 });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// AC-W3-18 (Spec_Vibes_Widget W3.2): the Lights mirror ops ride the same HMAC + nonce + size checks.
+// ---------------------------------------------------------------------------------------------------------------------
+const MIRROR_RUN = { region: 'truckee', season: 'halloween', year: 2026, status: 'ok', total: 1 };
+const lightsRow = (i: number) => ({
+  id: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, season: 'halloween', year: 2026,
+  title: `SYNTHETIC-LIGHTS-TITLE-${i}`, description: 'A synthetic description text.', venue: null, address: '1 Main St',
+  lat: 39.3, lng: -120.2, starts_at: '2026-10-30T02:00:00+00:00', ends_at: null, url: null, adults_only: false,
+});
+const MIRROR_LOG = /^ingest op=submit_lights_mirror status=\d+ rows=\d+/;
+
+Deno.test('AC-W3-18 mirror_grant and submit_lights_mirror need a valid HMAC: a bad signature -> 401, zero DB calls', async () => {
+  const handle = await load();
+  const f = fake();
+  for (const body of [op({ op: 'mirror_grant' }), op({ op: 'submit_lights_mirror', grant: 'g', run: MIRROR_RUN, rows: [lightsRow(1)] })]) {
+    const res = await handle(await signedRequest(body, { key: KEY + '-other' }), ENV, f.deps);
+    assertEquals(res.status, 401);
+    const stale = await handle(await signedRequest(body, { ts: Math.floor(T0 / 1000) - 301 }), ENV, f.deps);
+    assertEquals(stale.status, 401);
+  }
+  assertEquals(f.calls, []);
+});
+
+Deno.test('AC-W3-18 a replayed nonce on the mirror ops -> 409, the DB op runs once', async () => {
+  const handle = await load();
+  const f = fake();
+  const n = nextNonce();
+  const body = op({ op: 'mirror_grant' });
+  const first = await handle(await signedRequest(body, { nonce: n }), ENV, f.deps);
+  assertEquals(first.status, 200);
+  assertEquals((await first.json()).source.slug, 'truckee-lights');
+  assertEquals((await handle(await signedRequest(body, { nonce: n }), ENV, f.deps)).status, 409);
+  assertEquals(f.calls.filter((c) => c === 'mirrorGrant').length, 1);
+  assert(f.logs.some((l) => /^ingest op=mirror_grant status=200 grant=1$/.test(l)), f.logs.join('\n'));
+});
+
+Deno.test('AC-W3-18 submit_lights_mirror: valid -> 200 with the counts; logs counts only, never a title', async () => {
+  const handle = await load();
+  const f = fake();
+  const res = await handle(await signedRequest(op({ op: 'submit_lights_mirror', grant: 'g'.repeat(64), run: MIRROR_RUN, rows: [lightsRow(1)] })), ENV, f.deps);
+  assertEquals(res.status, 200);
+  assertEquals((await res.json()).added, 1);
+  assertEquals(f.calls, ['nonce', 'mirrorApply']);
+  const line = f.logs.find((l) => l.startsWith('ingest op=submit_lights_mirror')) ?? '';
+  assert(MIRROR_LOG.test(line), line);
+  assertEquals(line, 'ingest op=submit_lights_mirror status=200 rows=1 run_status=ok added=1 changed=0 removed=0 held=0 invalid=0');
+  assertFalse(f.logs.join('\n').includes('SYNTHETIC-LIGHTS-TITLE'));
+});
+
+Deno.test('AC-W3-18 1,001 rows -> 413; non-array rows -> 400; neither reaches the DB', async () => {
+  const handle = await load();
+  const f = fake();
+  const rows = Array.from({ length: 1001 }, (_, i) => ({ id: String(i) }));
+  const big = await handle(await signedRequest(op({ op: 'submit_lights_mirror', grant: 'g', run: MIRROR_RUN, rows })), ENV, f.deps);
+  assertEquals(big.status, 413);
+  for (const bad of [{ rows: { a: 1 } }, { rows: 'x' }, { run: [] }, { grant: 5 }]) {
+    const res = await handle(await signedRequest(op({ op: 'submit_lights_mirror', grant: 'g', run: MIRROR_RUN, rows: [], ...bad })), ENV, f.deps);
+    assertEquals(res.status, 400, JSON.stringify(bad));
+  }
+  assertFalse(f.calls.includes('mirrorApply'));
+  for (const l of f.logs.filter((x) => x.includes('submit_lights_mirror'))) assert(MIRROR_LOG.test(l), l);
+});
+
+Deno.test('AC-W3-18 DB P0001 -> 403 grant_rejected; 22023 -> 400; other -> 500; no title text in the logs', async () => {
+  const handle = await load();
+  for (const [code, status] of [['P0001', 403], ['22023', 400], ['XX000', 500]] as const) {
+    const f = fake({ mirrorApply: () => Promise.reject(Object.assign(new Error('rpc failed'), { code })) });
+    const res = await handle(await signedRequest(op({ op: 'submit_lights_mirror', grant: 'g', run: MIRROR_RUN, rows: [lightsRow(2)] })), ENV, f.deps);
+    assertEquals(res.status, status, code);
+    const line = f.logs.find((l) => l.startsWith('ingest op=submit_lights_mirror')) ?? '';
+    assert(MIRROR_LOG.test(line), line);
+    assertFalse(f.logs.join('\n').includes('SYNTHETIC-LIGHTS-TITLE'));
+  }
+});
+
+Deno.test('AC-W3-18 a null mirror grant -> 200 {grant: null}, logged grant=0', async () => {
+  const handle = await load();
+  const f = fake();
+  (f.deps.db as Record<string, unknown>).mirrorGrant = () => Promise.resolve({ grant: null });
+  const res = await handle(await signedRequest(op({ op: 'mirror_grant' })), ENV, f.deps);
+  assertEquals(res.status, 200);
+  assertEquals((await res.json()).grant, null);
+  assert(f.logs.includes('ingest op=mirror_grant status=200 grant=0'), f.logs.join('\n'));
 });

@@ -185,7 +185,7 @@ select pg_temp.eq($$(select trust::text from public.sources where slug = 'x-fres
 -- AC-M1-103 grants unchanged: the same 24 grant statements (27 role grants) as the predecessor (01_acl pins the exact list) ------
 select pg_temp.eq($$(select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace, lateral aclexplode(p.proacl) a
    where n.nspname in ('public', 'private') and a.privilege_type = 'EXECUTE' and a.grantee in (select oid from pg_roles where rolname in ('anon', 'authenticated', 'service_role')))$$,
-  '29', 'AC-M1-103 the explicit EXECUTE grant count is unchanged by A11 (27) + W1 api_events_v1 to anon and authenticated (+2 = 29)');   -- W1
+  '36', 'AC-M1-103 the explicit EXECUTE grant count is unchanged by A11 (27) + W1 api_events_v1 (+2 = 29) + W3 two svc mirror routines and five admin Lights RPCs (+7 = 36)');   -- W1, W3
 
 select * from finish();
 rollback;

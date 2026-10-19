@@ -10,6 +10,8 @@ import { parseAllDocuments } from 'yaml';
 export const ALLOWED_TRIGGERS = {
   'ci.yml': ['pull_request', 'push'],
   'ingest.yml': ['schedule', 'workflow_dispatch'],
+  'lights-mirror.yml': ['schedule', 'workflow_dispatch'],
+  'lights-compare.yml': ['schedule', 'workflow_dispatch'],
   'rebuild.yml': ['schedule', 'workflow_dispatch'],
   'sign-feed.yml': ['schedule', 'workflow_dispatch'],
   'sign-gate-probe.yml': ['workflow_dispatch'],

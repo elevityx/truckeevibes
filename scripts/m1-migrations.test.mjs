@@ -789,7 +789,7 @@ describe('retag_activate: series rule, hide re-run, sources reset, unchanged 24 
 describe('W1 api_events_v1 migration: canonical block, cumulative allowlist + api_events_v1 (25)', () => {
   const sqlFiles = () => files.filter((x) => x.endsWith('.sql'));
   it('is the newest migration and sorts after 20261023000300_ttusd_schools.sql', () => {
-    expect(sqlFiles().pop()).toBe('20261024000100_api_events_v1.sql');
+    expect(sqlFiles().filter((f) => f < '20261024000200').pop()).toBe('20261024000100_api_events_v1.sql');   // W3's migration follows it
     expect('20261024000100_api_events_v1.sql' > '20261023000300_ttusd_schools.sql').toBe(true);
   });
   it('its grants are the ttusd_schools set plus api_events_v1(...)->anon,authenticated', () => {
@@ -807,5 +807,50 @@ describe('W1 api_events_v1 migration: canonical block, cumulative allowlist + ap
     const headers = sql.match(/create\s+(?:or\s+replace\s+)?function[\s\S]*?\bas\s+\$/gi) ?? [];
     expect(headers.length).toBeGreaterThanOrEqual(10);
     for (const h of headers) expect(h, h.slice(0, 80)).toMatch(/set\s+search_path\s*=\s*''/i);
+  });
+});
+
+describe('W3 lights_mirror migration: canonical block, cumulative allowlist + the 7 W3 RPCs (32)', () => {
+  it('is the newest migration and sorts after 20261024000100_api_events_v1.sql', () => {
+    expect(files.filter((x) => x.endsWith('.sql')).pop()).toBe('20261024000200_lights_mirror.sql');
+  });
+  it('its grants are the W1 set plus the two svc mirror RPCs (service_role) and the five admin Lights RPCs (authenticated)', () => {
+    const prev = canonicalGrants(readFileSync(join(DIR, '20261024000100_api_events_v1.sql'), 'utf8'));
+    const sql = read('lights_mirror');
+    const cur = canonicalGrants(sql);
+    expect(prev.size).toBe(25);
+    expect(cur.size).toBe(32);
+    expect([...cur].filter((x) => !prev.has(x)).sort()).toEqual([
+      'public.admin_accept_lights_removals(text,text,integer,uuid[])->authenticated',
+      'public.admin_lights_events(text,integer)->authenticated',
+      'public.admin_lights_mirror_status()->authenticated',
+      'public.admin_set_lights_include(uuid,text)->authenticated',
+      'public.admin_set_lights_override(uuid)->authenticated',
+      'public.svc_issue_mirror_grant()->service_role',
+      'public.svc_lights_mirror_apply(text,jsonb,jsonb)->service_role',
+    ]);
+    expect(cumulativeProblems(prev, cur, createdFns(sql))).toEqual([]);
+  });
+});
+
+// Amendment W3-1 (AC-W3-27): the W3 svc_ingest_batch is its realtime predecessor plus one marked W3-1 block, nothing else.
+describe('AC-W3-27 svc_ingest_batch in the W3 migration', () => {
+  const fnText = (sql) => {
+    const at = sql.search(/create or replace function public\.svc_ingest_batch\(/);
+    expect(at).toBeGreaterThan(-1);
+    const end = sql.indexOf('\nend $$;', at);
+    return sql.slice(at, end + '\nend $$;'.length);
+  };
+  const W31 = /\n[ \t]*-- W3-1 begin[^\n]*\n[\s\S]*?\n[ \t]*-- W3-1 end[^\n]*/g;
+  it('is byte-identical to 20261023000100_realtime.sql apart from the marked W3-1 block', () => {
+    const prev = fnText(readFileSync(join(DIR, '20261023000100_realtime.sql'), 'utf8'));
+    const cur = fnText(read('lights_mirror'));
+    expect(cur.match(W31)?.length ?? 0).toBe(1);
+    expect(cur.replace(W31, '')).toBe(prev);
+  });
+  it('the W3-1 block refuses a lights_mirror source with 42501 forbidden', () => {
+    const block = fnText(read('lights_mirror')).match(W31)?.[0] ?? '';
+    expect(block).toMatch(/family\s*=\s*'lights_mirror'/);
+    expect(block).toMatch(/raise exception 'forbidden' using errcode = '42501'/);
   });
 });
