@@ -256,8 +256,9 @@ select pg_temp.t($$(select pg_temp.x('postgres', $s$insert into public.sources (
 select pg_temp.t($$(select pg_temp.x('postgres', $s$insert into public.sources (slug, name, homepage_url, allowed_hosts, family, class) values ('td-ok-fam', 'Tahoe Donner Family', 'https://example.test/', array['example.test'], 'html_tahoedonner', 'organizer')$s$)) = 'OK'$$,
   'AC-M1-130 family html_tahoedonner passes the CHECK');
 select pg_temp.eq($$(select count(distinct p.oid) from pg_proc p join pg_namespace n on n.oid = p.pronamespace, lateral aclexplode(p.proacl) a
-   where n.nspname in ('public', 'private') and a.privilege_type = 'EXECUTE' and a.grantee in (select oid from pg_roles where rolname in ('anon', 'authenticated', 'service_role')))$$, '24',
-  'AC-M1-130 the EXECUTE grants are unchanged (24)');
+   where n.nspname in ('public', 'private') and a.privilege_type = 'EXECUTE' and a.grantee in (select oid from pg_roles where rolname in ('anon', 'authenticated', 'service_role')))$$, '25',
+  'AC-M1-130 the EXECUTE grants are unchanged (24 from A13 + 1 for W1 api_events_v1 = 25)');
+-- 25 = A13's 24 (unchanged by this migration) + public.api_events_v1, granted by W1's 20261024000100 which sorts after this migration.
 
 -- AC-M1-133 (r4) members-only category -----------------------------------------------------------------------------------
 select pg_temp.eq($$(select count(*) from public.categories)$$, '15', 'AC-M1-133 fifteen categories');
