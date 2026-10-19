@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { adapter } from './htmlTahoeDonner';
 import { createPoliteFetch, FetchError } from '../core/politeFetch';
+import type { SourceEvent } from '../types';
 import { DESC_SENTINEL, fakeNet, fixture, makeClock, redirect, source, text } from '../testing/fakes';
 
 const NOW = Date.parse('2026-10-19T12:00:00Z');
@@ -37,7 +38,7 @@ function setup(o: Over = {}) {
   const run = () => adapter.fetch({ source: src, fetch: pf, now: new Date(NOW) });
   return { run, net, clock, src };
 }
-const by = (items: { title: string }[]) => Object.fromEntries(items.map((i) => [i.title, i]));
+const by = (items: SourceEvent[]) => Object.fromEntries(items.map((i) => [i.title, i]));
 
 describe('identity', () => {
   it('is the html_tahoedonner family', () => {
@@ -243,7 +244,7 @@ describe('AC-M1-128 fail closed', () => {
 });
 
 describe('AC-M1-128b (r4) hint-list contract', () => {
-  const lun = (items: { title: string; categoriesHint: string[] }[]) => items.find((i) => i.title.startsWith('New Year’s Eve Light Parade'))!;
+  const lun = (items: SourceEvent[]) => items.find((i) => i.title.startsWith('New Year’s Eve Light Parade'))!;
   it('hint list 94 identical to the main list -> no family hints, run ok', async () => {
     const r = await setup({ lists: { '94': fx('list.html') } }).run();
     expect(r.status).toBe('ok');
