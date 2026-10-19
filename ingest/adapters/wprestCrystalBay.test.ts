@@ -49,6 +49,24 @@ describe('AC-M1-134 date grammar', () => {
   });
 });
 
+describe('AC-M1-155 date restatement (A14 r3-5)', () => {
+  const ok = (s: string) => parseCbcDate(T(s));
+  it('a year-less token equal to a complete date is a restatement, not a conflict', () => {
+    expect(ok('<p>Sat. Nov. 7th 2026</p><p>at the Crown Room on November 7th.</p>')).toEqual({ date: '2026-11-07' });
+  });
+  it('a year-less token matching no complete date is date_mixed', () => {
+    expect(ok('<p>Sat. Nov. 7th 2026</p><p>at the Crown Room on November 8th.</p>')).toEqual({ drop: 'date_mixed' });
+    expect(ok('<p>Sat. Oct. 31st 2026</p><p>October 30th & 31st</p>')).toEqual({ drop: 'date_mixed' });
+  });
+  it('a restatement weekday joins the weekday set (date_mismatch)', () => {
+    expect(ok('<p>Sat. Nov. 7th 2026</p><p>Fri. Nov. 7</p>')).toEqual({ drop: 'date_mismatch' });
+  });
+  it('two complete dates plus a restatement stay date_multiple; a year-less token alone stays date_unparsed', () => {
+    expect(ok('<p>Sat. Nov. 7th 2026</p><p>Sat. Dec. 5th 2026</p><p>November 7th</p>')).toEqual({ drop: 'date_multiple' });
+    expect(ok('<p>November 7th</p>')).toEqual({ drop: 'date_unparsed' });
+  });
+});
+
 describe('AC-M1-135 time grammar', () => {
   const t = (s: string) => parseCbcTime(T(s));
   it('labelled show time wins over doors; minutes; a single unlabelled time', () => {
@@ -193,13 +211,35 @@ describe('AC-M1-137 happy path', () => {
       expect(i.ageText).toBeUndefined();
     }
   });
-  it('age comes only from the event\'s own text: Steely Dead says 21+ (21_plus, no kids/family); Boot Juice states nothing (not 21_plus)', async () => {
+  it('age comes only from the event\'s own text: Steely Dead and Boot Juice state nothing, so both are unknown and not 21_plus (A14 r3-6)', async () => {
     const m = by((await setup().run()).items);
-    expect(m['cbc:1002'].age).toBe('21_plus');
-    expect(m['cbc:1002'].categoriesHint).not.toContain('kids');
-    expect(m['cbc:1002'].categoriesHint).not.toContain('family');
-    expect(m['cbc:1005'].age).not.toBe('21_plus');
-    expect(m['cbc:1004'].age).not.toBe('21_plus'); // a Red Room show with no statement
+    expect(m['cbc:1002'].age).toBe('unknown');
+    expect(m['cbc:1005'].age).toBe('unknown');
+    expect(m['cbc:1004'].age).not.toBe('21_plus');
+  });
+  const steely = () => entries().find((e) => e.id === 1002)!;
+  it('a labeled synthetic variant: "21+ only" is a form the grammar accepts -> 21_plus, age:21_admission, no kids/family', async () => {
+    const e = steely();
+    const body = JSON.stringify([{ ...e, content: { rendered: `${e.content.rendered}<p>21+ only</p>` } }]);
+    const r = await setup({ body }).run();
+    expect(r.items).toHaveLength(1);
+    expect(r.items[0].age).toBe('21_plus');
+    expect(r.items[0].tagReasons).toContain('age:21_admission');
+    expect(r.items[0].categoriesHint).not.toContain('kids');
+    expect(r.items[0].categoriesHint).not.toContain('family');
+  });
+  it('pin: "21+ Crown Room" (no "Age ") is not widened -> unknown + age:ambiguous', async () => {
+    // Not widened (A14 r3-6): the REST feed never carries this form. If the casino starts posting it, the widening rule applies:
+    // grammar change + test rows for counts, drinking-only rules and room-wide text.
+    const e = steely();
+    const body = JSON.stringify([{ ...e, content: { rendered: `${e.content.rendered}<p>21+ Crown Room</p>` } }]);
+    const r = await setup({ body }).run();
+    expect(r.items[0].age).toBe('unknown');
+    expect(r.items[0].tagReasons).toContain('age:ambiguous');
+  });
+  it('events.json holds no "Age 21+" and no "21+ Crown Room"', () => {
+    expect(EVENTS).not.toContain('Age 21+');
+    expect(EVENTS).not.toContain('21+ Crown Room');
   });
   it('an explicit "All ages show" at the casino is unknown (adult-venue veto), never 21_plus', async () => {
     const body = JSON.stringify([entry(7, `${GOOD}<p>All ages show</p>`, 'Victor Wooten')]);
@@ -240,5 +280,60 @@ describe('fail-closed date/time rows drop and are counted', () => {
     const body = JSON.stringify([{ ...entry(1, GOOD), date: '2030-01-01T00:00:00', modified: '2030-01-01T00:00:00' }]);
     const r = await setup({ body }).run();
     expect(r.items[0].startsAt).toBe('2026-10-24T03:00:00Z');
+  });
+});
+
+// A14 r3-4 (AC-M1-154). events_real.json is built from a real capture of the feed (2026-10-19): facts only (titles, dates, times, rooms, links)
+// with synthetic prose. check-fixtures.mjs says fixtures are synthetic; this file keeps the source's facts and none of its description text.
+describe('AC-M1-154 real-feed fixture', () => {
+  const REAL = fixture('crystalbay/events_real.json');
+  const run = () => setup({ body: REAL, headers: { 'X-WP-TotalPages': '1' } }).run();
+  it('has 17 entries with exactly the 5 keys, no tixr.com and no foreign URL', () => {
+    const arr = JSON.parse(REAL) as Record<string, unknown>[];
+    expect(arr).toHaveLength(17);
+    for (const e of arr) expect(Object.keys(e).sort()).toEqual(['content', 'date', 'id', 'link', 'title']);
+    expect(REAL).not.toContain('tixr.com');
+    expect(REAL).not.toContain('<img');
+    const urls = REAL.match(/https?:\/\/[^\s"<\\]+/g) ?? [];
+    const links = new Set(arr.map((e) => e.link as string));
+    for (const u of urls) expect(links.has(u) || u === 'https://tixr.example/e/1').toBe(true);
+    expect(Buffer.byteLength(REAL)).toBeLessThanOrEqual(64 * 1024);
+  });
+  it('12 items, filtered 5 (date_mismatch 1, date_mixed 2, date_multiple 1, out_of_window 1)', async () => {
+    const r = await run();
+    expect(r.status).toBe('ok');
+    expect(r.items).toHaveLength(12);
+    expect(r.filtered).toBe(5);
+    expect(r.filteredBy).toEqual({ date_mismatch: 1, date_mixed: 2, date_multiple: 1, out_of_window: 1 });
+  });
+  it('the 12 externalKey / startsAt / room values', async () => {
+    const r = await run();
+    expect([...r.items].sort((a, b) => a.startsAt.localeCompare(b.startsAt)).map((i) => [i.externalKey, i.startsAt, i.venueName, i.title])).toEqual([
+      ['cbc:5911', '2026-10-24T03:00:00Z', 'Crystal Bay Casino', expect.stringContaining('Easy Star All-Stars')],
+      ['cbc:5859', '2026-10-25T03:00:00Z', 'Crystal Bay Casino', expect.stringContaining('Steely Dead')],
+      ['cbc:5907', '2026-11-07T04:00:00Z', 'Crystal Bay Casino', expect.stringContaining('Jim Norton')],
+      ['cbc:5924', '2026-11-08T04:00:00Z', 'Crystal Bay Casino Crown Room', expect.stringContaining('Shwayze')],
+      ['cbc:5921', '2026-11-15T04:00:00Z', 'Crystal Bay Casino', expect.stringContaining('Emo Kids')],
+      ['cbc:5843', '2026-11-28T04:00:00Z', 'Crystal Bay Casino', expect.stringContaining('Pat O')],
+      ['cbc:6145', '2026-11-29T04:00:00Z', 'Crystal Bay Casino Red Room', 'Boot Juice'],
+      ['cbc:5948', '2026-12-06T05:00:00Z', 'Crystal Bay Casino', expect.stringContaining('SoDown')],
+      ['cbc:5918', '2026-12-10T04:00:00Z', 'Crystal Bay Casino Red Room', 'The Fretliners'],
+      ['cbc:5836', '2026-12-12T04:00:00Z', 'Crystal Bay Casino', expect.stringContaining('Victor Wooten')],
+      ['cbc:6063', '2026-12-13T04:00:00Z', 'Crystal Bay Casino', expect.stringContaining('Dead Winter Carpenters')],
+      ['cbc:6056', '2027-01-01T05:00:00Z', 'Crystal Bay Casino', expect.stringContaining('OPIUO')],
+    ]);
+  });
+  it('every age is unknown; Emo Kids has no kids/family; no description, tixr or http URL in a text field; url === ticketUrl', async () => {
+    const r = await run();
+    for (const i of r.items) {
+      expect(i.age).toBe('unknown');
+      expect(i.url).toBe(i.ticketUrl);
+      expect(JSON.stringify(i).toLowerCase()).not.toContain('tixr');
+      expect(JSON.stringify(i)).not.toContain('Synthetic description');
+      for (const [k, v] of Object.entries(i)) if (typeof v === 'string' && k !== 'url' && k !== 'ticketUrl') expect(v).not.toMatch(/https?:\/\//);
+    }
+    const emo = r.items.find((i) => i.externalKey === 'cbc:5921')!;
+    expect(emo.categoriesHint).not.toContain('kids');
+    expect(emo.categoriesHint).not.toContain('family');
   });
 });

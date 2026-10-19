@@ -38,11 +38,14 @@ const MDT = /\b(?:(mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)[a-z]*\.?,?\s+)?(
 /** The single complete date of the text, or why there is none. A year is never inferred. */
 export function parseCbcDate(text: string): { date: string } | { drop: CbcDrop } {
   const complete = new Map<string, Set<number | null>>(); // date -> stated weekdays (null = none)
-  let incomplete = false;
+  const partial: { key: string; wd: number | null }[] = []; // year-less tokens: "mm-dd" + stated weekday
   let invalid = false;
   for (const m of text.matchAll(MDT)) {
-    if (m[4] === undefined) { incomplete = true; continue; }
     const mon = MONTHS.indexOf(m[2].toLowerCase().slice(0, 3));
+    if (m[4] === undefined) {
+      partial.push({ key: `${String(mon + 1).padStart(2, '0')}-${String(Number(m[3])).padStart(2, '0')}`, wd: m[1] ? WEEKDAYS.indexOf(m[1].toLowerCase().slice(0, 3)) : null });
+      continue;
+    }
     const y = Number(m[4]);
     const d = Number(m[3]);
     const dt = new Date(Date.UTC(y, mon, d));
@@ -55,7 +58,12 @@ export function parseCbcDate(text: string): { date: string } | { drop: CbcDrop }
   }
   if (invalid) return { drop: 'date_unparsed' };
   if (complete.size === 0) return { drop: 'date_unparsed' };
-  if (incomplete) return { drop: 'date_mixed' };
+  // A year-less token is a restatement (not a second date) when its month and day equal a complete date's; otherwise date_mixed (A14 r3-5).
+  for (const p of partial) {
+    const hit = [...complete].find(([k]) => k.slice(5) === p.key);
+    if (!hit) return { drop: 'date_mixed' };
+    hit[1].add(p.wd);
+  }
   if (complete.size > 1) return { drop: 'date_multiple' };
   const [[date, wds]] = [...complete];
   const actual = new Date(`${date}T00:00:00Z`).getUTCDay();
