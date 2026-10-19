@@ -6,9 +6,23 @@
 insert into public.categories (slug, label, sort, noun) values ('members-only', 'Members only', 15, 'members-only event')
   on conflict (slug) do nothing;
 
-alter table public.sources drop constraint if exists sources_family_check;
-alter table public.sources add constraint sources_family_check check (family in ('tribe','ics','ics_chambermaster','ics_civicplus','ics_eventsmanager',
-                                         'rss','squarespace','jsonld','html','llm','html_finalsite','html_tahoedonner'));
+-- Family CHECK, widen only (A14 r3-7): keep every family the live constraint already allows (a later amendment's, on a reapply) and add ours.
+do $$
+declare
+  want text[] := array['tribe','ics','ics_chambermaster','ics_civicplus','ics_eventsmanager','rss','squarespace','jsonld','html','llm',
+                       'html_finalsite','html_tahoedonner'];
+  def  text;
+  cur  text[];
+begin
+  select pg_get_constraintdef(c.oid) into def from pg_constraint c
+   where c.conrelid = 'public.sources'::regclass and c.conname = 'sources_family_check';
+  cur := coalesce((select array_agg(m[1]) from regexp_matches(coalesce(def, ''), '''([a-z][a-z0-9_]*)''', 'g') m), '{}');
+  if def is not null and cardinality(cur) = 0 then raise exception 'family_check_unparsed'; end if;
+  if def is not null and want <@ cur then return; end if;               -- nothing missing: leave the constraint untouched
+  alter table public.sources drop constraint if exists sources_family_check;
+  execute format('alter table public.sources add constraint sources_family_check check (family in (%s))',
+                 (select string_agg(quote_literal(f), ',' order by f) from (select unnest(cur) union select unnest(want)) u(f)));
+end $$;
 
 update public.sources set family = 'html_tahoedonner', allowed_hosts = array['www.tahoedonner.com'], cadence = '24h', page_cap = 45,
   config = '{"listUrl":"https://www.tahoedonner.com/events/","tz":"America/Los_Angeles"}'::jsonb

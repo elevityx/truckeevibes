@@ -69,3 +69,40 @@ test('(c) an unrelated source paused elsewhere does not break the self-check', a
     await rowChecks(c);
   });
 });
+
+const A13_FAMILIES = ['tribe','ics','ics_chambermaster','ics_civicplus','ics_eventsmanager','rss','squarespace','jsonld','html','llm','html_finalsite','html_tahoedonner'];
+const setCheck = (c, fams) => c.query(`alter table public.sources drop constraint sources_family_check;
+  alter table public.sources add constraint sources_family_check check (family in (${fams.map((f) => `'${f}'`).join(',')}))`);
+const famDef = async (c) => (await c.query(`select pg_get_constraintdef(oid) d from pg_constraint where conrelid = 'public.sources'::regclass and conname = 'sources_family_check'`)).rows[0].d;
+
+test('(d) reapplies over a post-A14 database (widen-only CHECK, A14 rows kept) (AC-M1-157)', async () => {
+  await inTx(async (c) => {
+    // On the A14 branch the reset DB already has the A14 families and rows; on A13 we simulate A14 here.
+    await setCheck(c, [...A13_FAMILIES, 'wprest_crystalbay', 'curated_dates']);
+    await c.query(`insert into public.sources (slug, name, homepage_url, allowed_hosts, family, class) values
+      ('r3-cbc', 'R3 CBC', 'https://example.test/', array['example.test'], 'wprest_crystalbay', 'venue'),
+      ('r3-cur', 'R3 CUR', 'https://example.test/', array['example.test'], 'curated_dates', 'community')`);
+    const before = await famDef(c);
+    await c.query(SQL);
+    await c.query(SQL);
+    const fam = await c.query(`select slug, family from public.sources where slug in ('r3-cbc','r3-cur') order by slug`);
+    assert.deepEqual(fam.rows, [{ slug: 'r3-cbc', family: 'wprest_crystalbay' }, { slug: 'r3-cur', family: 'curated_dates' }]);
+    assert.equal(await famDef(c), before);
+    await c.query('savepoint sp');
+    await assert.rejects(() => c.query(`insert into public.sources (slug, name, homepage_url, allowed_hosts, family, class)
+      values ('r3-bogus', 'B', 'https://example.test/', array['example.test'], 'html_bogus', 'venue')`), (e) => e.code === '23514');
+    await c.query('rollback to savepoint sp');
+    await rowChecks(c);
+  });
+});
+
+test('(e) widens a narrower CHECK to include html_tahoedonner (AC-M1-157)', async () => {
+  await inTx(async (c) => {
+    await c.query(`update public.sources set family = 'html' where slug = 'tahoe-donner'`);
+    await setCheck(c, A13_FAMILIES.filter((f) => f !== 'html_tahoedonner'));
+    assert.ok(!(await famDef(c)).includes('html_tahoedonner'));
+    await c.query(SQL);
+    assert.ok((await famDef(c)).includes('html_tahoedonner'));
+    await rowChecks(c);
+  });
+});

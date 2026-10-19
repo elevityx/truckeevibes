@@ -817,6 +817,12 @@ describe('tahoe_donner (A13 r7)', () => {
     expect(sql()).toContain('on conflict (slug) do nothing');
     expect(sql()).toContain('drop constraint if exists sources_family_check');
   });
+  it('the family CHECK only widens from the live constraint (A13 r7-3 / A14 r3-7)', () => {
+    expect(sql()).toContain('pg_get_constraintdef');
+    expect(sql()).toContain('want <@ cur');
+    expect(sql()).toContain('family_check_unparsed');
+    expect(sql()).not.toMatch(/^alter table public\.sources add constraint sources_family_check check \(family in \('/m);
+  });
   it("ships at trust 'review' and never sets trust = 'auto' (AC-M1-143)", () => {
     expect(sql()).toContain("trust = 'review'");
     expect(sql()).not.toMatch(/trust\s*=\s*'auto'/);
