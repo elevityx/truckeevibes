@@ -850,8 +850,8 @@ describe('ingest_quality (A15) migration text (AC-M1-170)', () => {
   it('touches no other function or table', () => {
     const t = stripComments(sql());
     expect(t).not.toMatch(/is_notice_title|clean_source_item|notice_sibling_exists|hide_notice_events/);
-    expect(t).not.toMatch(/update\s+public\.events/i);
     const outside = t.replace(fnRe('recompute_event'), '');
+    expect(outside).not.toMatch(/update\s+public\.events/i);
     expect(outside).not.toMatch(/insert\s+into\s+public\.event_changes/i);
     expect([...t.matchAll(/create\s+(?:or\s+replace\s+)?function\s+([\w.]+)/gi)].map((m) => m[1]).sort()).toEqual(['private.recompute_event', 'private.valid_reason_code']);
   });

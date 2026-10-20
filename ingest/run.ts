@@ -103,7 +103,7 @@ export async function main(deps: RunDeps): Promise<number> {
     if (r.lastModified) run.last_modified = r.lastModified;
     if (r.contentHash) run.content_hash = r.contentHash;
     const adapter = registry[g.source.family];
-    if (adapter) run.parser_version = `${adapter.version}-c2`;
+    if (adapter) run.parser_version = `${adapter.version}-c3`;
     const code = o.errorCode ?? r.errorCode;
     if (code) run.error_code = code;
     if (o.errorDetail) run.error_detail = o.errorDetail;
