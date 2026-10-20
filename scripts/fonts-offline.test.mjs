@@ -2,7 +2,7 @@
 // extensionless /l/font?kit=…&skey=… URLs (vercel/next.js#99114). Every web font is self-hosted now; these checks keep it that way.
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { REPO_ROOT } from './_testlib.mjs';
 
@@ -24,6 +24,25 @@ describe('self-hosted fonts (no build-time Google Fonts fetch)', () => {
       const family = Object.keys(OFL).find((k) => f.startsWith(k));
       expect(family, f).toBeDefined();
       expect(readFileSync(join(REPO_ROOT, OFL[family]), 'utf8')).toMatch(/SIL Open Font License, Version 1\.1/);
+    });
+  }
+});
+
+describe('font license texts ship with the static export', () => {
+  const LICENSES = { AtkinsonHyperlegibleNext: 'Atkinson Hyperlegible Next', BricolageGrotesque: 'Bricolage Grotesque', Fraunces: 'Fraunces' };
+  for (const [file, family] of Object.entries(LICENSES)) {
+    it(`public/fonts/licenses/OFL-${file}.txt keeps its copyright line and the OFL text, and is reachable from /about/`, () => {
+      const text = readFileSync(join(REPO_ROOT, `public/fonts/licenses/OFL-${file}.txt`), 'utf8');
+      expect(text).toMatch(/^Copyright .*Project Authors/);
+      expect(text).toMatch(/SIL Open Font License, Version 1\.1/);
+      // The public pages must not name Fraunces (r1a-build), so /about/ links the two public families plus the README that lists all three.
+      const about = readFileSync(join(REPO_ROOT, 'src/app/about/page.tsx'), 'utf8');
+      expect(about).toContain(file === 'Fraunces' ? 'href="/fonts/licenses/README.txt">All font licenses<' : `href="/fonts/licenses/OFL-${file}.txt">${family}<`);
+      expect(readFileSync(join(REPO_ROOT, 'public/fonts/licenses/README.txt'), 'utf8')).toContain(`OFL-${file}.txt`);
+    });
+    // Only runs after `npm run build`; the build step in CI runs before the tests.
+    it(`out/fonts/licenses/OFL-${file}.txt exists in the build output (run npm run build first)`, () => {
+      expect(existsSync(join(REPO_ROOT, `out/fonts/licenses/OFL-${file}.txt`))).toBe(true);
     });
   }
 });
