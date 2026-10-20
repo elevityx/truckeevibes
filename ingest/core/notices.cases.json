@@ -132,31 +132,84 @@
   {
     "title": "NO Country Fridays Tonight",
     "sibling": "Country Fridays",
-    "offsets": [-7, 7],
+    "offsets": [
+      -7,
+      7
+    ],
     "notice": true
   },
   {
     "title": "NO Country Fridays Tonight",
     "sibling": "Country Fridays",
-    "offsets": [-14, 14],
+    "offsets": [
+      -14,
+      14
+    ],
     "notice": true
   },
   {
     "title": "NO Country Fridays Tonight",
     "sibling": "Country Fridays",
-    "offsets": [7],
+    "offsets": [
+      7
+    ],
     "notice": false
   },
   {
     "title": "NO Country Fridays Tonight",
     "sibling": "Country Fridays",
-    "offsets": [-15, 15],
+    "offsets": [
+      -15,
+      15
+    ],
     "notice": false
   },
   {
     "title": "No Trivia Today",
     "sibling": "Trivia Night",
-    "offsets": [0],
+    "offsets": [
+      0
+    ],
+    "notice": false
+  },
+  {
+    "title": "Kitchen Closed Tonight",
+    "sibling": "",
+    "notice": true
+  },
+  {
+    "title": "Closed for a Private Party",
+    "sibling": "",
+    "notice": true
+  },
+  {
+    "title": "No Bluegrass Sundays Today",
+    "sibling": "Bluegrass Sundays",
+    "notice": true
+  },
+  {
+    "title": "NO SCHOOL - Example Holiday",
+    "sibling": "",
+    "notice": false
+  },
+  {
+    "title": "Closing Day Celebration",
+    "sibling": "",
+    "notice": false
+  },
+  {
+    "title": "Closing Reception for Example Artist",
+    "sibling": "",
+    "notice": false
+  },
+  {
+    "title": "Closing Night of Example Play",
+    "sibling": "",
+    "notice": false
+  },
+  {
+    "title": "Closed Loop Recycling Talk",
+    "sibling": "",
     "notice": false
   }
 ]

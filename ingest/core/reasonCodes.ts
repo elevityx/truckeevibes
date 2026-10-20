@@ -1,10 +1,10 @@
-// The closed reason-code vocabulary. Twin of `private.valid_reason_code` (supabase/migrations/20261022000300_tags_notices.sql);
+// The closed reason-code vocabulary. Twin of `private.valid_reason_code` (supabase/migrations/20261024000300_ingest_quality.sql, the last definition);
 // scripts/parity-cases.test.mjs compares the two lists, in order. Codes carry no source text (V6).
 export const REASON_CODES = [
   'cat:source_map', 'cat:title_kw', 'cat:desc_kids', 'cat:desc_family', 'cat:default',
   'price:text_free', 'price:text_paid', 'price:text_donation', 'price:desc_free', 'price:title_free', 'price:neg_blocked', 'price:unknown',
   'age:21_admission', 'age:18_admission', 'age:adult_phrase', 'age:all_ages', 'age:family', 'age:ambiguous', 'age:unknown',
-  'conflict:adult', 'conflict:adult_signal', 'notice:cancel_sibling',
+  'conflict:adult', 'conflict:adult_signal', 'notice:cancel_sibling', 'price:source_free',
 ] as const;
 
 export type ReasonCode = typeof REASON_CODES[number];

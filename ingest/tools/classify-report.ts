@@ -69,11 +69,13 @@ export async function runReport(rows: ReportRow[], deps: ReportDeps): Promise<nu
     const kept = noticed.items.map((i) => applySourceDefaults(i, source.config));
     const keptKeys = new Set(kept.map((i) => i.externalKey));
     const tags: Record<string, number> = {};
+    const priceReasons: Record<string, number> = {};
     let free = 0; let ambiguous = 0; let conflicts = 0; let kidsAdult = 0; let wordlistOnly = 0;
     for (const i of kept) {
       for (const c of new Set(i.categoriesHint)) tags[c] = (tags[c] ?? 0) + 1;
       if (i.priceKind === 'free') free++;
       const r = i.tagReasons ?? [];
+      for (const c of r) if (c.startsWith('price:')) priceReasons[c] = (priceReasons[c] ?? 0) + 1;
       if (r.includes('age:ambiguous')) ambiguous++;
       if (r.some((c) => c.startsWith('conflict:'))) conflicts++;
       const adultish = r.some((c) => c.startsWith('conflict:') || c === 'age:ambiguous' || c === 'age:21_admission' || c === 'age:18_admission' || c === 'age:adult_phrase');
@@ -84,6 +86,7 @@ export async function runReport(rows: ReportRow[], deps: ReportDeps): Promise<nu
     deps.out(`source=${row.slug} status=ok found=${valid.length} kept=${kept.length}`);
     deps.out(`  tags: ${counts(tags) || 'none'}`);
     deps.out(`  free: ${free}`);
+    deps.out(`  price_reasons: ${counts(priceReasons) || 'none'}`);
     deps.out(`  age_ambiguous: ${ambiguous}`);
     deps.out(`  conflicts: ${conflicts}`);
     deps.out(`  kids_family_with_adult_code: ${kidsAdult}`);

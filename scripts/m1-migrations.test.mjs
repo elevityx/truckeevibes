@@ -789,7 +789,8 @@ describe('retag_activate: series rule, hide re-run, sources reset, unchanged 24 
 describe('W1 api_events_v1 migration: canonical block, cumulative allowlist + api_events_v1 (25)', () => {
   const sqlFiles = () => files.filter((x) => x.endsWith('.sql'));
   it('is the newest migration and sorts after 20261023000300_ttusd_schools.sql', () => {
-    expect(sqlFiles().pop()).toBe('20261024000100_api_events_v1.sql');
+    // A15 and later migrations come after W1 (as W3 does): "newest" means newest below the A15 version.
+    expect(sqlFiles().filter((f) => f < '20261024000300').pop()).toBe('20261024000100_api_events_v1.sql');
     expect('20261024000100_api_events_v1.sql' > '20261023000300_ttusd_schools.sql').toBe(true);
   });
   it('its grants are the ttusd_schools set plus api_events_v1(...)->anon,authenticated', () => {
@@ -807,5 +808,63 @@ describe('W1 api_events_v1 migration: canonical block, cumulative allowlist + ap
     const headers = sql.match(/create\s+(?:or\s+replace\s+)?function[\s\S]*?\bas\s+\$/gi) ?? [];
     expect(headers.length).toBeGreaterThanOrEqual(10);
     for (const h of headers) expect(h, h.slice(0, 80)).toMatch(/set\s+search_path\s*=\s*''/i);
+  });
+});
+
+// A15 / AC-M1-170: ingest_quality = valid_reason_code + 'price:source_free', recompute_event + the cluster adult veto, one sources nudge.
+describe('ingest_quality (A15) migration text (AC-M1-170)', () => {
+  const NAME = '20261024000300_ingest_quality.sql';
+  const sql = () => readFileSync(join(DIR, NAME), 'utf8');
+  const fnRe = (name) => new RegExp(`create (?:or replace )?function private\\.${name}\\([\\s\\S]*?\\n(?:end \\$\\$|\\$\\$);`);
+  const body = (text, name) => { const m = fnRe(name).exec(text); if (!m) throw new Error(`${name} not found`); return m[0]; };
+  const others = () => files.filter((f) => f.endsWith('.sql') && f !== NAME);
+  it('exists, sorts after every other migration, and no two files share a version', () => {
+    expect(files).toContain(NAME);
+    const sorted = files.filter((f) => f.endsWith('.sql'));
+    expect(NAME > '20261023000300_ttusd_schools.sql').toBe(true);
+    expect(NAME > '20261024000100_api_events_v1.sql').toBe(true);
+    const versions = sorted.map((f) => f.slice(0, 14));
+    expect(new Set(versions).size).toBe(versions.length);
+  });
+  it("valid_reason_code is the tags_notices body plus ,'price:source_free'", () => {
+    const base = norm(body(read('tags_notices'), 'valid_reason_code')).replace(/^create function/, 'create or replace function');
+    const cur = norm(body(sql(), 'valid_reason_code'));
+    expect(cur).toBe(base.replace("'notice:cancel_sibling']", "'notice:cancel_sibling','price:source_free']"));
+    expect(cur).toContain("'notice:cancel_sibling','price:source_free'");
+  });
+  it('recompute_event minus the A15 markers equals the ttusd_schools body; the blocks hold the veto', () => {
+    const cur = body(sql(), 'recompute_event');
+    const base = body(readFileSync(join(DIR, '20261023000300_ttusd_schools.sql'), 'utf8'), 'recompute_event');
+    const blocks = [...cur.matchAll(/-- A15 begin[\s\S]*?-- A15 end/g)].map((m) => m[0]);
+    expect(blocks).toHaveLength(3);
+    const strip = cur.replace(/[^\n]*-- A15 begin[\s\S]*?-- A15 end[^\n]*\n/g, '').split('\n').filter((l) => !/-- A15\s*$/.test(l)).join('\n');
+    expect(norm(strip)).toBe(norm(base));
+    expect(blocks.join('\n')).toContain("'rule:adult_veto'");
+    expect(blocks.join('\n')).toContain("array_remove(array_remove(v_cats, 'kids'), 'family')");
+  });
+  it("has exactly one update public.sources, equal to set next_due_at = now() where enabled", () => {
+    const t = norm(stripComments(sql()));
+    const ups = t.match(/update public\.sources[^;]*;/g) ?? [];
+    expect(ups).toEqual(['update public.sources set next_due_at = now() where enabled;']);
+  });
+  it('touches no other function or table', () => {
+    const t = stripComments(sql());
+    expect(t).not.toMatch(/is_notice_title|clean_source_item|notice_sibling_exists|hide_notice_events/);
+    const outside = t.replace(fnRe('recompute_event'), '');
+    expect(outside).not.toMatch(/update\s+public\.events/i);
+    expect(outside).not.toMatch(/insert\s+into\s+public\.event_changes/i);
+    expect([...t.matchAll(/create\s+(?:or\s+replace\s+)?function\s+([\w.]+)/gi)].map((m) => m[1]).sort()).toEqual(['private.recompute_event', 'private.valid_reason_code']);
+  });
+  it('ends with the canonical block; grants equal api_events_v1 (25); creates no public function', () => {
+    const prev = canonicalGrants(read('api_events_v1'));
+    const cur = canonicalGrants(sql());
+    expect(prev.size).toBe(25);
+    expect([...cur].sort()).toEqual([...prev].sort());
+    expect(createdFns(sql()).size).toBe(0);
+    expect(cumulativeProblems(prev, cur, createdFns(sql()))).toEqual([]);
+  });
+  it('no migration after retag_activate defines is_notice_title or notice_sibling_exists (AC-M1-168)', () => {
+    const lo = fileFor('retag_activate');
+    for (const f of others()) if (f > lo) expect(readFileSync(join(DIR, f), 'utf8'), f).not.toMatch(/function\s+private\.(?:is_notice_title|notice_sibling_exists)\b/i);
   });
 });
