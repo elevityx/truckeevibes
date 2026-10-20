@@ -8,7 +8,8 @@ import { REPO_ROOT } from './_testlib.mjs';
 const CASES = JSON.parse(readFileSync(join(REPO_ROOT, 'ingest', 'core', 'notices.cases.json'), 'utf8'));
 const PGTAP = readFileSync(join(REPO_ROOT, 'supabase', 'tests', '21_tags_notices.test.sql'), 'utf8');
 const MIG_DIR = join(REPO_ROOT, 'supabase', 'migrations');
-const MIG = readFileSync(join(MIG_DIR, readdirSync(MIG_DIR).find((f) => f.endsWith('_tags_notices.sql'))), 'utf8');
+// The last migration (by name) that defines private.valid_reason_code; the block is cut at that file's last definition.
+const MIG = readFileSync(join(MIG_DIR, readdirSync(MIG_DIR).sort().filter((f) => f.endsWith('.sql') && /function private\.valid_reason_code/.test(readFileSync(join(MIG_DIR, f), 'utf8'))).pop()), 'utf8');
 
 const sq = (v) => String(v).replace(/'/g, "''");
 const key = (c) => `${c.title}|${c.sibling}|${c.offsets ? c.offsets.join(',') : ''}`;
@@ -18,18 +19,18 @@ const WITHOUT = CASES.filter((c) => !c.offsets);
 const SERIES = join(REPO_ROOT, 'supabase', 'tests', '23_notice_series.test.sql');
 
 describe('notices.cases.json is the SSOT for the notice parity table', () => {
-  it('has 31 rows (10 notices), a sibling column, optional offsets, and unique title|sibling|offsets keys', () => {
-    expect(CASES.length).toBe(31);
-    expect(CASES.filter((c) => c.notice).length).toBe(10);
-    expect(new Set(CASES.map(key)).size).toBe(31);
+  it('has 39 rows (13 notices), a sibling column, optional offsets, and unique title|sibling|offsets keys', () => {
+    expect(CASES.length).toBe(39);
+    expect(CASES.filter((c) => c.notice).length).toBe(13);
+    expect(new Set(CASES.map(key)).size).toBe(39);
     for (const c of CASES) {
       expect(typeof c.notice).toBe('boolean');
       expect(typeof c.sibling).toBe('string');
       if (c.offsets) { expect(c.sibling).not.toBe(''); expect(c.offsets.length).toBeGreaterThan(0); for (const o of c.offsets) expect(Number.isInteger(o)).toBe(true); }
     }
     expect(WITH.length).toBe(5);
-    expect(CASES.filter((c) => c.sibling).length).toBe(7);
-    expect([...new Set(CASES.filter((c) => c.sibling).map((c) => c.title))].sort()).toEqual(['NO Country Fridays Tonight', 'No Trivia Today']);
+    expect(CASES.filter((c) => c.sibling).length).toBe(8);
+    expect([...new Set(CASES.filter((c) => c.sibling).map((c) => c.title))].sort()).toEqual(['NO Country Fridays Tonight', 'No Bluegrass Sundays Today', 'No Trivia Today']);
   });
   it('every row without offsets appears in 21_tags_notices.test.sql as (\'<title>\', \'<sibling>\', <bool>)', () => {
     for (const c of WITHOUT) expect(PGTAP, c.title).toContain(`('${sq(c.title)}', '${sq(c.sibling)}', ${c.notice})`);
@@ -43,10 +44,10 @@ describe('notices.cases.json is the SSOT for the notice parity table', () => {
 });
 
 describe('reason-code vocabulary', () => {
-  const sqlCodes = [...(/array\[([\s\S]*?)\]::text\[\]/.exec(MIG.split('create function private.valid_reason_code')[1])[1]).matchAll(/'([^']+)'/g)].map((m) => m[1]);
-  it('the SQL list has the 22 distinct codes, all matching the shape check', () => {
-    expect(sqlCodes.length).toBe(22);
-    expect(new Set(sqlCodes).size).toBe(22);
+  const sqlCodes = [...(/array\[([\s\S]*?)\]::text\[\]/.exec(MIG.split(/create (?:or replace )?function private\.valid_reason_code/).pop())[1]).matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  it('the SQL list has the 23 distinct codes, all matching the shape check', () => {
+    expect(sqlCodes.length).toBe(23);
+    expect(new Set(sqlCodes).size).toBe(23);
     for (const c of sqlCodes) expect(c).toMatch(/^[a-z0-9_:]{1,40}$/);
   });
   it('the pgTAP list equals the SQL list, in order', () => {

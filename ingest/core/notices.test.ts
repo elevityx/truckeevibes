@@ -46,9 +46,9 @@ describe('helpers', () => {
 });
 
 describe('every parity row (AC-R4b-07, AC-R4b-14)', () => {
-  it('has 31 rows, 10 of them notices, 5 with offsets', () => {
-    expect(CASES.length).toBe(31);
-    expect(CASES.filter((c) => c.notice).length).toBe(10);
+  it('has 39 rows, 13 of them notices, 5 with offsets', () => {
+    expect(CASES.length).toBe(39);
+    expect(CASES.filter((c) => c.notice).length).toBe(13);
     expect(CASES.filter((c) => c.offsets).length).toBe(5);
   });
   it.each(CASES.map((c, i) => [`${i}: ${c.title} | ${c.sibling} | ${JSON.stringify(c.offsets ?? null)}`, c] as const))('%s', (_n, row) => {
@@ -157,5 +157,14 @@ describe('isNoticeTitle (rule a and b spot checks)', () => {
     expect(isNoticeTitle('No Trivia Today')).toBe(false);
     expect(isNoticeTitle('No Trivia Today', true)).toBe(true);
     expect(isNoticeTitle('No Trivia Tonight!', true)).toBe(false);
+  });
+});
+
+describe('AC-M1-168 regression rows and applyNotices keeps look-alikes', () => {
+  it('applyNotices keeps "NO SCHOOL - Example Holiday" (all-day) and "Closing Day Celebration"', () => {
+    const school = { ...at('NO SCHOOL - Example Holiday', D, 'a'), allDay: true, startDate: D, endDate: shift(D, 1) };
+    const out = applyNotices([school, at('Closing Day Celebration', D, 'b')]);
+    expect(out.items.map((i) => i.externalKey).sort()).toEqual(['a', 'b']);
+    expect(out.dropped).toBe(0);
   });
 });

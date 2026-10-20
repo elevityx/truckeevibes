@@ -95,4 +95,17 @@ describe('per-event rows and kids_family_wordlist_only (AC-R4b-24)', () => {
     const out = await go([wl, adult, clean]);
     expect(out).toContain('  kids_family_wordlist_only: 1');
   });
+  it('prints sorted price_reasons counts after free (AC-M1-171)', async () => {
+    const free = makeEvent(facts('f1', 'Sample Pumpkin Hunt', { hints: ['free-events'] }));
+    const t = makeEvent(facts('f2', 'Free Yoga Afternoon'));
+    const out = await go([free, t]);
+    expect(out).toContain('  free: 2');
+    expect(out).toContain('  price_reasons: price:source_free:1,price:title_free:1');
+    expect(out.indexOf('  free: 2')).toBeLessThan(out.findIndex((l) => l.startsWith('  price_reasons:')));
+  });
+  it('one free-events item prints free: 1 and price_reasons: price:source_free:1', async () => {
+    const out = await go([makeEvent(facts('f1', 'Sample Pumpkin Hunt', { hints: ['free-events'] }))]);
+    expect(out).toContain('  free: 1');
+    expect(out).toContain('  price_reasons: price:source_free:1');
+  });
 });
