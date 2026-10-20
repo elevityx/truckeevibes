@@ -1,0 +1,15 @@
+/* The two rules next/font/google generated next to the Bricolage and Atkinson faces (Next 16.4.0), kept as they were: the
+   metric-matched Arial fallback for Bricolage (Atkinson had none) and the variables tokens.css reads. See site.ts. */
+@font-face {
+  font-family: 'Bricolage Grotesque Fallback';
+  src: local("Arial");
+  ascent-override: 88.21%;
+  descent-override: 25.61%;
+  line-gap-override: 0.00%;
+  size-adjust: 105.43%;
+}
+
+.variable {
+  --font-bricolage: 'Bricolage Grotesque', 'Bricolage Grotesque Fallback';
+  --font-atkinson: 'Atkinson Hyperlegible Next';
+}
