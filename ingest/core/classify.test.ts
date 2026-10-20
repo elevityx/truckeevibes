@@ -434,3 +434,23 @@ describe('AC-M1-165 shared adult veto unchanged over VLT family', () => {
     expect(r.reasons).toContain('cat:source_map');
   });
 });
+
+describe('AC-M1-174 free-evidence guards', () => {
+  const D = (d: string) => c('Sample Evening', {}, d);
+  it.each(['No tickets are free.', 'This is not a free event.', 'Admission is never free.', 'Entry isn\'t free, tickets are not free.'])('negated: %s', (d) => {
+    const r = D(d);
+    expect(r.priceKind).toBe('unknown');
+    expect(r.reasons).toContain('price:neg_blocked');
+  });
+  it.each(['No cover', 'No cover charge.', 'There is no cost to attend.', 'No charge.', 'Admission $0', 'Tickets: $0', 'Tickets: $0.00'])('free: %s', (d) => {
+    const r = D(d);
+    expect(r.priceKind).toBe('free');
+    expect(r.reasons).toContain('price:desc_free');
+  });
+  it.each(['Tickets: $0 - $25', 'Tickets: $0–25', 'Tickets: $0 to $25', 'Tickets: $0 for children; $25 general admission.', 'Admission $0 with a member card.', 'Admission $0. Parking $10.'])('$0 not whole price: %s', (d) => {
+    expect(D(d).priceKind).toBe('unknown');
+  });
+  it('same-clause only: a negation in an earlier sentence does not block', () => {
+    expect(D('Not to be missed. Admission is free.').priceKind).toBe('free');
+  });
+});

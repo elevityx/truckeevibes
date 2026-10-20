@@ -71,8 +71,12 @@ export interface Classified {
 
 // ---- price -----------------------------------------------------------------------------------------------------------
 const FREE_NEGATIVES = /\bfree parking\b|\bgluten[- ]free\b|\bfree wi-?fi\b|\bkids? (?:under \d+|eat) free\b|\bfree (?:beer|drink|gift|swag|appetizer)s?\b|\bfree\s*\*|\bfree for (?:kids|children|members|students|seniors|veterans|military|locals|residents|under \d+)\b/g;
-const FREE_STRONG = /\b(?:free admission|free entry|free event|free to attend|free show|no cover|free and open to the public|free of charge|at no cost|no cost to (?:attend|participate|join)|(?:admission|entry|entrance|attendance|tickets?|the event|this event) (?:is|are) free|(?:admission|entry|cost|price|tickets?)\s*:\s*(?:free\b|\$0(?:\.00)?(?![\d.,])))/g;
-const FREE_NEG_PREFIX = /\b(?:not|never|no longer|isn't|is not|aren't|are not|wasn't|won't be)\s+(?:a\s+|an\s+|the\s+)?$/;
+const FREE_STRONG = /\b(?:free admission|free entry|free event|free to attend|free show|no cover|free and open to the public|free of charge|at no cost|no cost to (?:attend|participate|join)|(?:admission|entry|entrance|attendance|tickets?|the event|this event) (?:is|are) free|no charge|(?:admission|entry|cost|price|tickets?)\s*:?\s*(?:free\b|\$0(?:\.00)?(?![\d.,])))/g;
+const FREE_NEG_CUE = /\b(?:no|not|never|no longer|without)\b|\b(?:isn't|aren't|wasn't|won't|weren't)\b/;
+/** Phrases that themselves mean free; matched whole, so the leading "no" is not a negation. */
+const FREE_WHOLE_NO = /^no (?:cover|charge|cost)/;
+/** A $0 is the whole price only when no range, subset qualifier, or other price follows. */
+const ZERO_TAIL_BAD = /^\s*(?:[-–—]|to\b|through\b|thru\b|and\b|for\b|with\b|if\b|when\b|before\b|after\b|until\b|per\b|\/)/;
 const TITLE_FREE = /(?:^|[:|–—]\s*|\s-\s)(?:an?\s+|our\s+)?free\b/;
 
 /** Whether text states free once the negatives are removed, and whether a negative (or a negating prefix) covered a "free". */
@@ -81,10 +85,18 @@ function freeIn(text: string, mode: 'text' | 'desc' | 'title'): { free: boolean;
   let blocked = stripped !== text && /\bfree\b/.test(text);
   if (mode === 'text') return { free: /\bfree\b/.test(stripped), blocked };
   if (mode === 'title') return { free: TITLE_FREE.test(stripped), blocked };
+  const clauseBefore = (i: number) => stripped.slice(0, i).split(/[.;!?,\n]/).pop() ?? '';
   for (const m of stripped.matchAll(FREE_STRONG)) {
-    if (FREE_NEG_PREFIX.test(stripped.slice(Math.max(0, m.index! - 20), m.index!))) { blocked = true; continue; }
+    const i = m.index!;
+    if (FREE_NEG_CUE.test(clauseBefore(i))) { blocked = true; continue; }
+    if (m[0].includes('$')) {
+      const rest = stripped.slice(i + m[0].length);
+      const others = (stripped.slice(0, i) + ' ' + rest).match(/\$\s?\d[\d,.]*/g) ?? [];
+      if (ZERO_TAIL_BAD.test(rest) || others.some((o) => Number(o.replace(/[$,\s]/g, '')) !== 0)) { blocked = true; continue; }
+    }
     return { free: true, blocked };
   }
+  if (!blocked) for (const cl of stripped.split(/[.;!?,\n]/)) if (/\bfree\b/.test(cl) && FREE_NEG_CUE.test(cl) && !FREE_WHOLE_NO.test(cl.trim())) { blocked = true; break; }
   return { free: false, blocked };
 }
 
