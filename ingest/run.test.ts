@@ -555,7 +555,7 @@ describe('A13 members-only is ours alone (AC-M1-128b r4)', () => {
     const line = h.logs.find((l) => l.startsWith('source=tahoe-donner'))!;
     expect(line).toMatch(/^source=tahoe-donner status=ok found=8 new=\d+ changed=\d+ invalid=0 filtered=6 /);
     expect(line).not.toMatch(/Light Up|Board|https?:|tahoedonner\.com/i);
-    expect(h.submits()[0].body.run.parser_version).toBe('html_tahoedonner.1-c2');
+    expect(h.submits()[0].body.run.parser_version).toBe('html_tahoedonner.1-c3');
     expect(h.submits()[0].body.items).toHaveLength(8);
   });
 });
@@ -598,7 +598,7 @@ describe('A14 21+ venues and aviation through the runner (AC-M1-142)', () => {
   it('the crystal batch carries the parser version, default category nightlife and no tixr', async () => {
     const h = await go();
     const b = h.submits().find((s) => s.body.grant === 'g-cb')!.body;
-    expect(b.run.parser_version).toBe('wprest_crystalbay.1-c2');
+    expect(b.run.parser_version).toBe('wprest_crystalbay.1-c3');
     expect(b.items).toHaveLength(7);
     expect(JSON.stringify(b.items).toLowerCase()).not.toContain('tixr');
     for (const it of b.items) expect(it.categoriesHint).toContain('nightlife');
