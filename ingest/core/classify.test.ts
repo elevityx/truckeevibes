@@ -37,11 +37,13 @@ describe('categories (AC-R4b-01)', () => {
   ])('title %s -> %s', (title, cat) => {
     expect(c(title).categories).toContain(cat);
   });
-  it('title keywords are whole words, and never produce kids or family', () => {
+  it('title keywords are whole words, never produce family, and give kids only through the c4 kids rule (Spec_Kids_Live 5a)', () => {
     expect(c('Partisan Bigband').categories).toEqual([]);
-    for (const t of ['Family Trivia', 'Kids Storytime', 'Children Toddler Family Kids']) {
+    expect(c('Family Trivia').categories).not.toContain('family');
+    expect(c('Family Trivia').categories).not.toContain('kids');
+    for (const t of ['Kids Storytime', 'Children Toddler Family Kids']) {
       expect(c(t).categories).not.toContain('family');
-      expect(c(t).categories).not.toContain('kids');
+      expect(c(t).categories).toContain('kids');
     }
   });
   it("(c) description \"kids' storytime\" -> kids + cat:desc_kids", () => {
@@ -469,5 +471,66 @@ describe('A13 html_tahoedonner map and members-only', () => {
     for (const [f, m] of Object.entries(CATEGORY_MAPS)) expect(Object.values(m).includes('members-only'), f).toBe(false);
     expect(c('Sample', { categoriesHint: ['members-only'], family: 'tribe' }).categories).not.toContain('members-only');
     expect(c('Sample', { categoriesHint: ['members-only'], family: 'html_tahoedonner' }).categories).not.toContain('members-only');
+  });
+});
+
+describe('AC-K-20 c4 title kids rule', () => {
+  it.each([
+    'Preschool Storytime', 'Baby Lapsit at the Kings Beach Library', 'Toddler Time', 'Kids Ski Day', 'Youth Soccer Clinic', 'Holiday Camp',
+    'Tween Craft: CD Clock', 'Story Time in the Park', 'Art for Ages 5-10',
+  ])('%s -> kids + cat:title_kw', (t) => {
+    const r = c(t);
+    expect(r.categories).toContain('kids');
+    expect(r.reasons).toContain('cat:title_kw');
+    expect(r.categories).not.toContain('family');
+  });
+  it.each([
+    'Ages 13-18 Swim', 'Adults Only Storytime Slam', 'Kids Eat Free Tuesdays', "Parents' Night Out", 'No Kids Allowed Comedy',
+    'Summer Camp Reunion at the Brewery', 'Youth Night 21+', 'Base Camp Social',
+  ])('%s -> no kids', (t) => {
+    expect(c(t).categories).not.toContain('kids');
+  });
+  it('the title rule is off for an audience-authoritative family (rss_libcal)', () => {
+    expect(c('Preschool Storytime', { family: 'rss_libcal' }).categories).not.toContain('kids');
+    expect(c('Preschool Storytime', { family: 'rss_libcal', categoriesHint: ['audience:kids'] }).categories).toContain('kids');
+  });
+  it('description kids/family positives are off for rss_libcal, on elsewhere', () => {
+    expect(c('Open Studio', { family: 'rss_libcal' }, 'Kids welcome! Family friendly.').categories).toEqual([]);
+    expect(c('Open Studio', { family: 'tribe' }, 'Kids welcome! Family friendly.').categories).toEqual(expect.arrayContaining(['kids', 'family']));
+  });
+  it('audience: hints resolve only in the rss_libcal map; rss_libcal drops raw kids/family labels', () => {
+    expect(mapHints('rss_libcal', ['audience:kids', 'audience:family']).slugs).toEqual(['kids', 'family']);
+    expect(mapHints('tribe', ['audience:kids']).slugs).toEqual([]);
+    expect(mapHints(undefined, ['audience:kids']).slugs).toEqual([]);
+    expect(mapHints('rss_libcal', ['kids', 'children', 'youth', 'family', 'family-friendly']).slugs).toEqual([]);
+    expect(mapHints('rss_libcal', ['STEAM', 'Arts & Crafts']).slugs).toEqual(['learning', 'arts']);
+  });
+});
+
+describe('AC-K-21 kids-safe club exemption', () => {
+  it('"Lego/Duplo Club" + "All ages welcome." -> family, no adult_signal conflict', () => {
+    const r = c('Lego/Duplo Club', {}, 'All ages welcome.');
+    expect(r.categories).toContain('family');
+    expect(r.reasons).not.toContain('conflict:adult_signal');
+  });
+  it('"Builders Club at the Tahoe City Library" with a kids hint keeps kids', () => {
+    const r = c('Builders Club at the Tahoe City Library', { categoriesHint: ['kids'] });
+    expect(r.categories).toContain('kids');
+    expect(r.reasons).not.toContain('conflict:adult_signal');
+  });
+  it('"Kids Club at the Brewery" stays vetoed; "Book Club" alone still signals adult', () => {
+    const r = c('Kids Club at the Brewery');
+    expect(r.categories).not.toContain('kids');
+    expect(r.reasons).toContain('conflict:adult_signal');
+    expect(c('Book Club').reasons).toContain('conflict:adult_signal');
+  });
+  it('venue "Boys & Girls Club of Truckee" with a kids hint keeps kids', () => {
+    const r = c('After School Open Gym', { categoriesHint: ['kids'], venueName: 'Boys & Girls Club of Truckee' });
+    expect(r.categories).toContain('kids');
+    expect(r.reasons).not.toContain('conflict:adult_signal');
+  });
+  it('AC-K-22: adultSignal itself is unchanged', () => {
+    expect(adultSignal('club')).toBe(true);
+    expect(adultSignal('lego club')).toBe(true);
   });
 });

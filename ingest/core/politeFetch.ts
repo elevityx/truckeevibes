@@ -56,6 +56,16 @@ export const HOST_FAMILIES: Record<string, HostFamily> = {
       { path: /^\/wp-json\/wp\/v2\/event$/, search: /^\?per_page=100$/ },
     ],
   },
+  // Kids live (Spec_Kids_Live K1): public library LibCal hosts (*.libcal.com). robots.txt asks for a 10 s crawl delay and disallows only
+  // `/process_`; we read nothing but the month RSS feed (never the ajax JSON, the iCal export, calendar or event pages).
+  'libcal.com': {
+    floorMs: 10000,
+    deny: /^\/(?:process_|ajax|ical_subscribe|calendar|event)/,
+    rules: [
+      { path: /^\/robots\.txt$/, search: /^$/ },
+      { path: /^\/rss\.php$/, search: /^\?cid=\d{1,6}&m=month(?:&cam=\d{1,6})?$/ },
+    ],
+  },
 };
 
 export function familyOf(host: string): string | undefined {

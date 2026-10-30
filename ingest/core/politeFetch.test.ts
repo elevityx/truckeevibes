@@ -661,3 +661,40 @@ describe('AC-M1-138 Crystal Bay Casino family: path guard, robots and floor', ()
     expect(t.net.calls[1].at - t.net.calls[0].at).toBeGreaterThanOrEqual(5000);
   });
 });
+
+describe('AC-K-10 / AC-K-11 LibCal family: path guard, robots and floor (Spec_Kids_Live)', () => {
+  const LC_ROBOTS = fixture('libcal/robots.txt');
+  const lcSrc = (host: string) => source({ slug: 'libcal-test', allowed_hosts: [host], allowed_methods: ['feed'], page_cap: 3 });
+  function lc(host: string) {
+    const clock = makeClock();
+    const net = fakeNet((u) => (u.pathname === '/robots.txt' ? text(LC_ROBOTS) : text('<rss/>')), clock.now);
+    const pf = createPoliteFetch(lcSrc(host), { fetch: net.fetch, now: clock.now, sleep: clock.sleep });
+    return { pf, net, clock };
+  }
+  it('allowed: the month feed with or without a campus', async () => {
+    const a = lc('placer.libcal.com');
+    expect((await a.pf('https://placer.libcal.com/rss.php?cid=22618&m=month', { kind: 'feed' })).status).toBe(200);
+    const b = lc('nevadacountyca.libcal.com');
+    expect((await b.pf('https://nevadacountyca.libcal.com/rss.php?cid=20247&m=month&cam=8465', { kind: 'feed' })).status).toBe(200);
+    expect(familyOf('nevadacountyca.libcal.com')).toBe('libcal.com');
+    expect(HOST_FAMILIES['libcal.com'].floorMs).toBe(10000);
+  });
+  it('path_not_allowed: ajax, ical, event pages, other windows, process_; nothing is requested', async () => {
+    for (const p of ['/ajax/calendar/list?c=-1', '/ical_subscribe.php?src=p&cid=20247', '/event/123', '/rss.php?cid=1&m=all', '/process_x',
+      '/calendar?cid=20247', '/rss.php?cid=1&m=month&audience=2', '/rss.php?m=month&cid=1']) {
+      const t = lc('nevadacountyca.libcal.com');
+      expect(await code(t.pf(`https://nevadacountyca.libcal.com${p}`, { kind: 'feed' })), p).toBe('path_not_allowed');
+      expect(t.net.calls, p).toHaveLength(0);
+    }
+  });
+  it('two feed requests on one host are >= 10 s apart', async () => {
+    const t = lc('placer.libcal.com');
+    await t.pf('https://placer.libcal.com/rss.php?cid=22618&m=month', { kind: 'feed' });
+    await t.pf('https://placer.libcal.com/rss.php?cid=22619&m=month', { kind: 'feed' });
+    const at = t.net.calls.filter((c) => c.url.includes('rss.php')).map((c) => c.at);
+    expect(at[1] - at[0]).toBeGreaterThanOrEqual(10000);
+  });
+  it('the LibCal robots names GPTBot with Disallow: / (ai_bots_blocked true) and allows us', async () => {
+    expect(computeAiBotsBlocked(LC_ROBOTS)).toBe(true);
+  });
+});

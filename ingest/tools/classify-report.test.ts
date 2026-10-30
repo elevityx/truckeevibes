@@ -87,7 +87,7 @@ describe('per-event rows and kids_family_wordlist_only (AC-R4b-24)', () => {
     expect(out).toContain('  event k2 cats=- age=unknown price=unknown - cancelled');
   });
   it('counts a kids hint removed only by the word list; a 21+ item with a kids hint is not counted', async () => {
-    const wl = makeEvent(facts('w1', 'Kids Craft Afternoon', { venueName: 'Boys & Girls Club of Truckee', hints: ['kids'] }));
+    const wl = makeEvent(facts('w1', 'Kids Craft Afternoon', { venueName: 'Truckee Ski Club', hints: ['kids'] }));
     const adult = makeEvent(facts('a1', '21+ only Night', { hints: ['kids'] }));
     const clean = makeEvent(facts('c1', 'Kids Craft Afternoon', { hints: ['kids'] }));
     expect(wl.tagReasons).toEqual(expect.arrayContaining(['conflict:adult_signal', 'age:ambiguous']));
