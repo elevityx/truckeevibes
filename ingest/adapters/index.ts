@@ -6,6 +6,8 @@ import { adapter as icsCivicplus } from './icsCivicplus';
 import { adapter as icsEventsmanager } from './icsEventsmanager';
 import { adapter as htmlFinalsite } from './htmlFinalsite';
 import { adapter as htmlTahoeDonner } from './htmlTahoeDonner';
+import { adapter as wprestCrystalBay } from './wprestCrystalBay';
+import { adapter as curatedDates } from './curatedDates';
 
 export const adapters: Record<string, Adapter> = {
   [tribe.family]: tribe,
@@ -14,4 +16,6 @@ export const adapters: Record<string, Adapter> = {
   [icsEventsmanager.family]: icsEventsmanager,
   [htmlFinalsite.family]: htmlFinalsite,
   [htmlTahoeDonner.family]: htmlTahoeDonner,
+  [wprestCrystalBay.family]: wprestCrystalBay,
+  [curatedDates.family]: curatedDates,
 };

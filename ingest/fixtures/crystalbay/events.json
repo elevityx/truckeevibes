@@ -1,0 +1,101 @@
+[
+ {
+  "id": 1001,
+  "link": "https://www.crystalbaycasino.com/event/easy-star-all-stars/",
+  "title": {
+   "rendered": "Easy Star All-Stars &#8220;Dub Side of the Moon&#8221;"
+  },
+  "content": {
+   "rendered": "<p>Fri. Oct. 23rd 2026</p><p>Doors: 7PM Show: 8PM</p><p>Ticket Link: https://tixr.example/e/1</p><p>Synthetic description paragraph.</p>"
+  },
+  "date": "2026-06-24T10:00:00"
+ },
+ {
+  "id": 1002,
+  "link": "https://www.crystalbaycasino.com/event/steely-dead/",
+  "title": {
+   "rendered": "Steely Dead &#8211; Crown Room"
+  },
+  "content": {
+   "rendered": "<p>Sat. Oct. 24th 2026</p><p>Doors: 7PM Show: 8PM</p><p>Ticket Link: https://tixr.example/e/1</p><p>Synthetic description paragraph.</p>"
+  },
+  "date": "2026-06-24T10:00:00"
+ },
+ {
+  "id": 1003,
+  "link": "https://www.crystalbaycasino.com/event/jim-norton/",
+  "title": {
+   "rendered": "Jim Norton"
+  },
+  "content": {
+   "rendered": "<p>Fri. Nov. 6th 2026</p><p>Doors: 7PM Show: 8PM</p><p>Ticket Link: https://tixr.example/e/1</p><p>Synthetic description paragraph.</p>"
+  },
+  "date": "2026-06-24T10:00:00"
+ },
+ {
+  "id": 1004,
+  "link": "https://www.crystalbaycasino.com/event/pat-oneill/",
+  "title": {
+   "rendered": "Pat O&#8217;Neill &#8211; Red Room"
+  },
+  "content": {
+   "rendered": "<p>Fri. Nov. 27th 2026</p><p>Doors: 8PM Show: 9PM</p><p>Ticket Link: https://tixr.example/e/1</p><p>Synthetic description paragraph.</p>"
+  },
+  "date": "2026-06-24T10:00:00"
+ },
+ {
+  "id": 1005,
+  "link": "https://www.crystalbaycasino.com/event/boot-juice/",
+  "title": {
+   "rendered": "Boot Juice - Red Room"
+  },
+  "content": {
+   "rendered": "<p>Sat. Nov. 28th 2026</p><p>Doors: 7PM Show: 8PM</p><p>Ticket Link: https://tixr.example/e/1</p><p>Synthetic description paragraph.</p>"
+  },
+  "date": "2026-06-24T10:00:00"
+ },
+ {
+  "id": 1006,
+  "link": "https://www.crystalbaycasino.com/event/victor-wooten/",
+  "title": {
+   "rendered": "Victor Wooten"
+  },
+  "content": {
+   "rendered": "<p>Fri. Dec. 11th 2026</p><p>Doors: 7PM Show: 8PM</p><p>Ticket Link: https://tixr.example/e/1</p><p>Synthetic description paragraph.</p>"
+  },
+  "date": "2026-06-24T10:00:00"
+ },
+ {
+  "id": 1007,
+  "link": "https://www.crystalbaycasino.com/event/opiuo/",
+  "title": {
+   "rendered": "OPIUO"
+  },
+  "content": {
+   "rendered": "<p>Thu. Dec. 31st 2026</p><p>Doors: 8PM Show: 9PM</p><p>Ticket Link: https://tixr.example/e/1</p><p>Synthetic description paragraph.</p>"
+  },
+  "date": "2026-06-24T10:00:00"
+ },
+ {
+  "id": 1008,
+  "link": "https://www.crystalbaycasino.com/event/dogs-in-a-pile/",
+  "title": {
+   "rendered": "Dogs In A Pile - Red Room"
+  },
+  "content": {
+   "rendered": "<p>Wed. Jan. 13th 2026</p><p>Doors: 7PM Show: 8PM</p><p>Ticket Link: https://tixr.example/e/1</p><p>Synthetic description paragraph.</p>"
+  },
+  "date": "2026-06-24T10:00:00"
+ },
+ {
+  "id": 1009,
+  "link": "https://www.crystalbaycasino.com/event/sample-summer-show/",
+  "title": {
+   "rendered": "Sample Summer Show"
+  },
+  "content": {
+   "rendered": "<p>Sat. Aug. 15th 2026</p><p>Doors: 7PM Show: 8PM</p><p>Ticket Link: https://tixr.example/e/1</p><p>Synthetic description paragraph.</p>"
+  },
+  "date": "2026-06-24T10:00:00"
+ }
+]
