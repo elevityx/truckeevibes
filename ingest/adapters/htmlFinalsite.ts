@@ -62,8 +62,11 @@ function parsePage(html: string, tz: string, url: string): RawOccurrence[] {
     if (!title || !m) throw new Layout();
     const s = instant(m[2]);
     const e = instant(m[3]);
-    if (s === undefined || e === undefined || e <= s) throw new Layout();
-    const allDay = m[2].endsWith('T00:00:00Z') && m[3].endsWith('T00:00:00Z') && (e - s) % DAY_MS === 0;
+    // Finalsite renders an event with no end time as end == start (TLE, 2026-10); that is a timed item without `endsAt`.
+    if (s === undefined || e === undefined || e < s) throw new Layout();
+    const midnight = m[2].endsWith('T00:00:00Z') && m[3].endsWith('T00:00:00Z');
+    if (midnight && e === s) throw new Layout(); // neither the all-day nor the no-end-time encoding: fail closed
+    const allDay = midnight && (e - s) % DAY_MS === 0;
     const o: RawOccurrence = { externalKey: `${m[1]}#${m[2]}`, title, allDay, startsAt: m[2], url };
     if (allDay) {
       o.startDate = m[2].slice(0, 10);
@@ -71,7 +74,7 @@ function parsePage(html: string, tz: string, url: string): RawOccurrence[] {
       const local = toUtcFromLocal(o.startDate, '00:00', tz);
       if (local === 'dst_gap') throw new Layout();
       o.startsAt = local;
-    } else {
+    } else if (e > s) {
       o.endsAt = m[3];
     }
     out.push(o);

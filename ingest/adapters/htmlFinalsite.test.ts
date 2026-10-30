@@ -168,3 +168,37 @@ describe('adversarial markup is rejected in linear time (review P1)', () => {
     expect(`${r.status}:${r.errorCode}`).toBe('parse_error:layout_changed');
   });
 });
+
+describe('TLE: zero-length timed occurrences (RCA_TTUSD_TLE_Layout)', () => {
+  // Trimmed real page: Finalsite renders an event with no end time as `<id>_<startZ>_<startZ>` (end == start).
+  const tle = (pages: Record<string, string> = { '2026-10': fixture('finalsite/tle_2026-10.html') }) =>
+    setup({ host: 'tle.ttusd.org', path: '/calendar', school: 'tle', pages });
+  it('a real TLE month with end == start occurrences parses (ok, not layout_changed)', async () => {
+    const r = await tle().run();
+    expect(`${r.status}:${r.errorCode ?? ''}`).toBe('ok:');
+    expect(r.items.map((i) => `${i.title}|${i.startsAt}|${i.endsAt ?? '-'}`)).toEqual([
+      'Halloween Parade|2026-10-30T17:45:00Z|2026-10-30T18:15:00Z', 'Walk-a-Thon!|2026-10-23T17:00:00Z|2026-10-23T18:30:00Z',
+    ]);
+    for (const i of r.items) { expect(i.url).toBe('https://tle.ttusd.org/calendar'); expect(i.venueName).toBe('Tahoe Lake Elementary School'); }
+    // 7 unique occurrences: the two end == start "Dismissed at 12:00" notices, two Parent Teacher Conferences, TLE Collaborative Teams.
+    expect(r.filtered).toBe(5);
+  });
+  it('a zero-length occurrence becomes a timed item with no endsAt (the DB requires ends_at > starts_at)', async () => {
+    const page = fixture('finalsite/tle_2026-10.html').replace('341546547_2026-10-23T17:00:00Z_2026-10-23T18:30:00Z', '341546547_2026-10-23T17:00:00Z_2026-10-23T17:00:00Z');
+    const r = await tle({ '2026-10': page }).run();
+    const walk = r.items.find((i) => i.title === 'Walk-a-Thon!');
+    expect(walk?.allDay).toBe(false);
+    expect(walk?.startsAt).toBe('2026-10-23T17:00:00Z');
+    expect(walk?.endsAt).toBeUndefined();
+  });
+  it('a zero-length occurrence at T00:00:00Z (ambiguous with the all-day encoding) is still layout_changed', async () => {
+    const page = fixture('finalsite/tle_2026-10.html').replace('341546547_2026-10-23T17:00:00Z_2026-10-23T18:30:00Z', '341546547_2026-10-23T00:00:00Z_2026-10-23T00:00:00Z');
+    const r = await tle({ '2026-10': page }).run();
+    expect(`${r.status}:${r.errorCode}`).toBe('parse_error:layout_changed');
+  });
+  it('end before start is still layout_changed', async () => {
+    const page = fixture('finalsite/tle_2026-10.html').replace('341546547_2026-10-23T17:00:00Z_2026-10-23T18:30:00Z', '341546547_2026-10-23T17:00:00Z_2026-10-23T16:30:00Z');
+    const r = await tle({ '2026-10': page }).run();
+    expect(`${r.status}:${r.errorCode}`).toBe('parse_error:layout_changed');
+  });
+});

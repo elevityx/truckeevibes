@@ -1,0 +1,14 @@
+/* The two rules next/font/google generated next to the Fraunces faces (Next 16.4.0), kept as they were: the metric-matched
+   Times New Roman fallback and the variable admin-legacy.css reads. See admin.ts. */
+@font-face {
+  font-family: 'Fraunces Fallback';
+  src: local("Times New Roman");
+  ascent-override: 84.71%;
+  descent-override: 22.09%;
+  line-gap-override: 0.00%;
+  size-adjust: 115.45%;
+}
+
+.variable {
+  --font-fraunces: 'Fraunces', 'Fraunces Fallback';
+}

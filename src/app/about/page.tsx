@@ -60,6 +60,17 @@ export default function AboutPage() {
               TruckeeVibes is the year-round list. TruckeeLights covers Christmas and winter, TruckeeFrights covers Halloween and fall; both keep their own look and will draw their events from this list.
             </p>
 
+            <h2 className="h2">Font licenses</h2>
+            <p>
+              {'The fonts are served from this site under the SIL Open Font License 1.1: '}
+              <a href="/fonts/licenses/OFL-AtkinsonHyperlegibleNext.txt">Atkinson Hyperlegible Next</a>
+              {' and '}
+              <a href="/fonts/licenses/OFL-BricolageGrotesque.txt">Bricolage Grotesque</a>
+              {'. '}
+              <a href="/fonts/licenses/README.txt">All font licenses</a>
+              {'.'}
+            </p>
+
             <h2 className="h2">Privacy</h2>
             <p>No cookies, no accounts.</p>
             <p className="small" style={{ marginTop: 20 }}>Truckee sits on the ancestral homeland of the Washoe (Wašiw) people.</p>
