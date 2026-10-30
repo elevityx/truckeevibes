@@ -30,11 +30,12 @@ export async function callApiEvents(env: Env, q: Query, fetchFn: typeof fetch, t
         headers: { apikey: key, authorization: `Bearer ${key}`, 'content-type': 'application/json' },
         body: JSON.stringify(body),
         signal: ctl.signal,
-        redirect: 'error',
+        redirect: 'manual', // Workers fetch has no 'error' (throws); a 3xx is rejected below (Amendment W1-3)
       });
     } catch {
       throw new RpcError(504, null);
     }
+    if (res.status === 0 || (res.status >= 300 && res.status < 400)) throw new RpcError(502, null);
     if (!res.ok) {
       let code: string | null = null;
       try {
