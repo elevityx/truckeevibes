@@ -268,7 +268,7 @@ select pg_temp.eq($$(select count(*) from public.sources where slug like 'ttusd-
 select pg_temp.eq($$(select count(*) from public.sources where slug like 'ttusd-%' and enabled and trust = 'auto' and cadence = '24h' and ingest_disposition = 'permitted'
     and allowed_methods = array['html']::text[] and terms_recheck_at > now() and config ->> 'allowlist' = 'ttusd')$$, '7', 'AC-M1-115 seven enabled auto 24h permitted html sources with future recheck and allowlist ttusd');
 select pg_temp.eq($$(select string_agg(slug, ',' order by slug) from public.sources where slug in ('ttusd-kbe', 'ttusd-dte') and not enabled)$$, 'ttusd-dte,ttusd-kbe', 'AC-M1-115 kbe and dte are disabled');
-select pg_temp.eq($$(select count(*) from public.sources where enabled)$$, '15', 'AC-M1-115 fifteen sources enabled (A13 adds tahoe-donner, A14 adds three)');
+select pg_temp.eq($$(select count(*) from public.sources where enabled)$$, '17', 'AC-M1-115 fifteen sources enabled (A13 adds tahoe-donner, A14 adds three); Kids live: +3 libraries, -tdrpd = seventeen');
 select pg_temp.eq($$(select count(*) from public.categories where slug = 'schools')$$, '1', 'AC-M1-115 the schools category exists');
 select pg_temp.eq($$(select count(*) from public.categories)$$, '15', 'AC-M1-115 fifteen categories (A13 adds members-only)');
 select pg_temp.t($$(select pg_temp.x('postgres', $s$insert into public.sources (slug, name, homepage_url, allowed_hosts, family, class) values ('ttusd-bogus', 'Bogus Family', 'https://example.test/', array['example.test'], 'html_bogus', 'organizer')$s$)) like 'ERR:23514%'$$,
