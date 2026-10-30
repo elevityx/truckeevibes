@@ -8,6 +8,7 @@ import { adapter as htmlFinalsite } from './htmlFinalsite';
 import { adapter as htmlTahoeDonner } from './htmlTahoeDonner';
 import { adapter as wprestCrystalBay } from './wprestCrystalBay';
 import { adapter as curatedDates } from './curatedDates';
+import { adapter as rssLibcal } from './rssLibcal';
 
 export const adapters: Record<string, Adapter> = {
   [tribe.family]: tribe,
@@ -18,4 +19,5 @@ export const adapters: Record<string, Adapter> = {
   [htmlTahoeDonner.family]: htmlTahoeDonner,
   [wprestCrystalBay.family]: wprestCrystalBay,
   [curatedDates.family]: curatedDates,
+  [rssLibcal.family]: rssLibcal,
 };

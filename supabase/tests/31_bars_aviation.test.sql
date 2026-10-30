@@ -274,7 +274,7 @@ select pg_temp.eq($$(select page_cap::text || '|' || cadence || '|' || homepage_
 select pg_temp.eq($$(select config = '{"base":"https://www.moodysbistro.com","tz":"America/Los_Angeles","defaultCategories":["music"]}'::jsonb from public.sources where slug = 'moodys-bistro')$$, 'true', 'AC-M1-140 moodys-bistro config');
 select pg_temp.eq($$(select jsonb_array_length(config -> 'dates') || '|' || (config -> 'dates' -> 0 ->> 'date') || '|' || (config ->> 'provenance') from public.sources where slug = 'eaa-1073-breakfast')$$,
   '3|2026-11-14|listed on tahoe.com, checked 2026-10-19', 'AC-M1-140 the EAA config lists three dates with provenance');
-select pg_temp.eq($$(select count(*) from public.sources where enabled)$$, '15', 'AC-M1-140 fifteen sources enabled');
+select pg_temp.eq($$(select count(*) from public.sources where enabled)$$, '17', 'AC-M1-140 fifteen sources enabled; Kids live: +3 libraries, -tdrpd = seventeen');
 
 create temp table manifest (slug text, url text);
 insert into manifest values

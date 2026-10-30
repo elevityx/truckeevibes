@@ -1,4 +1,5 @@
-// Classifier v3 (plan 3.3; A15 adds source-free labels, $0 and description price phrases, and explicit kids/family phrases): fail-closed. Description text is read here, in memory, and never returned; every output
+// Classifier v4 (plan 3.3; A15 adds source-free labels, $0 and description price phrases, and explicit kids/family phrases; Spec_Kids_Live c4
+// adds kids title keywords, a kids-safe `club` exemption for the word-list check, and audience-authoritative families): fail-closed. Description text is read here, in memory, and never returned; every output
 // that explains a tag is a closed reason code. When unsure, no tag.
 import type { AgeKind, PriceKind } from '../types';
 import { ageOf } from './ageGrammar';
@@ -19,6 +20,27 @@ const TABLES: [string, RegExp][] = [
   ['holiday', /\b(?:christmas|holiday|santa|tree lighting|menorah|lights)(?:s|es)?\b/],
   ['halloween-fall', /\b(?:halloween|haunted|trick or treat|pumpkin|harvest|oktoberfest|costume)(?:s|es)?\b/],
 ];
+
+/**
+ * c4 (Spec_Kids_Live 5a): title words that say an event is made for kids. `family` still never comes from a title. Whole words on the
+ * lowercased title; `camp` counts only with a kids/season prefix, an age band only when it tops out at 12 or under.
+ */
+const KIDS_TITLE = /\b(?:story ?times?|toddlers?|preschool(?:ers?)?|baby lapsit|lapsit|kids'?|kid's|children's|youth|tweens?|(?:kids|youth|day|summer|winter|spring break|holiday) camps?)(?![\w'])/g;
+const KIDS_TITLE_AGES = /\bages?\s+(\d{1,2})\s*(?:-|–|to)\s*(\d{1,2})\b/g;
+const KIDS_TITLE_NEG = /\b(?:adults?|grown[- ]?ups?|no kids|kids?[- ]free|adults? only|grown[- ]ups? only|without (?:the )?kids|kids eat free|kids (?:under \d+ )?(?:eat|drink) free|parents'? night out|for parents)\b/;
+/** Families whose adapter states the audience (DR-K3): kids/family only from `audience:*` hints, never from the title or description. */
+const AUDIENCE_FAMILIES: ReadonlySet<string> = new Set(['rss_libcal']);
+/** c4 kids-safe exemption for the word-list check only (`adultSignal` itself and `private.adult_signal` are unchanged). */
+const KIDS_SAFE_CLUB = /\b(?:lego(?:\s*\/\s*duplo)?|duplo|builders?|kids'?|children's|chess|homework|reading|science|stem|steam|boys (?:&|and) girls|(?:kids'?|children's|teen|tween) book)\s+club\b/g;
+const stripKidsSafe = (t: string) => t.replace(KIDS_SAFE_CLUB, ' ');
+
+function titleKids(title: string): boolean {
+  if (KIDS_TITLE_NEG.test(title)) return false;
+  const ok = (i: number, len: number) => !negatedInSentence(title, i, i + len);
+  for (const m of title.matchAll(KIDS_TITLE)) if (ok(m.index!, m[0].length)) return true;
+  for (const m of title.matchAll(KIDS_TITLE_AGES)) if (+m[1] <= +m[2] && +m[2] <= 12 && ok(m.index!, m[0].length)) return true;
+  return false;
+}
 
 /** Description positives for kids/family only (the closed list), each guarded by negation. */
 const DESC_POSITIVES: { re: RegExp; cat: 'kids' | 'family'; ok?: (m: RegExpMatchArray) => boolean }[] = [
@@ -158,7 +180,9 @@ export function classify(item: ClassifyInput, descriptionText?: string): Classif
   if (slugs.length) { reasons.push('cat:source_map'); for (const s of slugs) cats.add(s); }
   const kw = TABLES.filter(([, re]) => re.test(title)).map(([s]) => s);
   if (kw.length) { reasons.push('cat:title_kw'); for (const s of kw) cats.add(s); }
-  for (const [cat, code] of descCategories(description)) { reasons.push(code); cats.add(cat); }
+  const audienceFamily = !!item.family && AUDIENCE_FAMILIES.has(item.family);
+  if (!audienceFamily && titleKids(title)) { if (!reasons.includes('cat:title_kw')) reasons.push('cat:title_kw'); cats.add('kids'); }
+  if (!audienceFamily) for (const [cat, code] of descCategories(description)) { reasons.push(code); cats.add(cat); }
 
   // 2. price
   const price = priceOf(item, description, sourceFree);
@@ -170,7 +194,7 @@ export function classify(item: ClassifyInput, descriptionText?: string): Classif
   const ageReasons = [...ageRes.reasons];
 
   // 4. final invariant (always last)
-  const wl = adultSignal(title) || adultSignal((item.venueName ?? '').toLowerCase());
+  const wl = adultSignal(stripKidsSafe(title)) || adultSignal(stripKidsSafe((item.venueName ?? '').toLowerCase()));
   const explicit = ageRes.adult || ageRes.ambiguous;
   if (explicit || wl) {
     const positive = cats.has('kids') || cats.has('family') || age === 'all_ages' || age === 'family';

@@ -914,3 +914,34 @@ describe('bars_aviation (A14 r3)', () => {
     expect(sql()).toContain("'https://www.fiftyfiftybrewing.com/pages/events'");
   });
 });
+
+// Kids live K1 (Spec_Kids_Live AC-K-25): data-only migration text.
+describe('kids_sources (Kids live K1)', () => {
+  const NAME = '20261030000100_kids_sources.sql';
+  const sql = () => readFileSync(join(DIR, NAME), 'utf8');
+  const code = () => sql().split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
+  it('exists, sorts after every merged migration, unique versions', () => {
+    expect(files).toContain(NAME);
+    for (const f of files.filter((x) => x.endsWith('.sql') && x !== NAME)) expect(NAME > f, f).toBe(true);
+    const versions = files.filter((f) => f.endsWith('.sql')).map((f) => f.slice(0, 14));
+    expect(new Set(versions).size).toBe(versions.length);
+  });
+  it('idempotent shape: one on conflict, widen-only CHECK, scoped self-check', () => {
+    expect(sql().match(/on conflict \(slug\) do nothing/g)).toHaveLength(1);
+    expect(sql()).toContain('pg_get_constraintdef');
+    expect(sql()).toContain('want <@ cur');
+    expect(sql()).toContain('family_check_unparsed');
+    expect(sql()).toContain('kids_sources_state');
+    expect(sql()).not.toMatch(/count\(\*\) from public\.sources where enabled\)/);
+  });
+  it('data only: no grant, no revoke, no function', () => {
+    expect(code()).not.toMatch(/\bgrant\s/i);
+    expect(code()).not.toMatch(/\brevoke\s/i);
+    expect(code()).not.toMatch(/create\s+(?:or\s+replace\s+)?function/i);
+  });
+  it('libraries at auto, tdrpd disabled, trust unchanged for tdrpd', () => {
+    expect(sql()).toMatch(/set enabled = true, trust = 'auto' where slug in \('libcal-truckee', 'libcal-kings-beach', 'libcal-tahoe-city'\)/);
+    expect(sql()).toMatch(/update public\.sources set enabled = false,[\s\S]*?where slug = 'tdrpd'/);
+    expect(sql()).not.toMatch(/update public\.sources set[^;]*\btrust\b[^;]*where slug = 'tdrpd'/);
+  });
+});

@@ -43,7 +43,21 @@ export const FREE_LABELS: ReadonlySet<string> = new Set(['free', 'free-event', '
 /** Editorial or filtered labels: neither a slug nor "unmapped" (keeps the classify-report honest). */
 export const IGNORED_LABELS: Record<string, ReadonlySet<string>> = {
   tribe: new Set(['featured-events', 'headliners-events', 'local-events', 'attractions-events', 'wellness', 'tahoe-blue-event-center']),
+  rss_libcal: new Set(['storytime', 'storytimes', 'featured events', 'book clubs', 'adult literacy & esl']),
 };
+
+/**
+ * LibCal (Spec_Kids_Live DR-K3): kids/family come only from the adapter's reserved `audience:*` hints (the organizer's audience labels),
+ * never from a raw category label, so every COMMON key that resolves to kids or family is removed from this copy.
+ */
+function libcalMap(): Record<string, string> {
+  const m: Record<string, string> = {};
+  for (const [k, v] of Object.entries(COMMON)) if (v !== 'kids' && v !== 'family') m[k] = v;
+  return {
+    ...m, steam: 'learning', stem: 'learning', 'computers & technology': 'learning', 'lifelong learning': 'learning', 'arts & crafts': 'arts',
+    'audience:kids': 'kids', 'audience:family': 'family',
+  };
+}
 
 /** Every family in `ingest/adapters/index.ts`. Each gets its own copy so a family can be extended alone. */
 export const CATEGORY_MAPS: Record<string, Record<string, string>> = {
@@ -53,6 +67,7 @@ export const CATEGORY_MAPS: Record<string, Record<string, string>> = {
   ics_eventsmanager: { ...COMMON },
   html_finalsite: { ...COMMON },
   wprest_crystalbay: { ...COMMON },
+  rss_libcal: libcalMap(),
   curated_dates: { ...COMMON },
   // `family`/`kids` only from Tahoe Donner's own Family Events / Kids Programming lists; `dining` and `live music` resolve through COMMON.
   html_tahoedonner: {
@@ -76,7 +91,8 @@ export function mapHints(family: string | undefined, hints: readonly string[]): 
     const f = slugForm(label);
     if (FREE_LABELS.has(label) || FREE_LABELS.has(f)) { sourceFree = true; continue; }
     if (ignored && (ignored.has(label) || ignored.has(f))) continue;
-    const hit = map[label] ?? map[f];
+    // Reserved eligibility hints resolve only by their exact label, never through the slug form (PR #35 review P1).
+    const hit = map[label] ?? (f.startsWith('audience-') ? undefined : map[f]);
     if (hit) slugs.push(hit);
     else unmapped.push(label);
   }
