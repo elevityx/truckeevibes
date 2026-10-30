@@ -177,7 +177,8 @@
 .ewhenl{margin:0; font-size:var(--fs-control); line-height:var(--lh-control); color:var(--ink)}
 .etags{margin:var(--space-1) 0 0; display:flex; flex-wrap:wrap; gap:6px; align-items:center}
 .etags .tg{border-color:currentColor}
-.etags .tg:not(.pick):not(.free):not(.t21):not(.drive){color:var(--ink-muted)}
+.etags .tg:not(.pick):not(.free):not(.t21):not(.drive):not(.members){color:var(--ink-muted)}
+.tg.members{color:var(--river)}
 .pickline{margin:0; font-size:var(--fs-body); line-height:var(--lh-body)}
 .kv{display:grid; grid-template-columns:auto minmax(0,1fr); gap:var(--space-1) var(--space-3); font-size:var(--fs-control); line-height:22px; margin:0}
 .kv dt{font-weight:700; color:var(--ink-muted)}

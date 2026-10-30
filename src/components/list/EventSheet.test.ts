@@ -113,3 +113,12 @@ describe('sheet handle drag', () => {
     expect(dragCloses(0, 10)).toBe(false);
   });
 });
+
+describe('AC-M1-133 (r4) Members only badge in the sheet', () => {
+  it('shows the badge once, never as a category chip, and only for such an event', () => {
+    const on = render({ ...first, categories: ['music', 'members-only'] });
+    expect(on.match(/<span class="tg members">Members only<\/span>/g)).toHaveLength(1);
+    expect(on.match(/Members only/g)).toHaveLength(1);
+    expect(render({ ...first, categories: ['music'] })).not.toContain('Members only');
+  });
+});

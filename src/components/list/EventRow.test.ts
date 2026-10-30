@@ -75,3 +75,12 @@ describe('AC-R1c-CO6 tile corner radius', () => {
     expect(tile).toContain('border-radius:var(--radius-md)');
   });
 });
+
+describe('AC-M1-133 (r4) Members only badge', () => {
+  it('renders next to the other tags when categories include members-only, and not otherwise', () => {
+    const on = html({ categories: ['food-drink', 'members-only'], priceKind: 'free' });
+    expect(on).toContain('<span class="tg members">Members only</span>');
+    expect(on.indexOf('tg free')).toBeLessThan(on.indexOf('tg members'));
+    expect(html({ categories: ['food-drink'] })).not.toContain('Members only');
+  });
+});

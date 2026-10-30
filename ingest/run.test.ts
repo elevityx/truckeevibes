@@ -520,3 +520,42 @@ describe('A12 TTUSD sources through the runner (AC-M1-114 c/d/h, AC-M1-120)', ()
     expect(max).toBe(1);
   });
 });
+
+describe('A13 members-only is ours alone (AC-M1-128b r4)', () => {
+  const run = async (family: string, hints: string[]) => {
+    const h = harness({ grants: [grant(family)], adapters: { [family]: fake(family, async () => ({ items: [at('Sample', 'k', { categoriesHint: hints, tagReasons: ['cat:source_map'] })], status: 'ok' as const })) } });
+    await h.run();
+    return h.submits()[0].body.items[0];
+  };
+  it('a Tribe item with categoriesHint [members-only, music] reaches the batch without it', async () => {
+    const it = await run('tribe', ['members-only', 'music']);
+    expect(it.categoriesHint).toEqual(['music']);
+  });
+  it('an html_tahoedonner item keeps it', async () => {
+    const it = await run('html_tahoedonner', ['members-only', 'food-drink']);
+    expect(it.categoriesHint).toEqual(['members-only', 'food-drink']);
+  });
+  it('the Tahoe Donner source runs through the runner: found=8 ... filtered=6, counts only', async () => {
+    const BASE = 'https://www.tahoedonner.com';
+    const h = harness({
+      grants: [{ grant: 'g-td', run_id: 'r-td', source: source({ slug: 'tahoe-donner', family: 'html_tahoedonner', allowed_hosts: ['www.tahoedonner.com'], allowed_methods: ['html'], page_cap: 45,
+        config: { listUrl: `${BASE}/events/`, tz: 'America/Los_Angeles' } }) }],
+      other: (u) => {
+        if (u.pathname === '/robots.txt') return text(fixture('tahoedonner/robots.txt'));
+        const h = (b: string) => new Response(b, { status: 200, headers: { 'content-type': 'text/html' } });
+        if (u.pathname === '/events/') {
+          const c = u.searchParams.get('categories[]');
+          return h(fixture(c === '94' ? 'tahoedonner/list_family.html' : c ? 'tahoedonner/list_kids.html' : 'tahoedonner/list.html'));
+        }
+        const m = /^\/events\/([a-z0-9-]+)\/$/.exec(u.pathname);
+        return m ? h(fixture(`tahoedonner/detail_${m[1]}.html`)) : text('nf', 404);
+      },
+    });
+    expect(await h.run()).toBe(0);
+    const line = h.logs.find((l) => l.startsWith('source=tahoe-donner'))!;
+    expect(line).toMatch(/^source=tahoe-donner status=ok found=8 new=\d+ changed=\d+ invalid=0 filtered=6 /);
+    expect(line).not.toMatch(/Light Up|Board|https?:|tahoedonner\.com/i);
+    expect(h.submits()[0].body.run.parser_version).toBe('html_tahoedonner.1-c2');
+    expect(h.submits()[0].body.items).toHaveLength(8);
+  });
+});

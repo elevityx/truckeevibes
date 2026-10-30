@@ -29,7 +29,10 @@ describe('AC-R1a-12 admin-legacy.css', () => {
     expect(app.indexOf("import './admin-legacy.css'")).toBeLessThan(app.indexOf("import './admin.css'"));
   });
   it('the admin layout loads Fraunces and the public root layout does not', () => {
-    expect(readFileSync(join(process.cwd(), 'src/app/admin/layout.tsx'), 'utf8')).toContain('Fraunces(');
-    expect(readFileSync(join(process.cwd(), 'src/app/layout.tsx'), 'utf8').toLowerCase()).not.toContain('fraunces');
+    // Fraunces is self-hosted (RCA_CI_Next_Font): src/app/fonts/admin.ts loads it, and only the admin layout imports that module.
+    expect(readFileSync(join(process.cwd(), 'src/app/admin/layout.tsx'), 'utf8')).toContain("from '../fonts/admin'");
+    expect(readFileSync(join(process.cwd(), 'src/app/fonts/admin.ts'), 'utf8')).toContain("src: './Fraunces-latin.woff2'");
+    for (const f of ['src/app/layout.tsx', 'src/app/fonts/site.ts'])
+      expect(readFileSync(join(process.cwd(), f), 'utf8').toLowerCase()).not.toContain('fraunces');
   });
 });

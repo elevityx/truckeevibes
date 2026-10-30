@@ -17,3 +17,11 @@ export const CATEGORY_LABELS: Readonly<Record<string, string>> = {
 };
 
 export const CATEGORY_SLUGS: readonly string[] = Object.keys(CATEGORY_LABELS);
+
+/**
+ * Access labels (A13): categories that tag an event but are not a kind of event, so they stay out of `CATEGORY_LABELS`, the Rail and the
+ * filter URL (`cat=members-only` is ignored). Today only Tahoe Donner's own "members only" wording sets one.
+ */
+export const ACCESS_TAG_LABELS: Readonly<Record<string, string>> = {
+  'members-only': 'Members only',
+};
