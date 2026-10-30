@@ -80,7 +80,7 @@ describe('Amendment W1-3: Workers-compatible redirect handling', () => {
   });
   it("no Function source uses redirect: 'error' (AC-W1-36)", () => {
     const walk = (d: string): string[] => readdirSync(d, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? walk(join(d, e.name)) : [join(d, e.name)]);
-    for (const f of walk(join(__dirname, '..')).filter((x) => /\.ts$/.test(x) && !/\.test\.ts$/.test(x))) expect(readFileSync(f, 'utf8'), f).not.toMatch(/redirect:\s*'error'/);
+    for (const f of walk(join(__dirname, '..')).filter((x) => /\.ts$/.test(x) && !/\.test\.ts$/.test(x))) expect(readFileSync(f, 'utf8'), f).not.toMatch(/redirect:\s*['"`]error/);
   });
   it.each([301, 302, 307])('a %i upstream is RpcError(502), never followed (AC-W1-37)', async (status) => {
     const f = recordingFetch(() => new Response(null, { status, headers: { location: 'https://example.invalid/' } }));
