@@ -25,7 +25,7 @@ export class FetchError extends Error {
  * Host families with a shared spacing floor and a request path guard (A12, generalized in A13). A request on a family host passes only
  * when its path is not denied, is short, and matches one allowed (path, query) rule exactly. TTUSD's robots.txt asks for a 5 s crawl
  * delay and disallows `/fs/` (where its ICS export lives); Tahoe Donner's disallows its calendar action views and the ai1ec exporter,
- * and our guard also keeps us off its RSS feed and the WordPress API.
+ * and our guard also keeps us off its RSS feed and the WordPress API. Crystal Bay Casino (A14) is limited to its one WP REST event route.
  */
 export interface HostFamily { floorMs: number; deny: RegExp; rules: { path: RegExp; search: RegExp }[] }
 export const HOST_FAMILIES: Record<string, HostFamily> = {
@@ -44,6 +44,16 @@ export const HOST_FAMILIES: Record<string, HostFamily> = {
       { path: /^\/robots\.txt$/, search: /^$/ },
       { path: /^\/events\/$/, search: /^(?:\?categories%5B%5D=(?:94|180|95))?$/ },
       { path: /^\/events\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/, search: /^$/ },
+    ],
+  },
+  // A14: Crystal Bay Casino. robots.txt allows everything and sets no delay; the 5 s floor is our choice. Only the one REST route is read.
+  // `deny` is tested against path + query, so the lookahead lets the exact route (with or without a query) through to the rules below.
+  'crystalbaycasino.com': {
+    floorMs: 5000,
+    deny: /^\/wp-json\/(?!wp\/v2\/event(?:\?|$))/,
+    rules: [
+      { path: /^\/robots\.txt$/, search: /^$/ },
+      { path: /^\/wp-json\/wp\/v2\/event$/, search: /^\?per_page=100$/ },
     ],
   },
 };

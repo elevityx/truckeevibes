@@ -614,3 +614,50 @@ describe('AC-M1-129 Tahoe Donner family: path guard, robots and floor', () => {
     expect(plain.finalUrl).toBe(`${B}/events/x-y/`);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// A14 (AC-M1-138): Crystal Bay Casino family guard
+// ---------------------------------------------------------------------------------------------------------------------
+describe('AC-M1-138 Crystal Bay Casino family: path guard, robots and floor', () => {
+  const CB_ROBOTS = fixture('crystalbay/robots.txt');
+  const cbSrc = () => source({ slug: 'crystal-bay-casino', allowed_hosts: ['www.crystalbaycasino.com'], allowed_methods: ['api'], page_cap: 3 });
+  function cb(handler: (u: URL) => Response | undefined, robots = CB_ROBOTS) {
+    const clock = makeClock();
+    const net = fakeNet((u) => handler(u) ?? (u.pathname === '/robots.txt' ? text(robots) : text('[]')), clock.now);
+    const pf = createPoliteFetch(cbSrc(), { fetch: net.fetch, now: clock.now, sleep: clock.sleep });
+    return { pf, net, clock };
+  }
+  const B = 'https://www.crystalbaycasino.com';
+  it('allowed: robots and the one REST URL', async () => {
+    const t = cb(() => undefined);
+    expect((await t.pf(`${B}/wp-json/wp/v2/event?per_page=100`, { kind: 'api' })).status).toBe(200);
+    await t.pf.fetchRobots('www.crystalbaycasino.com');
+    expect(HOST_FAMILIES['crystalbaycasino.com'].floorMs).toBe(5000);
+    expect(familyOf('www.crystalbaycasino.com')).toBe('crystalbaycasino.com');
+  });
+  it('path_not_allowed: other REST routes, queries and pages; nothing is requested', async () => {
+    for (const p of ['/wp-json/wp/v2/event', '/wp-json/wp/v2/event?per_page=100&page=2', '/wp-json/wp/v2/event?per_page=10', '/wp-json/wp/v2/pages/2707',
+      '/wp-json/tribe/events/v1/events', '/wp-json/', '/entertainment/events/', '/event/steely-dead/']) {
+      const t = cb(() => undefined);
+      expect(await code(t.pf(`${B}${p}`, { kind: 'api' })), p).toBe('path_not_allowed');
+      expect(t.net.calls, p).toHaveLength(0);
+    }
+  });
+  it('a 302 to tixr.com is blocked with no request to tixr.com; a direct tixr.com request is host_not_allowed', async () => {
+    const t = cb((u) => (u.pathname === '/wp-json/wp/v2/event' ? redirect('https://tixr.com/e/211222', 302) : undefined));
+    const c = await code(t.pf(`${B}/wp-json/wp/v2/event?per_page=100`, { kind: 'api' }));
+    expect(['host_not_allowed', 'redirect_blocked']).toContain(c);
+    expect(t.net.urls().some((u) => u.includes('tixr.com'))).toBe(false);
+    expect(await code(cb(() => undefined).pf('https://tixr.com/e/211222', { kind: 'api' }))).toBe('host_not_allowed');
+  });
+  it('robots Disallow: /wp-json/ -> robots_blocked, 0 API fetches', async () => {
+    const t = cb(() => undefined, 'User-agent: *\nDisallow: /wp-json/\n');
+    expect(await code(t.pf(`${B}/wp-json/wp/v2/event?per_page=100`, { kind: 'api' }))).toBe('robots_blocked');
+    expect(content(t.net)).toHaveLength(0);
+  });
+  it('the second request waits >= 5000 ms after robots', async () => {
+    const t = cb(() => undefined);
+    await t.pf(`${B}/wp-json/wp/v2/event?per_page=100`, { kind: 'api' });
+    expect(t.net.calls[1].at - t.net.calls[0].at).toBeGreaterThanOrEqual(5000);
+  });
+});

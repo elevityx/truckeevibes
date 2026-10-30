@@ -892,3 +892,25 @@ describe('tahoe_donner (A13 r7)', () => {
     expect(sql()).toContain('tahoe_donner_state');
   });
 });
+
+// A14 r3 (AC-M1-151, AC-M1-159): Crystal Bay ships at review; the migration is idempotent and validates what it didn't write.
+describe('bars_aviation (A14 r3)', () => {
+  const sql = () => read('bars_aviation');
+  it('is idempotent in text: on conflict (slug) do nothing twice, widen-only CHECK, scoped self-check', () => {
+    expect(sql().match(/on conflict \(slug\) do nothing/g)).toHaveLength(2);
+    expect(sql()).toContain('pg_get_constraintdef');
+    expect(sql()).toContain('want <@ cur');
+    expect(sql()).toContain('family_check_unparsed');
+    expect(sql()).toContain('bars_aviation_state');
+    expect(sql()).not.toMatch(/^alter table public\.sources add constraint sources_family_check check \(family in \('/m);
+  });
+  it("Crystal Bay is enabled at 'review' and never set to 'auto' here (AC-M1-151)", () => {
+    expect(sql()).toMatch(/set enabled = true, trust = 'review' where slug = 'crystal-bay-casino'/);
+    expect(sql()).not.toMatch(/trust\s*=\s*'auto'\s+where\s+slug\s*(?:=\s*'crystal-bay-casino'|in\s*\([^)]*crystal-bay-casino)/);
+  });
+  it('has no global enabled count and no UNVERIFIED marker (AC-M1-158)', () => {
+    expect(sql()).not.toMatch(/count\(\*\) from public\.sources where enabled/);
+    expect(sql()).not.toContain('UNVERIFIED');
+    expect(sql()).toContain("'https://www.fiftyfiftybrewing.com/pages/events'");
+  });
+});
