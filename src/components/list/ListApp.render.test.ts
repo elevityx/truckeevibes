@@ -54,17 +54,19 @@ describe('AC-R1b-04 tiles', () => {
     const labels = tiles.map((t) => /<span class="lb">([^<]*)<\/span>/.exec(t)![1]);
     expect(labels).toEqual(['All', 'Art', 'Music', '21+', 'Kids', 'Family friendly', 'Outdoors', 'Food & drink'].map((l) => l.replace('&', '&amp;')));
   });
-  it('the Kids tile says Soon and has no digit', () => {
+  it('AC-K-40: the Kids tile shows its count and no tile says Soon', () => {
     const kids = tiles[4];
-    expect(kids).toContain('Soon');
-    expect(kids.replace(/<[^>]*>/g, '')).not.toMatch(/\d/);
+    expect(kids).not.toContain('Soon');
+    expect(kids.replace(/<[^>]*>/g, '')).toMatch(/\d/);
+    for (const t of tiles) expect(t).not.toContain('Soon');
+    expect(kids).not.toContain('aria-disabled');
   });
   it('the All tile is pressed and the others are not', () => {
     expect(tiles[0]).toContain('aria-pressed="true"');
     for (const t of tiles.slice(1)) expect(t).toContain('aria-pressed="false"');
   });
   it('counts', () => {
-    expect(tiles.map((t) => /<span class="n">([^<]*)<\/span>/.exec(t)![1])).toEqual(['35', '11', '10', '2', 'Soon', '1', '6', '23']);
+    expect(tiles.map((t) => /<span class="n">([^<]*)<\/span>/.exec(t)![1])).toEqual(['35', '11', '10', '2', '0', '1', '6', '23']);
   });
 });
 

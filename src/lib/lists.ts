@@ -11,7 +11,7 @@ export interface ListDef {
   /** An EventGlyph category key (null = the calendar glyph). */
   glyph: string | null;
   lede: string;
-  /** false = the list shows a "Soon" tile instead of a count. */
+  /** false = the list shows a "Soon" tile instead of a count. Every list is ready since Kids went live (Spec_Kids_Live K2). */
   ready: boolean;
   match(e: VibeEvent): boolean;
 }
@@ -38,7 +38,7 @@ export const LISTS: readonly ListDef[] = [
     match: (e) => e.age === '21_plus',
   },
   {
-    slug: 'kids', path: '/kids/', label: 'Kids', title: "Kids' events around Truckee", glyph: 'family', ready: false,
+    slug: 'kids', path: '/kids/', label: 'Kids', title: "Kids' events around Truckee", glyph: 'family', ready: true,
     lede: 'Storytimes, camps and things made for kids. Tagged only when the organizer says so.',
     match: (e) => has(e, 'kids') && !ADULT.has(e.age),
   },

@@ -177,12 +177,13 @@ test.describe('AC-R1b-CO2 footer links', () => {
 });
 
 test.describe('R1b home layout', () => {
-  test('tiles: 8 in order, 4 columns from 760 px and 2 below; Kids says Soon', async ({ page }, info) => {
+  test('tiles: 8 in order, 4 columns from 760 px and 2 below; Kids shows a count (AC-K-41)', async ({ page }, info) => {
     await page.clock.install({ time: NOW });
     await page.goto('/');
     const tiles = page.locator('[aria-label="Lists"] .tile');
     await expect(tiles).toHaveCount(8);
-    await expect(tiles.nth(4)).toContainText('Soon');
+    await expect(tiles.nth(4)).not.toContainText('Soon');
+    await expect(tiles.nth(4)).toContainText(/\d/);
     const lefts = await tiles.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().left)));
     expect(new Set(lefts).size).toBe(info.project.name.startsWith('phone') ? 2 : 4);
   });
