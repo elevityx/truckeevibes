@@ -22,11 +22,30 @@ export class FetchError extends Error {
 }
 
 /**
- * Host families with a shared spacing floor and a request path allowlist (A12). TTUSD's robots.txt asks for a 5 s crawl delay
- * and disallows `/fs/` (where its ICS export lives): only the month pages and robots.txt itself may ever be requested.
+ * Host families with a shared spacing floor and a request path guard (A12, generalized in A13). A request on a family host passes only
+ * when its path is not denied, is short, and matches one allowed (path, query) rule exactly. TTUSD's robots.txt asks for a 5 s crawl
+ * delay and disallows `/fs/` (where its ICS export lives); Tahoe Donner's disallows its calendar action views and the ai1ec exporter,
+ * and our guard also keeps us off its RSS feed and the WordPress API.
  */
-export const HOST_FAMILIES: Record<string, { floorMs: number; paths: RegExp }> = {
-  'ttusd.org': { floorMs: 5000, paths: /^\/(?:robots\.txt|calendar|parents-students\/calendars\/calendars2)$/ },
+export interface HostFamily { floorMs: number; deny: RegExp; rules: { path: RegExp; search: RegExp }[] }
+export const HOST_FAMILIES: Record<string, HostFamily> = {
+  'ttusd.org': {
+    floorMs: 5000,
+    deny: /^\/fs\//,
+    rules: [
+      { path: /^\/robots\.txt$/, search: /^$/ },
+      { path: /^\/(?:calendar|parents-students\/calendars\/calendars2)$/, search: /^\?cal_date=\d{4}-\d{2}-01$/ },
+    ],
+  },
+  'tahoedonner.com': {
+    floorMs: 5000,
+    deny: /^\/(?:calendar|wp-|feed)|action~|ai1ec|controller=|^\/events\/feed\//i,
+    rules: [
+      { path: /^\/robots\.txt$/, search: /^$/ },
+      { path: /^\/events\/$/, search: /^(?:\?categories%5B%5D=(?:94|180|95))?$/ },
+      { path: /^\/events\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/, search: /^$/ },
+    ],
+  },
 };
 
 export function familyOf(host: string): string | undefined {
@@ -35,15 +54,16 @@ export function familyOf(host: string): string | undefined {
 }
 export const spacingKey = (host: string): string => familyOf(host) ?? host.toLowerCase();
 
-/** True when `u` may be requested on a family host: allowed path, exact query, never under `/fs/`. Non-family hosts always pass. */
+/** True when `u` may be requested on a family host (see `HostFamily`). Non-family hosts always pass. */
 function familyPathOk(u: URL): boolean {
   const f = familyOf(u.hostname);
   if (!f) return true;
-  if (u.pathname.startsWith('/fs/') || !HOST_FAMILIES[f].paths.test(u.pathname)) return false;
-  return u.pathname === '/robots.txt' ? u.search === '' : /^\?cal_date=\d{4}-\d{2}-01$/.test(u.search);
+  const fam = HOST_FAMILIES[f];
+  return u.pathname.length <= 120 && !fam.deny.test(u.pathname + u.search) && fam.rules.some((r) => r.path.test(u.pathname) && r.search.test(u.search));
 }
 
-export interface FetchOut { status: number; headers: Headers; body: Uint8Array; notModified: boolean }
+/** `finalUrl` is the URL of the last hop, so a caller can tell a redirect to another page from the page it asked for. */
+export interface FetchOut { status: number; headers: Headers; body: Uint8Array; notModified: boolean; finalUrl: string }
 export type FetchKind = 'feed' | 'api' | 'html';
 export interface RobotsInfo { hash: string; aiBotsBlocked: boolean }
 
@@ -228,10 +248,10 @@ export function createPoliteFetch(source: PoliteSource, deps: PoliteDeps): Polit
       }
       if (res.status === 304) {
         await res.body?.cancel().catch(() => undefined);
-        return { status: 304, headers: res.headers, body: new Uint8Array(0), notModified: true };
+        return { status: 304, headers: res.headers, body: new Uint8Array(0), notModified: true, finalUrl: u.href };
       }
       const body = await readBody(res);
-      return { status: res.status, headers: res.headers, body, notModified: false };
+      return { status: res.status, headers: res.headers, body, notModified: false, finalUrl: u.href };
     }
   }) as PoliteFetch;
 

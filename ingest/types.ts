@@ -77,6 +77,8 @@ export interface AdapterResult {
   robots?: { hash: string; aiBotsBlocked: boolean };
   /** Items removed by `config.filter` (Tribe); logged, never submitted. */
   filtered?: number;
+  /** `filtered` split by drop reason (Tahoe Donner); counts only. */
+  filteredBy?: Record<string, number>;
 }
 
 export interface Adapter {
