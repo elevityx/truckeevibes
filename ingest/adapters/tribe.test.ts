@@ -2,6 +2,7 @@
 // Contract assumed: each adapter module exports `adapter: Adapter`; AdapterResult adds `filtered?: number`.
 import { describe, expect, it } from 'vitest';
 import { adapter } from './tribe';
+import { classifyObserver } from './common';
 import { DESC_SENTINEL, fakePolite, fixture, SOURCE_EVENT_KEYS, source } from '../testing/fakes';
 
 const NOW = new Date('2026-10-15T19:00:00Z'); // 2026-10-15 12:00 in Los Angeles
@@ -171,5 +172,35 @@ describe('tribe: category exclusion (AC-M1-56 A5-1 / A6-3)', () => {
       cfg({ filter: { ...FILTER, excludeCategorySlugs: [' Wellness '] } })));
     expect(keys(r)).toEqual(['3', '4']);
     expect(r.filtered).toBe(2);
+  });
+});
+
+// AC-M1-166 (A15): VLT category labels through the adapter and the classifier.
+describe('tribe: vlt_categories.json (AC-M1-166)', () => {
+  const FILTER = { windowDays: 45, towns: ['truckee', 'tahoe city', 'kings beach'], maxDurationDays: 14, excludeCategorySlugs: ['attractions-events', 'wellness', 'tahoe-blue-event-center'], maxItems: 20 };
+  it('derives categories, price and reasons; reports no unmapped labels', async () => {
+    const unmapped: string[] = [];
+    classifyObserver.current = (e) => unmapped.push(...e.unmapped);
+    let r;
+    try { r = await adapter.fetch(ctx(fakePolite(() => ({ body: fixture('tribe/vlt_categories.json') })), cfg({ filter: FILTER }))); } finally { classifyObserver.current = undefined; }
+    expect(r.status).toBe('ok');
+    const by = (k: string) => r.items.find((i) => i.externalKey === k)!;
+    const cats = (k: string) => by(k).categoriesHint.join(',');
+    expect(r.items).toHaveLength(7);
+    expect(cats('701')).toBe('family,halloween-fall');
+    expect([by('701').priceKind, by('701').tagReasons]).toEqual(['free', expect.arrayContaining(['price:source_free'])]);
+    expect(cats('702')).toBe('music,nightlife');
+    expect([by('702').priceKind, by('702').priceMin, by('702').priceMax]).toEqual(['paid', 25, 25]);
+    expect(cats('703')).toBe('food-drink,halloween-fall');
+    expect([by('703').priceKind, by('703').priceMin]).toEqual(['paid', 15]);
+    expect(by('703').tagReasons).not.toContain('price:source_free');
+    expect(cats('704')).toBe('nightlife');
+    expect(by('704').tagReasons).toContain('conflict:adult_signal');
+    expect(cats('705')).toBe('community,markets');
+    expect(cats('706')).toBe('outdoors,sports');
+    expect([by('706').priceKind, by('706').tagReasons]).toEqual(['free', expect.arrayContaining(['price:text_free'])]);
+    expect(cats('707')).toBe('');
+    expect(by('707').priceKind).toBe('unknown');
+    expect(unmapped).toEqual([]);
   });
 });

@@ -1,0 +1,198 @@
+{
+  "events": [
+    {
+      "id": 701,
+      "url": "https://events.example.test/event/sample-701/",
+      "title": "Sample Pumpkin Hunt",
+      "description": "",
+      "all_day": false,
+      "start_date": "2026-10-21 19:00:00",
+      "end_date": "2026-10-21 21:00:00",
+      "utc_start_date": "2026-10-21 19:00:00",
+      "utc_end_date": "2026-10-21 21:00:00",
+      "cost": "",
+      "categories": [
+        {
+          "slug": "kids-families-events",
+          "name": "kids-families-events"
+        },
+        {
+          "slug": "free-events",
+          "name": "free-events"
+        }
+      ],
+      "venue": {
+        "venue": "Example Park",
+        "address": "1 Sample Way",
+        "city": "Truckee",
+        "geo_lat": 39.3,
+        "geo_lng": -120.1
+      }
+    },
+    {
+      "id": 702,
+      "url": "https://events.example.test/event/sample-702/",
+      "title": "Sample Concert Night",
+      "description": "",
+      "all_day": false,
+      "start_date": "2026-10-22 19:00:00",
+      "end_date": "2026-10-22 21:00:00",
+      "utc_start_date": "2026-10-22 19:00:00",
+      "utc_end_date": "2026-10-22 21:00:00",
+      "cost": "$25",
+      "categories": [
+        {
+          "slug": "music-dance-events",
+          "name": "music-dance-events"
+        },
+        {
+          "slug": "nightlife-events",
+          "name": "nightlife-events"
+        }
+      ],
+      "venue": {
+        "venue": "Example Hall",
+        "address": "1 Sample Way",
+        "city": "Tahoe City",
+        "geo_lat": 39.3,
+        "geo_lng": -120.1
+      }
+    },
+    {
+      "id": 703,
+      "url": "https://events.example.test/event/sample-703/",
+      "title": "Sample Harvest Tasting",
+      "description": "",
+      "all_day": false,
+      "start_date": "2026-10-23 19:00:00",
+      "end_date": "2026-10-23 21:00:00",
+      "utc_start_date": "2026-10-23 19:00:00",
+      "utc_end_date": "2026-10-23 21:00:00",
+      "cost": "$15",
+      "categories": [
+        {
+          "slug": "food-wine-events",
+          "name": "food-wine-events"
+        },
+        {
+          "slug": "free-events",
+          "name": "free-events"
+        }
+      ],
+      "venue": {
+        "venue": "Example Hall",
+        "address": "1 Sample Way",
+        "city": "Kings Beach",
+        "geo_lat": 39.3,
+        "geo_lng": -120.1
+      }
+    },
+    {
+      "id": 704,
+      "url": "https://events.example.test/event/sample-704/",
+      "title": "Sample Family Night",
+      "description": "",
+      "all_day": false,
+      "start_date": "2026-10-24 19:00:00",
+      "end_date": "2026-10-24 21:00:00",
+      "utc_start_date": "2026-10-24 19:00:00",
+      "utc_end_date": "2026-10-24 21:00:00",
+      "cost": "",
+      "categories": [
+        {
+          "slug": "kids-families-events",
+          "name": "kids-families-events"
+        }
+      ],
+      "venue": {
+        "venue": "Example Brewing Taproom",
+        "address": "1 Sample Way",
+        "city": "Truckee",
+        "geo_lat": 39.3,
+        "geo_lng": -120.1
+      }
+    },
+    {
+      "id": 705,
+      "url": "https://events.example.test/event/sample-705/",
+      "title": "Sample Street Fair",
+      "description": "",
+      "all_day": false,
+      "start_date": "2026-10-25 19:00:00",
+      "end_date": "2026-10-25 21:00:00",
+      "utc_start_date": "2026-10-25 19:00:00",
+      "utc_end_date": "2026-10-25 21:00:00",
+      "cost": "",
+      "categories": [
+        {
+          "slug": "festivals-events",
+          "name": "festivals-events"
+        },
+        {
+          "slug": "featured-events",
+          "name": "featured-events"
+        },
+        {
+          "slug": "local-events",
+          "name": "local-events"
+        }
+      ],
+      "venue": {
+        "venue": "Example Park",
+        "address": "1 Sample Way",
+        "city": "Truckee",
+        "geo_lat": 39.3,
+        "geo_lng": -120.1
+      }
+    },
+    {
+      "id": 706,
+      "url": "https://events.example.test/event/sample-706/",
+      "title": "Sample Ski Swap",
+      "description": "",
+      "all_day": false,
+      "start_date": "2026-10-26 19:00:00",
+      "end_date": "2026-10-26 21:00:00",
+      "utc_start_date": "2026-10-26 19:00:00",
+      "utc_end_date": "2026-10-26 21:00:00",
+      "cost": "$0",
+      "categories": [
+        {
+          "slug": "sports-events",
+          "name": "sports-events"
+        },
+        {
+          "slug": "headliners-events",
+          "name": "headliners-events"
+        }
+      ],
+      "venue": {
+        "venue": "Example Hall",
+        "address": "1 Sample Way",
+        "city": "Tahoe City",
+        "geo_lat": 39.3,
+        "geo_lng": -120.1
+      }
+    },
+    {
+      "id": 707,
+      "url": "https://events.example.test/event/sample-707/",
+      "title": "Sample Listing",
+      "description": "",
+      "all_day": false,
+      "start_date": "2026-10-27 19:00:00",
+      "end_date": "2026-10-27 21:00:00",
+      "utc_start_date": "2026-10-27 19:00:00",
+      "utc_end_date": "2026-10-27 21:00:00",
+      "cost": "",
+      "categories": [],
+      "venue": {
+        "venue": "Example Hall",
+        "address": "1 Sample Way",
+        "city": "Kings Beach",
+        "geo_lat": 39.3,
+        "geo_lng": -120.1
+      }
+    }
+  ]
+}

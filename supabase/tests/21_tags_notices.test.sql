@@ -231,7 +231,15 @@ insert into notice_cases (title, sibling, expect) values
   ('Closed Captioned Film for Seniors', '', false),
   ('No Shame Theatre Tonight', '', false),
   ('No Limits Comedy Tonight', '', false),
-  ('No Doubt Tribute Today', '', false);
+  ('No Doubt Tribute Today', '', false),
+  ('Kitchen Closed Tonight', '', true),
+  ('Closed for a Private Party', '', true),
+  ('No Bluegrass Sundays Today', 'Bluegrass Sundays', true),
+  ('NO SCHOOL - Example Holiday', '', false),
+  ('Closing Day Celebration', '', false),
+  ('Closing Reception for Example Artist', '', false),
+  ('Closing Night of Example Play', '', false),
+  ('Closed Loop Recycling Talk', '', false);
 -- one probe source per case; a sibling is a same-source, same-Pacific-day event with that title
 create function pg_temp.probe(p_title text, p_sibling text) returns boolean language plpgsql as $$
 declare v_slug text := 'np-' || substr(md5(p_title || '|' || p_sibling), 1, 12); v_src uuid; v_ev uuid; v_day date := (now() at time zone 'America/Los_Angeles')::date + 20;
@@ -254,7 +262,7 @@ insert into codes (n, code) select o, c from unnest(array[
     'cat:source_map','cat:title_kw','cat:desc_kids','cat:desc_family','cat:default',
     'price:text_free','price:text_paid','price:text_donation','price:desc_free','price:title_free','price:neg_blocked','price:unknown',
     'age:21_admission','age:18_admission','age:adult_phrase','age:all_ages','age:family','age:ambiguous','age:unknown',
-    'conflict:adult','conflict:adult_signal','notice:cancel_sibling']) with ordinality t(c, o);
+    'conflict:adult','conflict:adult_signal','notice:cancel_sibling','price:source_free']) with ordinality t(c, o);
 
 -- AC-R4a-01 ----------------------------------------------------------------------------------------------------------
 select pg_temp.eq($$(select label || '|' || sort || '|' || noun from public.categories where slug = 'kids')$$, 'Kids|5|kids'' event', 'AC-R4a-01 kids: label Kids, sort 5, noun kids'' event');
@@ -265,11 +273,11 @@ select pg_temp.ing('k1', 'r4a-auto', jsonb_build_array(pg_temp.item('k-a', 'R4a 
 select pg_temp.eq($$(select categories::text from public.list_events(120) where title = 'R4a Kids Craft Hour')$$, '{family,kids,arts}', 'AC-R4a-01 list_events orders {family, kids, arts} as family, kids, arts');
 
 -- AC-R4a-02 ----------------------------------------------------------------------------------------------------------
-select pg_temp.eq($$(select count(*) from notice_cases)$$, '26', 'AC-R4a-11 the parity table has 26 rows');
+select pg_temp.eq($$(select count(*) from notice_cases)$$, '34', 'AC-R4a-11 the parity table has 34 rows (A15 adds 8)');
 create temp table probed as select title, sibling, expect, pg_temp.probe(title, sibling) as got from notice_cases;
 select pg_temp.eq($$(select count(*) from probed where got is distinct from expect)$$, '0', 'AC-R4a-02/11 the matcher returns the table value for every row, siblings included');
-select pg_temp.eq($$(select count(*) from probed where got = expect and expect)$$, '8', 'AC-R4a-02 ... 8 notices');
-select pg_temp.eq($$(select count(*) from probed where got and sibling = '')$$, '6', 'AC-R4a-11 ... 6 of them need no sibling (rules a and b)');
+select pg_temp.eq($$(select count(*) from probed where got = expect and expect)$$, '11', 'AC-R4a-02 ... 11 notices');
+select pg_temp.eq($$(select count(*) from probed where got and sibling = '')$$, '8', 'AC-R4a-11 ... 8 of them need no sibling (rules a and b)');
 select pg_temp.eq($$(select count(*) from probed where title in ('Rocky Horror: Closing Tonight','Closing Tonight: Our Town','Truckee Thursdays (closing at 9pm)','Farmers Market, closing at 1pm','Closed-Course Criterium for Kids','Closed Captioned Film for Seniors','No Shame Theatre Tonight','No Limits Comedy Tonight','No Doubt Tribute Today') and not expect and not got)$$, '9', 'AC-R4a-11 the 9 probe titles are false');
 select pg_temp.eq($$private.is_notice_title(null)$$, 'false', 'AC-R4a-02 is_notice_title(null) is false');
 select pg_temp.eq($$private.is_notice_title(null) is null$$, 'false', 'AC-R4a-02 ... and not null');
@@ -333,8 +341,8 @@ select pg_temp.eq($$(select count(*) from public.event_changes where decided_by 
 select pg_temp.eq($$private.hide_notice_events()$$, '0', 'AC-R4a-04 running it again hides nothing');
 
 -- AC-R4a-05 ----------------------------------------------------------------------------------------------------------
-select pg_temp.eq($$(select count(*) from codes)$$, '22', 'AC-R4a-05 the vocabulary has 22 codes');
-select pg_temp.eq($$(select count(*) from codes where private.valid_reason_code(code))$$, '22', 'AC-R4a-05 valid_reason_code is true for all 22');
+select pg_temp.eq($$(select count(*) from codes)$$, '23', 'AC-R4a-05 the vocabulary has 23 codes');
+select pg_temp.eq($$(select count(*) from codes where private.valid_reason_code(code))$$, '23', 'AC-R4a-05 valid_reason_code is true for all 23');
 select pg_temp.eq($$(select string_agg(private.valid_reason_code(c)::text, ',') from unnest(array['age:made_up', 'AGE:21_admission', '', repeat('a', 41), 'age:21_admission ']) c)$$, 'false,false,false,false,false', 'AC-R4a-05 false for age:made_up, AGE:21_admission, empty, 41 chars, trailing space');
 select pg_temp.eq($$private.valid_reason_code(null) is null$$, 'true', 'AC-R4a-05 null in, null out (never a pass)');
 

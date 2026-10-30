@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { classify, adultSignal } from './classify';
 import { REASON_CODES } from './reasonCodes';
-import { CATEGORY_MAPS } from './categoryMaps';
+import { CATEGORY_MAPS, mapHints } from './categoryMaps';
 import { DESC_SENTINEL } from '../testing/fakes';
 
 const c = (title: string, extra: Record<string, unknown> = {}, description?: string) => classify({ title, categoriesHint: [], ...extra }, description);
@@ -306,6 +306,152 @@ describe('line breaks are sentence breaks (AC-R4b-25)', () => {
     expect(a.categories).toContain('kids');
     expect(a.reasons).toContain('cat:desc_kids');
     expect(c('Fall Fair', {}, d.replace(/\n/g, ' ')).categories).not.toContain('kids');
+  });
+});
+
+describe('AC-M1-162 category maps: VLT labels, source-free labels, ignored labels', () => {
+  it('tribe maps the six VLT slugs; other families do not', () => {
+    const m = CATEGORY_MAPS.tribe;
+    expect([m['kids-families-events'], m['music-dance-events'], m['nightlife-events'], m['food-wine-events'], m['festivals-events'], m['sports-events']])
+      .toEqual(['family', 'music', 'nightlife', 'food-drink', 'community', 'sports']);
+    expect(Object.values(m)).not.toContain('kids-families-events');
+    for (const [k, v] of Object.entries(m)) if (k.endsWith('-events')) expect(v).not.toBe('kids');
+  });
+  it('free / editorial / filtered labels are neither slugs nor unmapped', () => {
+    expect(mapHints('tribe', ['free-events', 'featured-events', 'headliners-events', 'local-events', 'attractions-events', 'wellness', 'tahoe-blue-event-center']))
+      .toEqual({ slugs: [], unmapped: [], sourceFree: true });
+  });
+  it('Free and Free Events state free in any family', () => {
+    expect(mapHints('ics_eventsmanager', ['Free']).sourceFree).toBe(true);
+    expect(mapHints('ics_eventsmanager', ['Free Events']).sourceFree).toBe(true);
+    expect(mapHints('tribe', ['music']).sourceFree).toBe(false);
+  });
+  it('the VLT slugs stay unmapped outside tribe, and the spelled-out label is not mapped', () => {
+    expect(mapHints('ics_eventsmanager', ['kids-families-events'])).toMatchObject({ slugs: [], unmapped: ['kids-families-events'] });
+    expect(mapHints('tribe', ['Kids & Families Events'])).toMatchObject({ slugs: [], unmapped: ['kids & families events'] });
+  });
+});
+
+describe('AC-M1-163 price: $0, source label, description and title forms', () => {
+  const P = (extra: Record<string, unknown>, d?: string, title = 'Sample Evening') => c(title, extra, d);
+  const T = { family: 'tribe', categoriesHint: ['free-events'] };
+  it('text $0', () => {
+    for (const t of ['$0', '$0.00', '$0 - $0']) expect(P({ priceText: t })).toMatchObject({ priceKind: 'free', reasons: expect.arrayContaining(['price:text_free']) });
+    expect(P({ priceText: '$0 - $25' })).toMatchObject({ priceKind: 'paid', priceMin: 0, priceMax: 25 });
+    expect(P({ priceText: '$0 - $25' }).reasons).toContain('price:text_paid');
+  });
+  it('source label', () => {
+    expect(P(T)).toMatchObject({ priceKind: 'free' });
+    expect(P(T).reasons).toContain('price:source_free');
+    const paid = P({ ...T, priceText: '$15' });
+    expect(paid).toMatchObject({ priceKind: 'paid', priceMin: 15, priceMax: 15 });
+    expect(paid.reasons).not.toContain('price:source_free');
+    expect(P({ ...T, priceText: 'By donation' }).priceKind).toBe('donation');
+    const f = P({ ...T, priceText: 'Free' });
+    expect(f.priceKind).toBe('free');
+    expect(f.reasons).toContain('price:text_free');
+    const e = P({ family: 'ics_eventsmanager', categoriesHint: ['Free'] });
+    expect(e.priceKind).toBe('free');
+    expect(e.reasons).toContain('price:source_free');
+  });
+  it.each(['Admission is free.', 'Entry is free for everyone.', 'Free of charge.', 'There is no cost to attend.', 'Tickets: $0', 'Admission: Free'])('description positive: %s', (d) => {
+    const r = P({}, d);
+    expect(r.priceKind).toBe('free');
+    expect(r.reasons).toContain('price:desc_free');
+  });
+  it.each([
+    ['This is not a free event.', true], ['Admission is free for kids under 5.', true],
+    ['Tickets are free for members; $20 general.', false], ['No cost for parking.', false], ['Tickets: $0.50 service fee', false],
+  ] as const)('description negative: %s', (d, blocked) => {
+    const r = P({}, d);
+    expect(r.priceKind).toBe('unknown');
+    if (blocked) expect(r.reasons).toContain('price:neg_blocked');
+  });
+  it('titles', () => {
+    for (const t of ['Example Workplace: A Free Lunch & Learn', 'Example Series - Free Yoga']) {
+      const r = P({}, undefined, t);
+      expect([t, r.priceKind, r.reasons.includes('price:title_free')]).toEqual([t, 'free', true]);
+    }
+    const star = P({}, undefined, 'Free* Private Chef Dinner');
+    expect(star.priceKind).toBe('unknown');
+    expect(star.reasons).toContain('price:neg_blocked');
+    for (const t of ['Example Band: Free Parking Night', 'Gluten-Free Baking: Example', 'Freestyle Ski Demo']) expect([t, P({}, undefined, t).priceKind]).toEqual([t, 'unknown']);
+  });
+  it('a veto keeps price', () => {
+    const r = classify({ title: 'Sample Evening', categoriesHint: ['kids-families-events', 'free-events'], venueName: 'Example Taproom', family: 'tribe' });
+    expect(r.priceKind).toBe('free');
+    expect(r.reasons).toContain('price:source_free');
+    expect(r.categories).not.toContain('family');
+    expect(r.reasons).toContain('conflict:adult_signal');
+  });
+});
+
+describe('AC-M1-164 explicit kids/family description phrases', () => {
+  const D = (d: string) => c('Sample Afternoon', {}, d);
+  it.each(['Fun for the whole family.', 'Families welcome.', 'Families are welcome.', 'A kid-friendly afternoon.', 'Something for the whole family.'])('family: %s', (d) => {
+    const r = D(d);
+    expect(r.categories).toContain('family');
+    expect(r.reasons).toContain('cat:desc_family');
+  });
+  it.each(['For children ages 3-5.', 'Ages 4 to 10.', 'Ages 8 and under.'])('kids: %s', (d) => {
+    const r = D(d);
+    expect(r.categories).toContain('kids');
+    expect(r.reasons).toContain('cat:desc_kids');
+  });
+  it.each(['Not for children.', 'Kid-friendly? Sorry, not this one.', 'Ages 13-17.', 'Ages 21 to 99.', 'Ages 5-15.', 'Family-owned since 1990.', 'The whole family of brews on tap.'])('neither: %s', (d) => {
+    const r = D(d);
+    expect(r.categories).not.toContain('kids');
+    expect(r.categories).not.toContain('family');
+  });
+  it('titles never yield family', () => {
+    expect(c('Family Fun Day').categories).not.toContain('family');
+  });
+});
+
+describe('AC-M1-165 shared adult veto unchanged over VLT family', () => {
+  const V = { categoriesHint: ['kids-families-events'], family: 'tribe' };
+  const none = (r: ReturnType<typeof classify>) => { expect(r.categories).not.toContain('family'); expect(r.categories).not.toContain('kids'); };
+  it('venue word list', () => {
+    const r = c('Sample Evening', { ...V, venueName: 'Example Brewing Taproom' });
+    none(r);
+    expect(r.reasons).toContain('conflict:adult_signal');
+  });
+  it('21+ in the description', () => {
+    const r = c('Sample Evening', V, 'Fun for the whole family. 21+ only.');
+    none(r);
+    expect(r.age).toBe('21_plus');
+    expect(r.reasons).toContain('conflict:adult');
+  });
+  it('adult title word', () => { none(c('Example Saloon Night', V)); });
+  it('for adults', () => {
+    const r = c('Sample Evening', V, 'For adults.');
+    none(r);
+    expect(r.reasons).toContain('age:adult_phrase');
+  });
+  it('control', () => {
+    const r = c('Sample Evening', { ...V, venueName: 'Example Park' });
+    expect(r.categories).toContain('family');
+    expect(r.reasons).toContain('cat:source_map');
+  });
+});
+
+describe('AC-M1-174 free-evidence guards', () => {
+  const D = (d: string) => c('Sample Evening', {}, d);
+  it.each(['No tickets are free.', 'This is not a free event.', 'Admission is never free.', 'Entry isn\'t free, tickets are not free.'])('negated: %s', (d) => {
+    const r = D(d);
+    expect(r.priceKind).toBe('unknown');
+    expect(r.reasons).toContain('price:neg_blocked');
+  });
+  it.each(['No cover', 'No cover charge.', 'There is no cost to attend.', 'No charge.', 'Admission $0', 'Tickets: $0', 'Tickets: $0.00'])('free: %s', (d) => {
+    const r = D(d);
+    expect(r.priceKind).toBe('free');
+    expect(r.reasons).toContain('price:desc_free');
+  });
+  it.each(['Tickets: $0 - $25', 'Tickets: $0–25', 'Tickets: $0 to $25', 'Tickets: $0 for children; $25 general admission.', 'Admission $0 with a member card.', 'Admission $0. Parking $10.'])('$0 not whole price: %s', (d) => {
+    expect(D(d).priceKind).toBe('unknown');
+  });
+  it('same-clause only: a negation in an earlier sentence does not block', () => {
+    expect(D('Not to be missed. Admission is free.').priceKind).toBe('free');
   });
 });
 
