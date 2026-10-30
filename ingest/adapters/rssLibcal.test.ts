@@ -99,6 +99,18 @@ describe('AC-K-02 / AC-K-03 audience rule (organizer labels only)', () => {
     expect(kids(['Teens'])).toBe(false);
     expect(kids([])).toBe(false);
   });
+  it('composite labels with an adult term are not kids (PR #35 review P1)', () => {
+    expect(audienceHints(['Children and Adults'])).toEqual([]);
+    expect(audienceHints(['Kids / Seniors'])).toEqual([]);
+    expect(audienceHints(['Preschool', 'Grown-ups'])).toEqual([]);
+  });
+  it('forged aliases with an adult audience never give kids or family end to end', async () => {
+    for (const cats of [['audience-kids'], ['audience kids'], ['audience family'], ['audience/kids']]) {
+      const r = await harness(feed(item({ id: '1', title: 'Open Studio', aud: ['Adults'], cats }), item({ id: '2' }), item({ id: '3' }), item({ id: '4' }))).run();
+      expect(r.items[0].categoriesHint, cats.join()).not.toContain('kids');
+      expect(r.items[0].categoriesHint, cats.join()).not.toContain('family');
+    }
+  });
   it('families / all ages give family, never with an adult audience', () => {
     expect(audienceHints(['Families'])).toEqual(['audience:family']);
     expect(audienceHints(['All Ages', 'Adults'])).toEqual([]);
@@ -138,7 +150,7 @@ describe('AC-K-09 audience authority end to end (family rss_libcal)', () => {
     expect(i.categoriesHint).not.toContain('family');
   });
   it('raw Kids / Family categories and a forged audience: label are not honored', async () => {
-    for (const cats of [['Kids'], ['Family'], ['audience:kids'], ['Children', 'Youth']]) {
+    for (const cats of [['Kids'], ['Family'], ['audience:kids'], ['Children', 'Youth'], ['audience-kids'], ['audience kids'], ['audience/kids'], ['audience family'], ['Audience-Family']]) {
       const i = await one({ title: 'Open Studio', aud: ['Teens'], cats });
       expect(i.categoriesHint, cats.join()).not.toContain('kids');
       expect(i.categoriesHint, cats.join()).not.toContain('family');

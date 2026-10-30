@@ -486,7 +486,7 @@ describe('AC-K-20 c4 title kids rule', () => {
   });
   it.each([
     'Ages 13-18 Swim', 'Adults Only Storytime Slam', 'Kids Eat Free Tuesdays', "Parents' Night Out", 'No Kids Allowed Comedy',
-    'Summer Camp Reunion at the Brewery', 'Youth Night 21+', 'Base Camp Social',
+    'Summer Camp Reunion at the Brewery', 'Youth Night 21+', 'Base Camp Social', 'Adult Storytime', 'Storytime for Grown-Ups', 'Storytime for Grownups',
   ])('%s -> no kids', (t) => {
     expect(c(t).categories).not.toContain('kids');
   });
@@ -504,6 +504,7 @@ describe('AC-K-20 c4 title kids rule', () => {
     expect(mapHints(undefined, ['audience:kids']).slugs).toEqual([]);
     expect(mapHints('rss_libcal', ['kids', 'children', 'youth', 'family', 'family-friendly']).slugs).toEqual([]);
     expect(mapHints('rss_libcal', ['STEAM', 'Arts & Crafts']).slugs).toEqual(['learning', 'arts']);
+    expect(mapHints('rss_libcal', ['audience-kids', 'audience kids', 'Audience/Family']).slugs).toEqual([]);
   });
 });
 

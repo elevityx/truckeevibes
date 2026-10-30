@@ -55,7 +55,7 @@ function libcalMap(): Record<string, string> {
   for (const [k, v] of Object.entries(COMMON)) if (v !== 'kids' && v !== 'family') m[k] = v;
   return {
     ...m, steam: 'learning', stem: 'learning', 'computers & technology': 'learning', 'lifelong learning': 'learning', 'arts & crafts': 'arts',
-    'audience:kids': 'kids', 'audience-kids': 'kids', 'audience:family': 'family', 'audience-family': 'family',
+    'audience:kids': 'kids', 'audience:family': 'family',
   };
 }
 
@@ -91,7 +91,8 @@ export function mapHints(family: string | undefined, hints: readonly string[]): 
     const f = slugForm(label);
     if (FREE_LABELS.has(label) || FREE_LABELS.has(f)) { sourceFree = true; continue; }
     if (ignored && (ignored.has(label) || ignored.has(f))) continue;
-    const hit = map[label] ?? map[f];
+    // Reserved eligibility hints resolve only by their exact label, never through the slug form (PR #35 review P1).
+    const hit = map[label] ?? (f.startsWith('audience-') ? undefined : map[f]);
     if (hit) slugs.push(hit);
     else unmapped.push(label);
   }

@@ -27,7 +27,7 @@ const TABLES: [string, RegExp][] = [
  */
 const KIDS_TITLE = /\b(?:story ?times?|toddlers?|preschool(?:ers?)?|baby lapsit|lapsit|kids'?|kid's|children's|youth|tweens?|(?:kids|youth|day|summer|winter|spring break|holiday) camps?)(?![\w'])/g;
 const KIDS_TITLE_AGES = /\bages?\s+(\d{1,2})\s*(?:-|–|to)\s*(\d{1,2})\b/g;
-const KIDS_TITLE_NEG = /\b(?:no kids|kids?[- ]free|adults? only|grown[- ]ups? only|without (?:the )?kids|kids eat free|kids (?:under \d+ )?(?:eat|drink) free|parents'? night out|for parents)\b/;
+const KIDS_TITLE_NEG = /\b(?:adults?|grown[- ]?ups?|no kids|kids?[- ]free|adults? only|grown[- ]ups? only|without (?:the )?kids|kids eat free|kids (?:under \d+ )?(?:eat|drink) free|parents'? night out|for parents)\b/;
 /** Families whose adapter states the audience (DR-K3): kids/family only from `audience:*` hints, never from the title or description. */
 const AUDIENCE_FAMILIES: ReadonlySet<string> = new Set(['rss_libcal']);
 /** c4 kids-safe exemption for the word-list check only (`adultSignal` itself and `private.adult_signal` are unchanged). */

@@ -17,7 +17,7 @@ const ALL_DAY_ENDS = new Set(['', '00:00:00', '23:59:00', '23:59:59']);
 
 const CHILD_AUDIENCE = /^(?:babies|baby|toddlers?|preschool|kids|children|tweens?|school age)\b/;
 const AGE_BAND = /^ages?\s+(\d{1,2})\s*[-–]\s*(\d{1,2})\b/;
-const ADULT_AUDIENCE = /^(?:adults?|seniors?|grown[- ]ups)\b/;
+const ADULT_AUDIENCE = /\b(?:adults?|seniors?|grown[- ]?ups?)\b/; // anywhere in a label: "Children and Adults" is not a kids audience
 const FAMILY_AUDIENCE = /^(?:families|family|all ages)\b/;
 
 class Fail extends Error { constructor(readonly code: string) { super(code); } }
