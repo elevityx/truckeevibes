@@ -21,10 +21,10 @@ describe('AC-R1b-01 LISTS', () => {
       ['food-drink', '/food-drink/', 'Food & drink', 'Food & drink around Truckee'],
     ]);
   });
-  it('every list has a lede; only Kids is not ready', () => {
+  it('every list has a lede; every list is ready (AC-K-40, Kids live)', () => {
     for (const l of LISTS.slice(1)) expect(l.lede.length, l.slug).toBeGreaterThan(20);
-    expect(LISTS.filter((l) => !l.ready).map((l) => l.slug)).toEqual(['kids']);
-    expect(listBySlug('kids')!.ready).toBe(false);
+    expect(LISTS.filter((l) => !l.ready).map((l) => l.slug)).toEqual([]);
+    expect(listBySlug('kids')!.ready).toBe(true);
   });
   it('glyph keys follow the table', () => {
     expect(LISTS.map((l) => l.glyph)).toEqual([null, 'arts', 'music', 'twentyone', 'family', 'family', 'outdoors', 'food-drink']);
