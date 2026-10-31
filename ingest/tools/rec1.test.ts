@@ -243,6 +243,14 @@ describe('runRead: the request plan (AC-K3-07, DR-K3-5)', () => {
     expect(r.sessions).toEqual([]);
   });
 
+  it('a mixed tab (one valid session plus one unrecognized record) is layout_changed', async () => {
+    const valid = JSON.parse(fx('items-1002.json')).items[0];
+    const h = harness((c) => (c.url.endsWith('/1002') ? { status: 200, body: JSON.stringify({ hasMoreResults: false, items: [valid, { id: 9, text: 'Mystery', attrs: { a: 1 } }] }) } : normal(c)));
+    const r = await runRead(CFG, h.deps);
+    expect(r.status).toBe('layout_changed');
+    expect(r.sessions).toEqual([]);
+  });
+
   it('an empty tab is fine', async () => {
     const h = harness((c) => (c.url.endsWith('/1002') ? { status: 200, body: JSON.stringify({ hasMoreResults: false, items: [] }) } : normal(c)));
     expect((await runRead(CFG, h.deps)).status).toBe('ok');

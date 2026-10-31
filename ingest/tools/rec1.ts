@@ -65,6 +65,26 @@ export function collectSessions(json: unknown): Session[] {
 }
 
 /** Tab ids; any tab without a valid id makes the whole list unusable (review: no silently skipped tab). */
+/**
+ * Leaf records (an id and a name, no nested list of objects) that are not recognizable sessions. Any one of them means the shape
+ * changed, so the read fails closed instead of silently dropping it (recheck r2 P1: mixed tabs).
+ */
+export function unrecognizedRecords(json: unknown): number {
+  let n = 0;
+  const walk = (v: unknown, depth: number) => {
+    if (depth > 12 || v === null || typeof v !== 'object') return;
+    if (Array.isArray(v)) { for (const x of v) walk(x, depth + 1); return; }
+    const o = v as Record<string, unknown>;
+    if (Array.isArray(o.features)) return; // judged by collectSessions
+    const nested = Object.values(o).filter((x) => Array.isArray(x) && x.some((y) => y && typeof y === 'object'));
+    const named = [o.text, o.name, o.label, o.title].some((x) => typeof x === 'string' && x.trim() !== '');
+    if (nested.length === 0) { if (named && o.id !== undefined) n++; return; }
+    for (const x of nested) walk(x, depth + 1);
+  };
+  walk(json, 0);
+  return n;
+}
+
 export function collectTabIds(json: unknown): string[] {
   const tabs = Array.isArray(json) ? json : (json as { tabs?: unknown })?.tabs;
   if (!Array.isArray(tabs)) return [];
@@ -275,6 +295,7 @@ export async function runRead(cfg: Rec1Config, deps: ReadDeps): Promise<ReadOut>
         // Recheck P1: a non-empty answer whose records are not recognizable sessions is a shape change, never an empty tab.
         const o = j as unknown as Record<string, unknown[] | undefined>;
         if (found.length === 0 && ['sections', 'groups', 'items'].some((k) => Array.isArray(o[k]) && o[k]!.length > 0)) throw new Rec1Fail('layout_changed');
+        if (unrecognizedRecords(j) > 0) throw new Rec1Fail('layout_changed');
         sessions.push(...found);
         if (!j.hasMoreResults) break;
       }
