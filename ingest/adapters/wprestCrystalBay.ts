@@ -130,14 +130,22 @@ const ORIGIN = 'https://www.crystalbaycasino.com';
 export function parseCbcAgeLabels(html: string): Map<string, string> {
   const seen = new Map<string, string | null>();
   const $ = cheerio.load(html);
+  // Recheck 5 (P2): resolve hrefs against the document's own base; a base off the casino's origin means no labels at all.
+  let base = `${ORIGIN}/`;
+  const baseHref = $('base[href]').first().attr('href');
+  if (baseHref !== undefined) {
+    try { base = new URL(baseHref, `${ORIGIN}/`).href; } catch { return new Map(); }
+    if (new URL(base).origin !== ORIGIN) return new Map();
+  }
   $('article.ae-post-item').each((_, el) => {
     const card = $(el);
+    if (card.find('article').length > 0) return; // recheck 5 (P2): a card holding another card is ambiguous
     const slugs = new Set<string>();
     let foreign = false;
     card.find('a[href]').each((__, a) => {
       const raw = $(a).attr('href') ?? '';
       let u: URL | null = null;
-      try { u = new URL(raw, `${ORIGIN}/`); } catch { u = null; }
+      try { u = new URL(raw, base); } catch { u = null; }
       const ev = u ? /^\/event\/([a-z0-9-]{1,120})\/$/.exec(u.pathname) : null;
       if (u && u.origin === ORIGIN && ev && u.search === '' && u.hash === '') slugs.add(ev[1]);
       else if (/\/event\//i.test(raw) || (u && /\/event\//i.test(u.href))) foreign = true;

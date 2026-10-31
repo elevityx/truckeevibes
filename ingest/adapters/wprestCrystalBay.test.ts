@@ -421,6 +421,16 @@ describe('AC-21-10 parseCbcAgeLabels', () => {
       expect(parseCbcAgeLabels(bare.replace('</ul>', `</ul>${extra}`)).size, extra).toBe(0);
     }
   });
+  it('recheck 5: a foreign <base href> gives no labels; a card that contains another card gives none (the inner one still counts)', () => {
+    expect(parseCbcAgeLabels(LIST.replace('<head>', '<head><base href="https://external.example/">')).size).toBe(0);
+    expect(parseCbcAgeLabels(LIST.replace('<head>', '<head><base href="https://www.crystalbaycasino.com/">')).size).toBe(3);
+    const a = LIST.indexOf('<article'); const b = LIST.indexOf('<article', a + 1); const c = LIST.indexOf('<article', b + 1);
+    const outer = LIST.slice(a, b).replace(/href="[^"]*"/g, 'href="#"').replace('</article>', '');
+    const nested = `${outer}${LIST.slice(b, c)}</article>`;
+    const m = parseCbcAgeLabels(nested);
+    expect(m.get(ev('boot-juice'))).toBe('21+');
+    expect(m.size).toBe(1);
+  });
   it('an empty, unrelated or article-free page gives no labels', () => {
     expect(parseCbcAgeLabels('').size).toBe(0);
     expect(parseCbcAgeLabels('<html><body>closed</body></html>').size).toBe(0);
