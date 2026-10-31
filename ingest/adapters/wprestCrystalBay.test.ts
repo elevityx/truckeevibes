@@ -399,6 +399,9 @@ describe('AC-21-10 parseCbcAgeLabels', () => {
     expect(parseCbcAgeLabels(offOnly).size).toBe(0);
     const mixed = LIST.slice(a, b).replace('</ul>', '</ul><a href="https://external.example/event/steely-dead/">x</a>');
     expect(parseCbcAgeLabels(mixed).size).toBe(0);
+    const query = LIST.slice(a, b).replace(/https:\/\/www\.crystalbaycasino\.com\/event\//g, 'https://external.example/?path=/event/');
+    expect(parseCbcAgeLabels(query).size).toBe(0);
+    expect(parseCbcAgeLabels(mixed).size).toBe(0);
     expect(parseCbcAgeLabels(LIST.slice(a, b).replace(/https:\/\/www\.crystalbaycasino\.com\/event\//g, '//www.crystalbaycasino.com/event/')).get(ev('steely-dead'))).toBe('21+');
   });
   it('an empty, unrelated or article-free page gives no labels', () => {

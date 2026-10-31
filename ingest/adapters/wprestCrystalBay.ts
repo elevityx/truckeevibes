@@ -119,7 +119,7 @@ const AGE_LABELS: ReadonlyMap<string, string> = new Map([['21+', '21+'], ['18+',
  * Every mention of an event path in a card, in any attribute form or quoting (review F3), counted as raw text. Group 1 is whatever
  * precedes `/event/` in the same token: it must be empty (relative) or the casino's own origin, else the card is rejected (recheck P1).
  */
-const EVENT_REF = /([^\s"'=<>()]*)\/event\/([^"'\s<>/]{1,200})\//g;
+const EVENT_REF = /([^\s"'<>()]*)\/event\/([^"'\s<>/]{1,200})\//g; // the token includes `=`, `?`, `&`: a query-embedded path is foreign
 const OWN_ORIGIN = new Set(['', 'https://www.crystalbaycasino.com', '//www.crystalbaycasino.com']);
 const EVENT_SLUG = /^[a-z0-9-]{1,120}$/;
 
