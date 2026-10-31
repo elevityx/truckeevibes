@@ -336,17 +336,18 @@ insert into svc_calls values
   ('svc_ingest_batch(text, jsonb, jsonb)', $$public.svc_ingest_batch('x', '{}'::jsonb, '[]'::jsonb)$$),
   ('svc_set_venue_geocode(uuid, double precision, double precision, text)', $$public.svc_set_venue_geocode(gen_random_uuid(), 39.3, -120.1, 'nominatim')$$),
   ('svc_cluster_and_publish(integer)', $$public.svc_cluster_and_publish(1)$$),
-  ('svc_weekly_report()', $$public.svc_weekly_report()$$);
-select is((select count(*)::int from svc_calls c where pg_temp.v('anon', c.call) like 'ERR:42501%'), 6, 'AC-M1-05 anon calling any of the six svc_* -> 42501');
-select is((select count(*)::int from svc_calls c where pg_temp.v('user', c.call) like 'ERR:42501%'), 6, 'AC-M1-05 authenticated calling any of the six svc_* -> 42501');
+  ('svc_weekly_report()', $$public.svc_weekly_report()$$),
+  ('svc_manual_grant(text)', $$public.svc_manual_grant('tdrpd-rec1')$$);
+select is((select count(*)::int from svc_calls c where pg_temp.v('anon', c.call) like 'ERR:42501%'), 7, 'AC-M1-05 anon calling any of the seven svc_* -> 42501');
+select is((select count(*)::int from svc_calls c where pg_temp.v('user', c.call) like 'ERR:42501%'), 7, 'AC-M1-05 authenticated calling any of the seven svc_* -> 42501');
 select is(
   array(select format('%s(%s)', p.proname, oidvectortypes(p.proargtypes))
      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and has_function_privilege('service_role', p.oid, 'EXECUTE')
       and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e') order by 1),
   array['svc_cluster_and_publish(integer)', 'svc_ingest_batch(text, jsonb, jsonb)', 'svc_ingest_nonce(text)', 'svc_issue_run_grants()',
-        'svc_set_venue_geocode(uuid, double precision, double precision, text)', 'svc_weekly_report()'],
-  'AC-M1-05 the service_role EXECUTE list in public is exactly the six svc_* routines');
+        'svc_manual_grant(text)', 'svc_set_venue_geocode(uuid, double precision, double precision, text)', 'svc_weekly_report()'],
+  'AC-M1-05 the service_role EXECUTE list in public is exactly the seven svc_* routines (K3 adds svc_manual_grant)');
 select is(
   array(select p.proname::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.proname like 'svc\_%' and (has_function_privilege('anon', p.oid, 'EXECUTE') or has_function_privilege('authenticated', p.oid, 'EXECUTE'))),
