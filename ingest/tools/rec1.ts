@@ -85,7 +85,8 @@ export function unrecognizedRecords(json: unknown): number {
       // recheck r5-r7: a session holds only scalars plus a flat features list; any other nested object could hide a record
       const scalar = (x: unknown) => x === null || ['string', 'number', 'boolean'].includes(typeof x);
       if (Object.entries(o).some(([k, x]) => k !== 'features' && !scalar(x))) n++;
-      if (!(o.features as unknown[]).every((f) => f && typeof f === 'object' && !Array.isArray(f) && Object.values(f).every(scalar))) n++;
+      if (!(o.features as unknown[]).every((f) => f && typeof f === 'object' && !Array.isArray(f) && Object.values(f).every(scalar)
+          && typeof (f as { name?: unknown }).name === 'string' && ['string', 'number'].includes(typeof (f as { value?: unknown }).value))) n++;
       return;
     }
     const nested = Object.values(o).filter((x) => Array.isArray(x) && x.length > 0); // every non-empty list is walked, scalar lists too

@@ -314,6 +314,12 @@ describe('runRead: the request plan (AC-K3-07, DR-K3-5)', () => {
     expect((await runRead(CFG, h.deps)).status).toBe('layout_changed');
   });
 
+  it('a feature row without a string name and a string/number value is layout_changed', async () => {
+    const valid = JSON.parse(fx('items-1002.json')).items[0];
+    const h = harness((c) => (c.url.endsWith('/1002') ? { status: 200, body: JSON.stringify({ hasMoreResults: false, items: [{ ...valid, features: [...valid.features, { label: 'Ages', value: '5-12' }] }] }) } : normal(c)));
+    expect((await runRead(CFG, h.deps)).status).toBe('layout_changed');
+  });
+
   it('an empty tab is fine', async () => {
     const h = harness((c) => (c.url.endsWith('/1002') ? { status: 200, body: JSON.stringify({ hasMoreResults: false, items: [] }) } : normal(c)));
     expect((await runRead(CFG, h.deps)).status).toBe('ok');
