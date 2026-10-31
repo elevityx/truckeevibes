@@ -469,9 +469,16 @@ describe('K3.1 grammars (AC-K3.1-03/04)', () => {
     expect(Object.keys(r.raw ?? {})).toContain('group-1001-302-p1.json');
     expect(h.calls.length).toBe(9);
   });
-  it('a group page whose itemCount disagrees with discovery, or more ids than itemCount, is layout_changed (review r2-1/4)', async () => {
+  it("the group answer's own itemCount is the authority (r5); it must hold on every page; more ids than it is layout_changed", async () => {
     const h = harness((c) => (c.url.endsWith('/1001/302') ? { status: 200, body: JSON.stringify({ items: group(2, 200), itemCount: 3 }) } : groups(c)));
-    expect((await runRead(CFG, h.deps)).status).toBe('layout_changed');
+    expect((await runRead(CFG, h.deps)).status).toBe('layout_changed'); // 2 of 3, then a page with no new id
+    const h1 = harness((c) => (c.url.endsWith('/1001/302') ? { status: 200, body: JSON.stringify({ items: group(3, 200), itemCount: 3 }) } : groups(c)));
+    expect((await runRead(CFG, h1.deps)).status).toBe('ok'); // discovery said 2, the group says 3 and delivers 3
+    const h3 = harness((c) => {
+      const p = Number(new URLSearchParams(c.form).get('page'));
+      return c.url.endsWith('/1001/301') ? { status: 200, body: JSON.stringify({ items: p === 1 ? group(10, 100) : group(2, 110), itemCount: p === 1 ? 12 : 13 }) } : groups(c);
+    });
+    expect((await runRead(CFG, h3.deps)).status).toBe('layout_changed'); // the count moved between pages
     const h2 = harness((c) => (c.url.endsWith('/1001/302') ? { status: 200, body: JSON.stringify({ items: group(3, 200), itemCount: 2 }) } : groups(c)));
     expect((await runRead(CFG, h2.deps)).status).toBe('layout_changed');
   });
@@ -482,6 +489,21 @@ describe('K3.1 grammars (AC-K3.1-03/04)', () => {
   it('session metadata lists (groups) are allowed but never read (review r2-3)', () => {
     expect(toSession(sess('1', { groups: [1, { id: 2, name: 'x' }] })).id).toBe('1');
     expect(() => toSession(sess('1', { groups: [{ items: [] }] }))).toThrow('layout_changed');
+  });
+  it('a transport failure (status 0) is retried once after 30 s, at most 3 times a read; an HTTP error never (r6)', async () => {
+    let n = 0;
+    const h = harness((c) => (c.url.endsWith('/1001/302') && n++ === 0 ? { status: 0, body: '' } : groups(c)));
+    const r = await runRead(CFG, h.deps);
+    expect(r.status).toBe('ok');
+    const two = h.calls.filter((c) => c.url.endsWith('/1001/302'));
+    expect(two.length).toBe(2);
+    expect(two[1].at - two[0].at).toBeGreaterThanOrEqual(30_000);
+    const h2 = harness((c) => (c.url.includes('getActivitySessions') ? { status: 0, body: '' } : groups(c)));
+    expect((await runRead(CFG, h2.deps)).status).toBe('http_error');
+    expect(h2.calls.filter((c) => c.url.includes('getActivitySessions')).length).toBe(2); // one retry, then the read stops
+    const h3 = harness((c) => (c.url.endsWith('/1001/302') ? { status: 500, body: '' } : groups(c)));
+    await runRead(CFG, h3.deps);
+    expect(h3.calls.filter((c) => c.url.endsWith('/1001/302')).length).toBe(1);
   });
   it('a 403 on a group call stops at once', async () => {
     const h = harness((c) => (c.url.endsWith('/1001/301') ? { status: 403, body: '' } : groups(c)));
