@@ -66,23 +66,24 @@ export function collectSessions(json: unknown): Session[] {
 
 /** Tab ids; any tab without a valid id makes the whole list unusable (review: no silently skipped tab). */
 /**
- * Leaf records (an id and a name, no nested list of objects) that are not recognizable sessions. Any one of them means the shape
- * changed, so the read fails closed instead of silently dropping it (recheck r2 P1: mixed tabs).
+ * Every leaf object reached through a list (an object with no nested list of objects) must be a valid session; anything else, whatever
+ * keys it has, is counted here and fails the read closed (recheck r2-r4 P1: mixed tabs never become a partial snapshot).
  */
 export function unrecognizedRecords(json: unknown): number {
   let n = 0;
   const walk = (v: unknown, depth: number) => {
-    if (depth > 12 || v === null || typeof v !== 'object') return;
+    if (depth > 12) { n++; return; }
+    if (v === null || typeof v !== 'object') return;
     if (Array.isArray(v)) { for (const x of v) walk(x, depth + 1); return; }
     const o = v as Record<string, unknown>;
-    const named = [o.text, o.name, o.label, o.title].some((x) => typeof x === 'string' && x.trim() !== '');
     if (Array.isArray(o.features)) { // a session candidate: it must meet the collectSessions grammar exactly
+      const named = [o.text, o.name, o.label, o.title].some((x) => typeof x === 'string' && x.trim() !== '');
       const id = typeof o.id === 'number' || typeof o.id === 'string' ? String(o.id) : '';
       if (!named || !/^\d{1,12}$/.test(id)) n++;
       return;
     }
     const nested = Object.values(o).filter((x) => Array.isArray(x) && x.some((y) => y && typeof y === 'object'));
-    if (nested.length === 0) { if (named && o.id !== undefined) n++; return; }
+    if (nested.length === 0) { if (depth > 0) n++; return; }
     for (const x of nested) walk(x, depth + 1);
   };
   walk(json, 0);
