@@ -988,9 +988,11 @@ describe('tdrpd_rec1 (Kids live K3)', () => {
   const NAME = '20261030000700_tdrpd_rec1.sql';
   const sql = () => readFileSync(join(DIR, NAME), 'utf8');
   const code = () => sql().split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
-  it('exists, sorts after every other migration, unique versions', () => {
+  it('exists, sorts after every migration merged before it, unique versions', () => {
     expect(files).toContain(NAME);
-    for (const f of files.filter((x) => x.endsWith('.sql') && x !== NAME)) expect(NAME > f, f).toBe(true);
+    // Pinned to the migrations merged before it (later ones, e.g. manual_sources, sort after it by design).
+    for (const f of files.filter((x) => x.endsWith('.sql') && x !== NAME && x.slice(0, 14) < NAME.slice(0, 14))) expect(NAME > f, f).toBe(true);
+    expect(files.filter((x) => x.endsWith('.sql') && x.slice(0, 14) < NAME.slice(0, 14)).at(-1)).toBe('20261030000500_21plus_coverage.sql');
     const versions = files.filter((f) => f.endsWith('.sql')).map((f) => f.slice(0, 14));
     expect(new Set(versions).size).toBe(versions.length);
   });
@@ -1011,5 +1013,48 @@ describe('tdrpd_rec1 (Kids live K3)', () => {
     const cur = canonicalGrants(sql());
     expect(cumulativeProblems(prev, cur, createdFns(sql()))).toEqual([]);
     expect([...cur].filter((x) => !prev.has(x))).toEqual(['public.svc_manual_grant(text)->service_role']);
+  });
+});
+
+// Spec_Manual_Sources DR-M6 (M1 manual): five manual-only sources; data only.
+describe('manual_sources (M1 manual)', () => {
+  const NAME = '20261031000100_manual_sources.sql';
+  const sql = () => readFileSync(join(DIR, NAME), 'utf8');
+  const code = () => sql().split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
+  it('exists, sorts after every other migration, unique versions', () => {
+    expect(files).toContain(NAME);
+    for (const f of files.filter((x) => x.endsWith('.sql') && x !== NAME)) expect(NAME > f, f).toBe(true);
+    const versions = files.filter((f) => f.endsWith('.sql')).map((f) => f.slice(0, 14));
+    expect(new Set(versions).size).toBe(versions.length);
+  });
+  it('data only: no grant, no revoke, no function; widen-only CHECK with elfsight', () => {
+    expect(code()).not.toMatch(/\bgrant\s/i);
+    expect(code()).not.toMatch(/\brevoke\s/i);
+    expect(code()).not.toMatch(/create\s+(?:or\s+replace\s+)?function/i);
+    expect(code()).toContain('want <@ cur');
+    expect(code()).toContain("'rec1_catalog','elfsight'");
+  });
+  it('setup guarded per row (never re-enables or resets trust on re-apply); never trust auto; self-check skips enabled/trust', () => {
+    for (const slug of ['bar-of-america', 'fiftyfifty-brewing', 'diamond-peak', 'ivgid']) {
+      expect(code()).toContain(`if exists (select 1 from public.sources where slug = '${slug}' and manual_only) then return; end if;`);
+    }
+    expect(code()).toContain("if exists (select 1 from public.sources where slug = 'tahoe-national-brewing') then return; end if;");
+    expect(code()).not.toMatch(/trust\s*=\s*'auto'/);
+    const check = code().split('-- Self-check')[1] ?? code().slice(code().lastIndexOf('do $$ begin'));
+    expect(check).toContain('manual_sources_state');
+    expect(check).not.toMatch(/\b(?:s\.)?(?:enabled|trust)\s*=/);
+    expect(code()).toContain("update public.sources set page_cap = 80 where slug = 'tdrpd-rec1' and page_cap <> 80;");
+  });
+  it('honest owner terms notes (<= 200 chars), never for glasses-wine-bar', () => {
+    const notes = [...code().matchAll(/'(Manual read only \(owner 2026-10-30\); [^']*(?:''[^']*)*)'/g)].map((m) => m[1].replace(/''/g, "'")).filter((n) => !n.endsWith('%'));
+    expect(notes).toHaveLength(5);
+    for (const n of notes) { expect(n.length).toBeLessThanOrEqual(200); expect(n).toMatch(/no venue OK$/); }
+    expect(code()).not.toMatch(/record_source_terms\('glasses-wine-bar'/);
+  });
+  it('pgTAP 35 re-runs the migration verbatim', () => {
+    const t = readFileSync(join(REPO_ROOT, 'supabase', 'tests', '35_manual_sources.test.sql'), 'utf8');
+    const copy = t.split('-- BEGIN migration copy\n')[1].split('\n-- END migration copy')[0];
+    const body = sql().split('\n').filter((l) => l.trim() && !l.trim().startsWith('--')).join('\n');
+    expect(copy).toBe(body);
   });
 });

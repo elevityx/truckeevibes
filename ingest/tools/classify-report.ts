@@ -16,6 +16,7 @@ import type { Adapter, AdapterResult, GrantOut, SourceEvent } from '../types';
 export interface ReportRow {
   slug: string; family: string; config: Record<string, unknown>; allowed_hosts: string[]; allowed_methods: string[];
   page_cap: number; ingest_disposition: string; terms_recheck_at: string | null; enabled: boolean;
+  manual_only?: boolean; automation_restricted?: boolean;
 }
 export interface ReportDeps {
   /** Test seam: replaces the adapter registry. */
@@ -29,10 +30,10 @@ export interface ReportDeps {
 
 const OK_DISPOSITIONS = new Set(['permitted', 'official_api_only']);
 
-/** Slugs of rows the runner would not fetch: disabled, wrong disposition, or terms re-check missing or in the past. */
+/** Slugs of rows the runner would not fetch: disabled, manual-only or restricted (M1), wrong disposition, or terms re-check missing or in the past. */
 export function refusedRows(rows: ReportRow[], now: Date): string[] {
   return rows
-    .filter((r) => r.enabled !== true || !OK_DISPOSITIONS.has(r.ingest_disposition) || !r.terms_recheck_at || !(Date.parse(r.terms_recheck_at) > now.getTime()))
+    .filter((r) => r.enabled !== true || r.manual_only === true || r.automation_restricted === true || !OK_DISPOSITIONS.has(r.ingest_disposition) || !r.terms_recheck_at || !(Date.parse(r.terms_recheck_at) > now.getTime()))
     .map((r) => String(r.slug));
 }
 
@@ -41,7 +42,7 @@ const counts = (m: Record<string, number>) => Object.keys(m).sort().map((k) => `
 export async function runReport(rows: ReportRow[], deps: ReportDeps): Promise<number> {
   if (!Array.isArray(rows) || rows.length === 0) { deps.err('classify-report: the sources file has no rows'); return 1; }
   const refused = refusedRows(rows, deps.now());
-  if (refused.length > 0) { deps.err(`classify-report: refusing, not enabled with a permitted disposition and a future terms_recheck_at: ${refused.join(', ')}`); return 1; }
+  if (refused.length > 0) { deps.err(`classify-report: refusing, not enabled with a permitted disposition and a future terms_recheck_at, or manual-only: ${refused.join(', ')}`); return 1; }
   const spacer = createSpacer({ now: () => deps.now().getTime(), sleep: deps.sleep });
   for (const row of rows) {
     const adapter = (deps.adapters ?? adapters)[row.family];

@@ -274,7 +274,7 @@ select pg_temp.eq($$(select page_cap::text || '|' || cadence || '|' || homepage_
 select pg_temp.eq($$(select config = '{"base":"https://www.moodysbistro.com","tz":"America/Los_Angeles","defaultCategories":["music"]}'::jsonb from public.sources where slug = 'moodys-bistro')$$, 'true', 'AC-M1-140 moodys-bistro config');
 select pg_temp.eq($$(select jsonb_array_length(config -> 'dates') || '|' || (config -> 'dates' -> 0 ->> 'date') || '|' || (config ->> 'provenance') from public.sources where slug = 'eaa-1073-breakfast')$$,
   '3|2026-11-14|listed on tahoe.com, checked 2026-10-19', 'AC-M1-140 the EAA config lists three dates with provenance');
-select pg_temp.eq($$(select count(*) from public.sources where enabled)$$, '18', 'AC-M1-140 fifteen sources enabled; Kids live: +3 libraries, -tdrpd = seventeen; K3 +tdrpd-rec1 = eighteen');
+select pg_temp.eq($$(select count(*) from public.sources where enabled)$$, '23', 'AC-M1-140 fifteen sources enabled; Kids live: +3 libraries, -tdrpd = seventeen; K3 +tdrpd-rec1 = eighteen; M1 manual +5 = twenty-three');
 
 create temp table manifest (slug text, url text);
 insert into manifest values
@@ -288,10 +288,12 @@ insert into manifest values
   ('gar-woods', 'https://www.garwoods.com/calendar.html');
 select pg_temp.eq($$(select count(*) from public.sources s join manifest m on m.slug = s.slug and m.url = s.homepage_url
     where not s.enabled and s.trust = 'link_only' and s.ingest_disposition = 'unknown' and s.family = 'html' and s.class = 'venue' and s.allowed_methods = '{}')$$,
-  '8', 'AC-M1-158 the manifest rows exist: link_only, unknown, html, venue, never enabled, homepage_url = manifest URL');
+  '6', 'AC-M1-158 the manifest rows exist: link_only, unknown, html, venue, never enabled, homepage_url = manifest URL (M1 manual: bar-of-america and fiftyfifty-brewing are manual-only now)');
+select pg_temp.eq($$(select count(*) from public.sources s join manifest m on m.slug = s.slug and m.url = s.homepage_url and s.class = 'venue'
+    where s.slug in ('bar-of-america', 'fiftyfifty-brewing') and s.manual_only and s.automation_restricted)$$, '2', 'M1 the two manual-only manifest rows keep their homepage_url and class');
 select pg_temp.eq($$(select allowed_hosts[1] from public.sources where slug = 'fiftyfifty-brewing')$$, 'www.fiftyfiftybrewing.com', 'AC-M1-158 FiftyFifty allowed host is the www host');
-select pg_temp.eq($$(select count(*) from public.sources where trust = 'link_only')$$, '16', 'AC-M1-140 link_only sources: the 8 earlier + the manifest of 8');
-select pg_temp.eq($$(select count(*) from public.list_sources_public() p where p.status = 'link_only' and p.homepage_url in (select url from manifest))$$, '8', 'AC-M1-140 the manifest rows show as link_only on the public sources list');
+select pg_temp.eq($$(select count(*) from public.sources where trust = 'link_only')$$, '12', 'AC-M1-140 link_only sources: the 8 earlier + the manifest of 8, minus the four M1 manual sources');
+select pg_temp.eq($$(select count(*) from public.list_sources_public() p where p.status = 'link_only' and p.homepage_url in (select url from manifest))$$, '6', 'AC-M1-140 the six unread manifest rows show as link_only on the public sources list');
 select pg_temp.t($$(select pg_temp.x('postgres', $s$insert into public.sources (slug, name, homepage_url, allowed_hosts, family, class) values ('bars-bogus', 'Bogus Family', 'https://example.test/', array['example.test'], 'html_bogus', 'venue')$s$) like 'ERR:23514%')$$, 'AC-M1-140 family html_bogus fails the CHECK');
 select pg_temp.t($$(select pg_temp.x('postgres', $s$insert into public.sources (slug, name, homepage_url, allowed_hosts, family, class) values ('bars-ok-1', 'OK Crystal', 'https://example.test/', array['example.test'], 'wprest_crystalbay', 'venue')$s$) = 'OK')$$, 'AC-M1-140 family wprest_crystalbay is accepted');
 select pg_temp.t($$(select pg_temp.x('postgres', $s$insert into public.sources (slug, name, homepage_url, allowed_hosts, family, class) values ('bars-ok-2', 'OK Curated', 'https://example.test/', array['example.test'], 'curated_dates', 'community')$s$) = 'OK')$$, 'AC-M1-140 family curated_dates is accepted');
