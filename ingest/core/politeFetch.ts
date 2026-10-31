@@ -54,6 +54,8 @@ export const HOST_FAMILIES: Record<string, HostFamily> = {
     rules: [
       { path: /^\/robots\.txt$/, search: /^$/ },
       { path: /^\/wp-json\/wp\/v2\/event$/, search: /^\?per_page=100$/ },
+      // Spec_21Plus_Coverage: the casino's own events list page, read only for each show's age label (no query string).
+      { path: /^\/entertainment\/events\/$/, search: /^$/ },
     ],
   },
   // Kids live (Spec_Kids_Live K1): public library LibCal hosts (*.libcal.com). robots.txt asks for a 10 s crawl delay and disallows only

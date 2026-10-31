@@ -3,9 +3,12 @@
 // Facts only: no description text or images are kept, the link goes to the casino's own event page, and Tixr is never fetched or emitted. Trust ships at review (A14 r3-1).
 import type { Adapter, AdapterCtx, AdapterResult, SourceEvent } from '../types';
 import { decodeUtf8, dedupe, makeEvent, sha256Hex, tzOf } from './common';
+import * as cheerio from 'cheerio';
 import { decodeEntities, plainText, toUtcFromLocal } from '../core/normalize';
 
 const API_URL = 'https://www.crystalbaycasino.com/wp-json/wp/v2/event?per_page=100';
+/** Spec_21Plus_Coverage: the casino's events list page. Read only for each card's age label (the `fa-id-card` post-info item). */
+export const LIST_URL = 'https://www.crystalbaycasino.com/entertainment/events/';
 const LINK = /^https:\/\/www\.crystalbaycasino\.com\/[a-z0-9/-]{1,120}\/$/;
 const MAX_BODY = 1_048_576;
 const MAX_EVENTS = 100;
@@ -111,6 +114,58 @@ export function parseCbcRoom(title: string, text: string): { title: string; room
   return rooms.size === 1 ? { title, room: ROOM_NAME[[...rooms][0]] } : { title };
 }
 
+/** The only age labels the casino's card field is read for (own keys only: a Map, never an object lookup); anything else gives no age. */
+const AGE_LABELS: ReadonlyMap<string, string> = new Map([['21+', '21+'], ['18+', '18+'], ['all ages', 'All ages']]);
+const ORIGIN = 'https://www.crystalbaycasino.com';
+
+/**
+ * Spec_21Plus_Coverage (r3; review F3 and rechecks 1-4): event link -> the casino's own age label for that show, from the events list page,
+ * read through a real HTML parser (cheerio), so comments, text and `data-*` attributes never count. Each show is one
+ * `article.ae-post-item` card. A card counts only when:
+ * - its `<a href>` elements, each resolved the way a browser does (`new URL` against the casino's origin), name exactly one
+ *   `https://www.crystalbaycasino.com/event/<slug>/` (no query or hash), and no `<a href>` mentioning `/event/` resolves anywhere else;
+ * - it holds exactly one element with the `fa-id-card` class, whose list item's `.elementor-post-info__item` text is a known label.
+ * Anything else gives that card nothing; a link whose cards disagree gets nothing. A missed label leaves the age to the REST text.
+ */
+export function parseCbcAgeLabels(html: string): Map<string, string> {
+  const seen = new Map<string, string | null>();
+  const $ = cheerio.load(html);
+  // Recheck 5 (P2): resolve hrefs against the document's own base; a base off the casino's origin means no labels at all.
+  let base = `${ORIGIN}/`;
+  const baseHref = $('base[href]').first().attr('href');
+  if (baseHref !== undefined) {
+    try { base = new URL(baseHref, `${ORIGIN}/`).href; } catch { return new Map(); }
+    if (new URL(base).origin !== ORIGIN) return new Map();
+  }
+  $('article.ae-post-item').each((_, el) => {
+    const card = $(el);
+    if (card.find('article').length > 0) return; // recheck 5 (P2): a card holding another card is ambiguous
+    const slugs = new Set<string>();
+    let foreign = false;
+    card.find('a[href]').each((__, a) => {
+      const raw = $(a).attr('href') ?? '';
+      let u: URL | null = null;
+      try { u = new URL(raw, base); } catch { u = null; }
+      const ev = u ? /^\/event\/([a-z0-9-]{1,120})\/$/.exec(u.pathname) : null;
+      if (u && u.origin === ORIGIN && ev && u.search === '' && u.hash === '') slugs.add(ev[1]);
+      else if (/\/event\//i.test(raw) || (u && /\/event\//i.test(u.href))) foreign = true;
+    });
+    if (foreign || slugs.size !== 1) return;
+    const link = `${ORIGIN}/event/${[...slugs][0]}/`;
+    const ids = card.find('.fa-id-card');
+    let label: string | null = null;
+    if (ids.length === 1) {
+      const items = ids.first().closest('li').find('.elementor-post-info__item');
+      if (items.length === 1) label = AGE_LABELS.get(items.first().text().replace(/\s+/g, ' ').trim().toLowerCase()) ?? null;
+    }
+    if (seen.has(link) && seen.get(link) !== label) seen.set(link, null);
+    else if (!seen.has(link)) seen.set(link, label);
+  });
+  const out = new Map<string, string>();
+  for (const [k, v] of seen) if (typeof v === 'string') out.set(k, v);
+  return out;
+}
+
 interface Entry { id: number; link: string; title: string; content: string }
 
 function entriesOf(body: Uint8Array, headers: Headers): Entry[] {
@@ -128,7 +183,7 @@ function entriesOf(body: Uint8Array, headers: Headers): Entry[] {
 
 export const adapter: Adapter = {
   family: 'wprest_crystalbay',
-  version: 'wprest_crystalbay.1',
+  version: 'wprest_crystalbay.2',
   async fetch(ctx: AdapterCtx): Promise<AdapterResult> {
     const { source, now } = ctx;
     for (const k of Object.keys(source.config)) if (!CONFIG_KEYS.has(k)) throw new Error('config_key_unknown');
@@ -140,6 +195,12 @@ export const adapter: Adapter = {
       if (res.status !== 200) return { items: [], status: 'http_error', httpStatus: res.status };
       if (res.body.byteLength > MAX_BODY) throw new Fail('page_too_large');
       const entries = entriesOf(res.body, res.headers);
+      // The list page is best effort: any failure leaves every age to the event's own text (unknown), never to a guess.
+      let ageLabels = new Map<string, string>();
+      try {
+        const list = await ctx.fetch(LIST_URL, { kind: 'html' });
+        if (list.status === 200 && list.body.byteLength <= 2 * MAX_BODY) ageLabels = parseCbcAgeLabels(decodeUtf8(list.body));
+      } catch { /* ageLabels stays empty */ }
 
       const items: SourceEvent[] = [];
       const filteredBy: Record<string, number> = {};
@@ -162,7 +223,7 @@ export const adapter: Adapter = {
         items.push(makeEvent({
           externalKey: `cbc:${entry.id}`, title, startsAt, allDay: false, tz,
           venueName: room ? `Crystal Bay Casino ${room}` : 'Crystal Bay Casino', ...VENUE,
-          url: entry.link, ticketUrl: entry.link, family: 'wprest_crystalbay',
+          url: entry.link, ticketUrl: entry.link, family: 'wprest_crystalbay', ageText: ageLabels.get(entry.link),
         }, text.replace(/https?:\/\/\S+/g, '').slice(0, CLASSIFIER_CAP)));
       }
 

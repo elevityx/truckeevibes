@@ -22,13 +22,15 @@ type Context = 'admission' | 'ambiguous' | 'bar_rule';
 function admission(text: string, start: number, end: number, years = false): Context {
   const before = text.slice(0, start);
   const after = text.slice(end).replace(/^[\s]+/, '');
+  if (/(?:[$#]|\d\s*\/)[\s*]*$/.test(before)) return 'ambiguous'; // c5: a price, a number or a date ("$ 21+", "# *21+*", "9/ 21+") is never an admission
   if (BAR_RULE_NEXT.test(after)) return 'bar_rule';
   if (NOT_ADMISSION_NEXT.test(after)) return 'ambiguous';
   if (!years && before.replace(/[^a-z0-9]/g, '') === '') return 'admission'; // starts the title / the text
   if (ADMISSION_PREV.test(before)) return 'admission';
   if (ADMISSION_NEXT.test(after)) return 'admission';
-  if (after === '' || (!years && /^[)\]\-–—,.;:!]/.test(after))) return 'admission'; // closes the text or sits in a bracket / after a separator
-  if (!years && /[(\[\-–—,:]\s*$/.test(before)) return 'admission';
+  if (!years && /\*$/.test(before) && /^\*/.test(after)) return 'admission'; // c5: a "*21+*" wrapper
+  if (after === '' || (!years && /^[)\]\-–—,.;:!•·]/.test(after))) return 'admission'; // closes the text or sits in a bracket / after a separator (c5: also • ·)
+  if (!years && /[(\[\-–—,:•·]\s*$/.test(before)) return 'admission';
   return 'ambiguous';
 }
 
@@ -42,8 +44,8 @@ function numberPhrases(text: string, n: 18 | 21): Found {
   };
   const yearsWord = /\b(?:years?|yrs?)\b/;
   // These need the admission context; they can be a count ("21+ years", "over 21 vendors").
-  for (const m of text.matchAll(new RegExp(`(?<![\\w$.])${n}\\s*(?:years?|yrs?)?\\s?\\+`, 'g'))) record(m.index!, m.index! + m[0].length, yearsWord.test(m[0]));
-  for (const m of text.matchAll(new RegExp(`(?<![\\w$.])${n}\\s*(?:years?|yrs?)?\\s*(?:and|&)\\s*(?:over|up|older)\\b`, 'g'))) record(m.index!, m.index! + m[0].length, yearsWord.test(m[0]));
+  for (const m of text.matchAll(new RegExp(`(?<![\\w$./])${n}\\s*(?:years?|yrs?)?\\s?\\+`, 'g'))) record(m.index!, m.index! + m[0].length, yearsWord.test(m[0]));
+  for (const m of text.matchAll(new RegExp(`(?<![\\w$./])${n}(?:\\s*|-)(?:(?:years?|yrs?)(?:\\s*|-))?(?:and|&)(?:\\s*|-)(?:over|up|older)\\b`, 'g'))) record(m.index!, m.index! + m[0].length, yearsWord.test(m[0]));
   for (const m of text.matchAll(new RegExp(`\\bover\\s+${n}\\b`, 'g'))) record(m.index!, m.index! + m[0].length);
   // These carry their own context.
   const own = [
@@ -54,6 +56,23 @@ function numberPhrases(text: string, n: 18 | 21): Found {
     `\\bno(?:\\s*one|body)\\s+under\\s+${n}\\b`,
   ];
   for (const p of own) if (new RegExp(p).test(text)) out.admission = true;
+  // c5 (Spec_21Plus_Coverage r2/r3): two more own-context phrasings. Each is matched whole (with its optional "years of age and older"
+  // tail), then judged on what follows: a unit other than years ("at least 21 months") is ambiguous, a drinking-only rule ("… to drink")
+  // is a bar rule. A bar rule found by either phrasing vetoes an admission from an overlapping match of the other (review F1).
+  const NOT_YEARS = /^(?:months?|mos?|weeks?|days?|inch(?:es)?|lbs?|pounds?|cm|ft|feet)\b/;
+  const TAIL = `(?:\\s+years?(?:\\s+(?:old|of\\s+age))?)?(?:\\s+(?:and|or)\\s+(?:over|up|older))?`;
+  const hits: { s: number; e: number; c: 'admission' | 'bar' | 'ambiguous' }[] = [];
+  for (const re of [new RegExp(`\\bmust be at least ${n}\\b${TAIL}`, 'g'),
+    new RegExp(`(?<![\\w$./])${n}\\s+years?\\s+of\\s+age\\s+(?:and|or)\\s+(?:over|up|older)\\b`, 'g')]) {
+    for (const m of text.matchAll(re)) {
+      const after = text.slice(m.index! + m[0].length).replace(/^\s+/, '');
+      hits.push({ s: m.index!, e: m.index! + m[0].length, c: NOT_YEARS.test(after) ? 'ambiguous' : BAR_RULE_NEXT.test(after) ? 'bar' : 'admission' });
+    }
+  }
+  for (const h of hits) {
+    const vetoed = h.c === 'admission' && hits.some((o) => o.c !== 'admission' && o.s < h.e && h.s < o.e);
+    if (h.c === 'bar') out.bar = true; else if (h.c === 'ambiguous' || vetoed) out.ambiguous = true; else out.admission = true;
+  }
   return out;
 }
 

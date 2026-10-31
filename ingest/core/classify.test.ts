@@ -535,3 +535,20 @@ describe('AC-K-21 kids-safe club exemption', () => {
     expect(adultSignal('lego club')).toBe(true);
   });
 });
+
+// Spec_21Plus_Coverage c5 (AC-21-03 / AC-21-04)
+describe('c5 music title word and Events Manager labels', () => {
+  it.each(['Friday Night Music at Sample Hall', 'Sample Symphony Winter Concert', 'Sample Orchestra'])('%s -> music', (t) => {
+    expect(classify({ title: t }).categories).toContain('music');
+  });
+  it.each(['Musical Theatre Camp', 'Acoustic Insulation Workshop'])('%s is not music', (t) => {
+    expect(classify({ title: t }).categories).not.toContain('music');
+  });
+  it('ics_eventsmanager: Trivia and Line Dancing -> nightlife; Open Mic/ Open Stage stays unmapped (poetry readings); tribe Trivia unmapped', () => {
+    expect(mapHints('ics_eventsmanager', ['Trivia']).slugs).toEqual(['nightlife']);
+    expect(mapHints('ics_eventsmanager', ['Line Dancing']).slugs).toEqual(['nightlife']);
+    expect(mapHints('ics_eventsmanager', ['Open Mic/ Open Stage']).slugs).toEqual([]);
+    expect(mapHints('tribe', ['Trivia'])).toMatchObject({ slugs: [], unmapped: ['trivia'] });
+    expect(CATEGORY_MAPS.ics_chambermaster.trivia).toBeUndefined();
+  });
+});

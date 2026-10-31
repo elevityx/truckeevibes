@@ -64,7 +64,8 @@ export const CATEGORY_MAPS: Record<string, Record<string, string>> = {
   tribe: { ...COMMON, ...TRIBE_VLT },
   ics_chambermaster: { ...COMMON },
   ics_civicplus: { ...COMMON },
-  ics_eventsmanager: { ...COMMON },
+  // Spec_21Plus_Coverage c5: Alibi Ale Works' own Events Manager labels.
+  ics_eventsmanager: { ...COMMON, trivia: 'nightlife', 'line dancing': 'nightlife' },
   html_finalsite: { ...COMMON },
   wprest_crystalbay: { ...COMMON },
   rss_libcal: libcalMap(),

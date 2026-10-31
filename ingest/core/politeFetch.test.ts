@@ -637,11 +637,15 @@ describe('AC-M1-138 Crystal Bay Casino family: path guard, robots and floor', ()
   });
   it('path_not_allowed: other REST routes, queries and pages; nothing is requested', async () => {
     for (const p of ['/wp-json/wp/v2/event', '/wp-json/wp/v2/event?per_page=100&page=2', '/wp-json/wp/v2/event?per_page=10', '/wp-json/wp/v2/pages/2707',
-      '/wp-json/tribe/events/v1/events', '/wp-json/', '/entertainment/events/', '/event/steely-dead/']) {
+      '/wp-json/tribe/events/v1/events', '/wp-json/', '/entertainment/events/?page=2', '/entertainment/events', '/entertainment/', '/event/steely-dead/', '/wp-json/wp/v2/posts']) {
       const t = cb(() => undefined);
       expect(await code(t.pf(`${B}${p}`, { kind: 'api' })), p).toBe('path_not_allowed');
       expect(t.net.calls, p).toHaveLength(0);
     }
+  });
+  it('AC-21-16 the events list page (exact path, no query) is allowed', async () => {
+    const t = cb(() => undefined);
+    expect((await t.pf(`${B}/entertainment/events/`, { kind: 'api' })).status).toBe(200);
   });
   it('a 302 to tixr.com is blocked with no request to tixr.com; a direct tixr.com request is host_not_allowed', async () => {
     const t = cb((u) => (u.pathname === '/wp-json/wp/v2/event' ? redirect('https://tixr.com/e/211222', 302) : undefined));

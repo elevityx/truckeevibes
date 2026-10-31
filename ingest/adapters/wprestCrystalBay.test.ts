@@ -1,6 +1,6 @@
 // A14 (AC-M1-134 .. 137, 142): the Crystal Bay Casino WP REST adapter. Pure grammar helpers first, then the adapter over a fake network.
 import { describe, expect, it } from 'vitest';
-import { adapter, cbcText, parseCbcDate, parseCbcRoom, parseCbcTime } from './wprestCrystalBay';
+import { adapter, cbcText, LIST_URL, parseCbcAgeLabels, parseCbcDate, parseCbcRoom, parseCbcTime } from './wprestCrystalBay';
 import { createPoliteFetch } from '../core/politeFetch';
 import type { SourceEvent } from '../types';
 import { fakeNet, fixture, makeClock, source, text } from '../testing/fakes';
@@ -9,12 +9,13 @@ const NOW = Date.parse('2026-10-19T12:00:00Z');
 const API = 'https://www.crystalbaycasino.com/wp-json/wp/v2/event?per_page=100';
 const ROBOTS = fixture('crystalbay/robots.txt');
 const EVENTS = fixture('crystalbay/events.json');
+const LIST = fixture('crystalbay/events_list.html');
 const T = (html: string) => cbcText(html);
 
 describe('identity', () => {
   it('is the wprest_crystalbay family', () => {
     expect(adapter.family).toBe('wprest_crystalbay');
-    expect(adapter.version).toBe('wprest_crystalbay.1');
+    expect(adapter.version).toBe('wprest_crystalbay.2');
   });
 });
 
@@ -118,7 +119,7 @@ describe('AC-M1-135 rooms', () => {
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
-interface Over { body?: string | Uint8Array; status?: number; headers?: Record<string, string>; config?: Record<string, unknown>; now?: number }
+interface Over { body?: string | Uint8Array; status?: number; headers?: Record<string, string>; config?: Record<string, unknown>; now?: number; list?: string | number | 'throw'; methods?: string[] }
 function setup(o: Over = {}) {
   const now = o.now ?? NOW;
   const clock = makeClock(now);
@@ -127,10 +128,16 @@ function setup(o: Over = {}) {
     if (u.pathname === '/wp-json/wp/v2/event') {
       return new Response((o.body ?? EVENTS) as BodyInit, { status: o.status ?? 200, headers: { 'content-type': 'application/json', ...o.headers } });
     }
+    if (u.pathname === '/entertainment/events/') {
+      // Default: no list page (404), so every pre-existing test sees c4 ages (Spec_21Plus_Coverage D3).
+      if (o.list === 'throw') throw new TypeError('network down');
+      if (typeof o.list === 'string') return text(o.list);
+      return text('nf', o.list ?? 404);
+    }
     return text('nf', 404);
   }, clock.now);
   const src = source({
-    slug: 'crystal-bay-casino', family: 'wprest_crystalbay', allowed_hosts: ['www.crystalbaycasino.com'], allowed_methods: ['api'], page_cap: 3,
+    slug: 'crystal-bay-casino', family: 'wprest_crystalbay', allowed_hosts: ['www.crystalbaycasino.com'], allowed_methods: o.methods ?? ['api', 'html'], page_cap: 3,
     config: { apiUrl: API, tz: 'America/Los_Angeles', defaultCategories: ['nightlife'], ...o.config },
   });
   const pf = createPoliteFetch(src, { fetch: net.fetch, now: clock.now, sleep: clock.sleep });
@@ -182,11 +189,13 @@ describe('AC-M1-136 config and fail closed', () => {
 });
 
 describe('AC-M1-137 happy path', () => {
-  it('requests robots, then apiUrl >= 5000 ms later; nothing else', async () => {
-    const s = setup();
+  it('requests robots, then apiUrl >= 5000 ms later, then the list page >= 5000 ms later; nothing else (AC-21-13)', async () => {
+    const s = setup({ list: LIST });
     await s.run();
-    expect(s.net.urls()).toEqual(['https://www.crystalbaycasino.com/robots.txt', API]);
+    expect(s.net.urls()).toEqual(['https://www.crystalbaycasino.com/robots.txt', API, LIST_URL]);
     expect(s.net.calls[1].at - s.net.calls[0].at).toBeGreaterThanOrEqual(5000);
+    expect(s.net.calls[2].at - s.net.calls[1].at).toBeGreaterThanOrEqual(5000);
+    expect(s.net.urls().some((x) => /tixr/i.test(x))).toBe(false);
   });
   it('9 entries -> 7 items, filtered 2 (date_mismatch 1, out_of_window 1)', async () => {
     const r = await setup().run();
@@ -241,8 +250,8 @@ describe('AC-M1-137 happy path', () => {
     expect(r.items[0].categoriesHint).not.toContain('family');
   });
   it('pin: "21+ Crown Room" (no "Age ") is not widened -> unknown + age:ambiguous', async () => {
-    // Not widened (A14 r3-6): the REST feed never carries this form. If the casino starts posting it, the widening rule applies:
-    // grammar change + test rows for counts, drinking-only rules and room-wide text.
+    // Not widened (A14 r3-6; Spec_21Plus_Coverage r2 keeps it: a line break is not an admission separator). The casino's age is read
+    // from its list page's per-card age field instead.
     const e = steely();
     const body = JSON.stringify([{ ...e, content: { rendered: `${e.content.rendered}<p>21+ Crown Room</p>` } }]);
     const r = await setup({ body }).run();
@@ -347,5 +356,122 @@ describe('AC-M1-154 real-feed fixture', () => {
     const emo = r.items.find((i) => i.externalKey === 'cbc:5921')!;
     expect(emo.categoriesHint).not.toContain('kids');
     expect(emo.categoriesHint).not.toContain('family');
+  });
+});
+
+// Spec_21Plus_Coverage: each show's age label from the casino's events list page (c5).
+describe('AC-21-10 parseCbcAgeLabels', () => {
+  const ev = (slug: string) => `https://www.crystalbaycasino.com/event/${slug}/`;
+  it('one card = one article with exactly one event link and exactly one id-card field holding a known label', () => {
+    const m = parseCbcAgeLabels(LIST);
+    expect(m.get(ev('steely-dead'))).toBe('21+');
+    expect(m.get(ev('boot-juice'))).toBe('21+'); // relative /event/ link
+    expect(m.get(ev('victor-wooten'))).toBe('All ages');
+    expect(m.has(ev('jim-norton'))).toBe(false); // unknown label "Members"; the page-level link outside any card is ignored
+    expect(m.has(ev('opiuo'))).toBe(false); // two cards disagree (21+ / 18+)
+    expect(m.has(ev('pat-oneill'))).toBe(false); // two id-card fields (one with an extra class token)
+    expect(m.has(ev('easy-star-all-stars'))).toBe(false); // no post-info widget
+    expect(m.has(ev('dogs-in-a-pile'))).toBe(false); // card links to two events
+    expect(m.has(ev('sample-summer-show'))).toBe(false);
+    expect(m.has(ev('sample-proto'))).toBe(false); // label "constructor" is not an own key
+    expect(m.size).toBe(3);
+  });
+  it('R1: a card with a relative link never lends its label to the card before it', () => {
+    const a = LIST.indexOf('<article'); const b = LIST.indexOf('<article', a + 1); const c = LIST.indexOf('<article', b + 1);
+    const noAge = LIST.slice(a, b).replace(/fa-id-card/g, 'fa-x');
+    const m = parseCbcAgeLabels(noAge + LIST.slice(b, c));
+    expect(m.has(ev('steely-dead'))).toBe(false);
+    expect(m.get(ev('boot-juice'))).toBe('21+');
+  });
+  it('F3: mixed quoting cannot hide a second age field or a second event link', () => {
+    const a = LIST.indexOf('<article'); const b = LIST.indexOf('<article', a + 1);
+    const one = LIST.slice(a, b);
+    const twoAges = one.replace('</ul>', `<li><span><i aria-hidden='true' class='far fa-id-card'></i></span><span class='elementor-post-info__item'> 18+ </span></li></ul>`);
+    expect(parseCbcAgeLabels(twoAges).size).toBe(0);
+    const twoLinks = one.replace('</ul>', `</ul><a href='/event/other-show/'>x</a>`);
+    expect(parseCbcAgeLabels(twoLinks).size).toBe(0);
+    const single = one.replace(/class="far fa-id-card"/, `class='far fa-id-card'`).replace(/<span class="elementor-icon-list-text elementor-post-info__item elementor-post-info__item--type-custom"> 21\+/, `<span class='elementor-post-info__item'> 21+`);
+    expect(parseCbcAgeLabels(single).get(ev('steely-dead'))).toBe('21+');
+  });
+  it('recheck P1: an off-domain /event/ link never names a casino event', () => {
+    const a = LIST.indexOf('<article'); const b = LIST.indexOf('<article', a + 1);
+    const offOnly = LIST.slice(a, b).replace(/https:\/\/www\.crystalbaycasino\.com\/event\//g, 'https://external.example/event/');
+    expect(parseCbcAgeLabels(offOnly).size).toBe(0);
+    const mixed = LIST.slice(a, b).replace('</ul>', '</ul><a href="https://external.example/event/steely-dead/">x</a>');
+    expect(parseCbcAgeLabels(mixed).size).toBe(0);
+    const query = LIST.slice(a, b).replace(/https:\/\/www\.crystalbaycasino\.com\/event\//g, 'https://external.example/?path=/event/');
+    expect(parseCbcAgeLabels(query).size).toBe(0);
+    expect(parseCbcAgeLabels(mixed).size).toBe(0);
+    expect(parseCbcAgeLabels(LIST.slice(a, b).replace(/https:\/\/www\.crystalbaycasino\.com\/event\//g, '//www.crystalbaycasino.com/event/')).get(ev('steely-dead'))).toBe('21+');
+  });
+  it('recheck 3: only href attributes name the event; text, data attributes and whitespace-split foreign hrefs never do', () => {
+    const a = LIST.indexOf('<article'); const b = LIST.indexOf('<article', a + 1);
+    const one = LIST.slice(a, b);
+    const noHref = one.replace(/href="[^"]*"/g, 'href="#"').replace('</ul>', '</ul><span data-x="/event/steely-dead/">/event/steely-dead/</span>');
+    expect(parseCbcAgeLabels(noHref).size).toBe(0);
+    const split = one.replace(/https:\/\/www\.crystalbaycasino\.com\/event\//g, 'https://external.example\n/event/');
+    expect(parseCbcAgeLabels(split).size).toBe(0);
+    const tab = one.replace(/https:\/\/www\.crystalbaycasino\.com\/event\//g, 'https://external.example\t/event/');
+    expect(parseCbcAgeLabels(tab).size).toBe(0);
+  });
+  it('recheck 4: data-href, an href in text or in an HTML comment never names the event', () => {
+    const a = LIST.indexOf('<article'); const b = LIST.indexOf('<article', a + 1);
+    const bare = LIST.slice(a, b).replace(/href="[^"]*"/g, 'href="#"');
+    for (const extra of ['<span data-href="/event/steely-dead/">x</span>', '<p>href="/event/steely-dead/"</p>', '<!-- <a href="/event/steely-dead/">x</a> -->']) {
+      expect(parseCbcAgeLabels(bare.replace('</ul>', `</ul>${extra}`)).size, extra).toBe(0);
+    }
+  });
+  it('recheck 5: a foreign <base href> gives no labels; a card that contains another card gives none (the inner one still counts)', () => {
+    expect(parseCbcAgeLabels(LIST.replace('<head>', '<head><base href="https://external.example/">')).size).toBe(0);
+    expect(parseCbcAgeLabels(LIST.replace('<head>', '<head><base href="https://www.crystalbaycasino.com/">')).size).toBe(3);
+    const a = LIST.indexOf('<article'); const b = LIST.indexOf('<article', a + 1); const c = LIST.indexOf('<article', b + 1);
+    const outer = LIST.slice(a, b).replace(/href="[^"]*"/g, 'href="#"').replace('</article>', '');
+    const nested = `${outer}${LIST.slice(b, c)}</article>`;
+    const m = parseCbcAgeLabels(nested);
+    expect(m.get(ev('boot-juice'))).toBe('21+');
+    expect(m.size).toBe(1);
+  });
+  it('an empty, unrelated or article-free page gives no labels', () => {
+    expect(parseCbcAgeLabels('').size).toBe(0);
+    expect(parseCbcAgeLabels('<html><body>closed</body></html>').size).toBe(0);
+    expect(parseCbcAgeLabels(LIST.replace(/<article class="ae-post-item/g, '<div class="x')).size).toBe(0);
+  });
+});
+
+describe('AC-21-11..15 adapter with the list page', () => {
+  it('a 21+ label gives 21_plus with age:21_admission and ageText "21+"; no label leaves the c4 age', async () => {
+    const m = by((await setup({ list: LIST }).run()).items);
+    for (const k of ['cbc:1002', 'cbc:1005']) {
+      expect(m[k].age).toBe('21_plus');
+      expect(m[k].ageText).toBe('21+');
+      expect(m[k].tagReasons).toContain('age:21_admission');
+      expect(m[k].categoriesHint).not.toContain('kids');
+      expect(m[k].categoriesHint).not.toContain('family');
+    }
+    const base = by((await setup().run()).items);
+    for (const k of Object.keys(base).filter((k) => !['cbc:1002', 'cbc:1005', 'cbc:1006'].includes(k))) {
+      expect(m[k].age, k).toBe(base[k].age);
+      expect(m[k].ageText, k).toBeUndefined();
+    }
+  });
+  it('AC-21-14 an "All ages" label at the casino is unknown (adult-venue veto), never all_ages', async () => {
+    const m = by((await setup({ list: LIST }).run()).items);
+    expect(m['cbc:1006'].age).toBe('unknown');
+  });
+  it('AC-21-12 list page 404, 500, network error, oversize, or html not allowed: ok, same items, REST-only ages', async () => {
+    const base = await setup().run();
+    const strip = (r: typeof base) => r.items.map((i) => [i.externalKey, i.startsAt, i.age, i.ageText ?? null]);
+    for (const o of [{ list: 500 }, { list: 'throw' as const }, { list: LIST + ' '.repeat(2_200_000) }, { list: LIST, methods: ['api'] }]) {
+      const r = await setup(o).run();
+      expect(r.status).toBe('ok');
+      expect(strip(r)).toEqual(strip(base));
+    }
+  });
+  it('AC-21-15 no item carries description text or a URL in a text field with the list page served', async () => {
+    const r = await setup({ list: LIST }).run();
+    for (const i of r.items) {
+      for (const v of [i.title, i.venueName, i.ageText, i.priceText]) if (v) expect(v).not.toMatch(/https?:|tixr/i);
+      expect((i as unknown as Record<string, unknown>).description).toBeUndefined();
+    }
   });
 });
