@@ -7,7 +7,7 @@ select no_plan();
 -- AC-K3-03 the row
 select is((select string_agg(slug || ':' || family || ':' || trust::text || ':' || enabled::text || ':' || manual_only::text || ':' || automation_restricted::text || ':' || cadence || ':' || page_cap, ',')
              from public.sources where slug = 'tdrpd-rec1'),
-  'tdrpd-rec1:rec1_catalog:review:true:true:true:24h:12', 'tdrpd-rec1: rec1_catalog, trust review, enabled, manual only, restricted, 24h, page_cap 12');
+  'tdrpd-rec1:rec1_catalog:review:true:true:true:24h:80', 'tdrpd-rec1: rec1_catalog, trust review, enabled, manual only, restricted, 24h, page_cap 80 (M1: K3.1 r2-9)');
 select is((select terms_note from public.sources where slug = 'tdrpd-rec1'),
   'CivicPlus ToU restricts automated access; owner accepted risk 2026-10-30; no agency OK yet', 'the terms note is honest (no agency permission claimed)');
 select is((select terms_reviewed_by || ':' || ingest_disposition::text || ':' || array_to_string(allowed_methods, '+') from public.sources where slug = 'tdrpd-rec1'),

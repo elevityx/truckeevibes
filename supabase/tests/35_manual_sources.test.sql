@@ -1,0 +1,154 @@
+-- Spec_Manual_Sources AC-M1-07: the five manual-only sources; the cron path never grants them; svc_manual_grant grants each once per
+-- cadence; glasses-wine-bar is unchanged; a re-run of the migration is a no-op (keeps a kill switch and a later trust change).
+begin;
+create extension if not exists pgtap with schema extensions;
+select no_plan();
+
+select is((select string_agg(slug || ':' || family || ':' || trust::text || ':' || enabled::text || ':' || manual_only::text || ':' || automation_restricted::text || ':' || cadence || ':' || page_cap, ',' order by slug)
+             from public.sources where slug in ('bar-of-america', 'diamond-peak', 'fiftyfifty-brewing', 'ivgid', 'tahoe-national-brewing')),
+  'bar-of-america:ics:review:true:true:true:24h:1,diamond-peak:tribe:review:true:true:true:24h:2,fiftyfifty-brewing:elfsight:review:true:true:true:24h:1,ivgid:tribe:review:true:true:true:24h:2,tahoe-national-brewing:squarespace:review:true:true:true:24h:1',
+  'AC-M1-07 the five rows: family, trust review, enabled, manual only, restricted, 24h, page_cap');
+select is((select count(*) from public.sources where slug in ('bar-of-america', 'diamond-peak', 'fiftyfifty-brewing', 'ivgid', 'tahoe-national-brewing')
+             and ingest_disposition = 'permitted' and terms_reviewed_by = 'owner' and terms_note like 'Manual read only (owner 2026-10-30); %no venue OK'
+             and char_length(terms_note) <= 200 and terms_hash ~ '^[0-9a-f]{64}$' and terms_recheck_at > now()), 5::bigint,
+  'AC-M1-07 owner terms record on each: permitted, honest note <= 200 chars, hash, future recheck');
+select is((select count(*) from public.sources s where slug in ('bar-of-america', 'fiftyfifty-brewing', 'tahoe-national-brewing')
+             and s.terms_hash = encode(sha256(convert_to(s.config::text, 'UTF8')), 'hex')), 3::bigint, 'the venue-page terms hash is the sha256 of our own config');
+select is((select allowed_hosts::text from public.sources where slug = 'bar-of-america'), '{www.barofamerica.com,calendar.google.com}', 'bar-of-america: the link host and the feed host');
+select is((select allowed_hosts::text from public.sources where slug = 'fiftyfifty-brewing'), '{www.fiftyfiftybrewing.com,core.service.elfsight.com}', 'fiftyfifty-brewing: the link host and the feed host');
+select is((select count(*) from public.sources where slug in ('bar-of-america', 'diamond-peak', 'fiftyfifty-brewing', 'tahoe-national-brewing')
+             and (config #>> '{venue,lat}')::float8 between 38 and 40 and (config #>> '{venue,lng}')::float8 between -121 and -119), 4::bigint, 'a default venue with coordinates for the four single-venue sources');
+select is((select page_cap::int from public.sources where slug = 'tdrpd-rec1'), 80, 'tdrpd-rec1 page_cap 80 (K3.1 r2-9)');
+select is((select slug || ':' || trust::text || ':' || enabled::text || ':' || manual_only::text || ':' || ingest_disposition::text from public.sources where slug = 'glasses-wine-bar'),
+  'glasses-wine-bar:link_only:false:false:unknown', 'AC-M1-07 glasses-wine-bar is unchanged (no feed)');
+select is((select count(*) from public.sources where automation_restricted and not manual_only), 0::bigint, 'no restricted source is schedulable');
+select lives_ok($$insert into public.sources (slug, name, homepage_url, allowed_hosts, family, class) values ('m1-probe', 'Probe', 'https://a.test/', array['a.test'], 'elfsight', 'venue')$$,
+  'the family CHECK accepts elfsight');
+
+-- the cron path never grants them, even when due
+update public.sources set next_due_at = now() - interval '1 hour' where slug in ('bar-of-america', 'diamond-peak', 'fiftyfifty-brewing', 'ivgid', 'tahoe-national-brewing');
+select is((select count(*) from jsonb_array_elements(public.svc_issue_run_grants() -> 'grants') g
+             where g #>> '{source,slug}' in ('bar-of-america', 'diamond-peak', 'fiftyfifty-brewing', 'ivgid', 'tahoe-national-brewing')), 0::bigint,
+  'AC-M1-07 svc_issue_run_grants returns none of the five');
+
+-- svc_manual_grant grants each once
+select is((select string_agg(public.svc_manual_grant(s) #>> '{source,slug}', ',' order by s)
+             from unnest(array['bar-of-america', 'diamond-peak', 'fiftyfifty-brewing', 'ivgid', 'tahoe-national-brewing']) s),
+  'bar-of-america,diamond-peak,fiftyfifty-brewing,ivgid,tahoe-national-brewing', 'AC-M1-07 svc_manual_grant grants each when due');
+select throws_ok($$select public.svc_manual_grant('bar-of-america')$$, 'P0001', 'manual_grant_refused', 'a second read the same day is refused');
+select throws_ok($$select public.svc_manual_grant('ivgid')$$, 'P0001', 'manual_grant_refused', 'a second Tribe read the same day is refused');
+select throws_ok($$select public.svc_manual_grant('glasses-wine-bar')$$, 'P0001', 'manual_grant_refused', 'glasses-wine-bar is never granted');
+
+-- a re-run changes nothing: a kill-switched source stays off and a later trust change stays (review P2-7)
+update public.sources set enabled = false where slug = 'bar-of-america';
+update public.sources set trust = 'auto' where slug = 'fiftyfifty-brewing';
+create temp table _before as select slug, updated_at, enabled, trust, config, terms_note, terms_reviewed_at, page_cap from public.sources
+  where slug in ('bar-of-america', 'diamond-peak', 'fiftyfifty-brewing', 'ivgid', 'tahoe-national-brewing', 'tdrpd-rec1');
+-- The block below is the migration's code verbatim (scripts/m1-migrations.test.mjs checks it).
+-- BEGIN migration copy
+do $$
+declare
+  want text[] := array['tribe','ics','ics_chambermaster','ics_civicplus','ics_eventsmanager','rss','squarespace','jsonld','html','llm',
+                       'html_finalsite','html_tahoedonner','wprest_crystalbay','curated_dates','rss_libcal','rec1_catalog','elfsight'];
+  def  text;
+  cur  text[];
+begin
+  select pg_get_constraintdef(c.oid) into def from pg_constraint c
+   where c.conrelid = 'public.sources'::regclass and c.conname = 'sources_family_check';
+  cur := coalesce((select array_agg(m[1]) from regexp_matches(coalesce(def, ''), '''([a-z][a-z0-9_]*)''', 'g') m), '{}');
+  if def is not null and cardinality(cur) = 0 then raise exception 'family_check_unparsed'; end if;
+  if def is not null and want <@ cur then return; end if;
+  alter table public.sources drop constraint if exists sources_family_check;
+  execute format('alter table public.sources add constraint sources_family_check check (family in (%s))',
+                 (select string_agg(quote_literal(f), ',' order by f) from (select unnest(cur) union select unnest(want)) u(f)));
+end $$;
+do $$ begin
+  if exists (select 1 from public.sources where slug = 'bar-of-america' and manual_only) then return; end if;
+  update public.sources set family = 'ics', page_cap = 1, cadence = '24h', trust = 'review',
+         allowed_hosts = array['www.barofamerica.com', 'calendar.google.com'],
+         config = '{"mapper":"manual_gcal","feedUrl":"https://calendar.google.com/calendar/ical/pvq7se1vhdtap3i4bsa990jbas%40group.calendar.google.com/public/basic.ics","link":"https://www.barofamerica.com/music.html","tz":"America/Los_Angeles","town":"Truckee","hints":["music"],"venue":{"name":"Bar of America","address":"10040 Donner Pass Rd, Truckee, CA 96161","lat":39.327989,"lng":-120.184929}}'::jsonb
+   where slug = 'bar-of-america';
+  if not found then raise exception 'manual_sources_state'; end if;
+  perform private.record_source_terms('bar-of-america', 'permitted', array['feed']::text[], 'https://www.barofamerica.com/music.html',
+    (select encode(sha256(convert_to(config::text, 'UTF8')), 'hex') from public.sources where slug = 'bar-of-america'), 'owner', '2026-10-31', '2027-10-31',
+    'Manual read only (owner 2026-10-30); calendar.google.com robots.txt disallows crawlers; facts + link only; hash is of our config; no venue OK');
+  update public.sources set manual_only = true, automation_restricted = true where slug = 'bar-of-america';
+  update public.sources set enabled = true where slug = 'bar-of-america';
+end $$;
+do $$ begin
+  if exists (select 1 from public.sources where slug = 'fiftyfifty-brewing' and manual_only) then return; end if;
+  update public.sources set family = 'elfsight', page_cap = 1, cadence = '24h', trust = 'review',
+         allowed_hosts = array['www.fiftyfiftybrewing.com', 'core.service.elfsight.com'],
+         config = '{"mapper":"manual_elfsight","widget":"e11cc5c3-c71b-4300-b405-829867efe6c3","feedUrl":"https://core.service.elfsight.com/p/boot/?page=https%3A%2F%2Fwww.fiftyfiftybrewing.com%2Fpages%2Fevents&w=e11cc5c3-c71b-4300-b405-829867efe6c3","link":"https://www.fiftyfiftybrewing.com/pages/events","tz":"America/Los_Angeles","town":"Truckee","venue":{"name":"FiftyFifty Brewing Co.","address":"11197 Brockway Rd, Truckee, CA 96161","lat":39.322527,"lng":-120.165175}}'::jsonb
+   where slug = 'fiftyfifty-brewing';
+  if not found then raise exception 'manual_sources_state'; end if;
+  perform private.record_source_terms('fiftyfifty-brewing', 'permitted', array['feed']::text[], 'https://www.fiftyfiftybrewing.com/pages/events',
+    (select encode(sha256(convert_to(config::text, 'UTF8')), 'hex') from public.sources where slug = 'fiftyfifty-brewing'), 'owner', '2026-10-31', '2027-10-31',
+    'Manual read only (owner 2026-10-30); events come from a third-party widget API, not a published feed; facts + link only; hash is of our config; no venue OK');
+  update public.sources set manual_only = true, automation_restricted = true where slug = 'fiftyfifty-brewing';
+  update public.sources set enabled = true where slug = 'fiftyfifty-brewing';
+end $$;
+do $$ begin
+  if exists (select 1 from public.sources where slug = 'diamond-peak' and manual_only) then return; end if;
+  update public.sources set page_cap = 2, cadence = '24h', trust = 'review',
+         config = '{"base":"https://www.diamondpeak.com","tz":"America/Los_Angeles","town":"Incline Village","venue":{"name":"Diamond Peak Ski Resort","address":"1210 Ski Way, Incline Village, NV 89451","lat":39.251679,"lng":-119.925873},"venues":[{"match":"diamond peak","name":"Diamond Peak Ski Resort","address":"1210 Ski Way, Incline Village, NV 89451","lat":39.251679,"lng":-119.925873},{"match":"alibi","name":"Alibi Ale Works - Incline Public House","address":"931 Tahoe Blvd, Incline Village, NV 89451","lat":39.249088,"lng":-119.9489837}]}'::jsonb
+   where slug = 'diamond-peak' and family = 'tribe';
+  if not found then raise exception 'manual_sources_state'; end if;
+  perform private.record_source_terms('diamond-peak', 'permitted', array['api']::text[], 'https://www.diamondpeak.com/terms-of-use/',
+    (select terms_hash from public.sources where slug = 'diamond-peak'), 'owner', '2026-10-31', '2027-10-31',
+    'Manual read only (owner 2026-10-30); terms review 2026-10-15 found permission required for automated use; facts + link only; no venue OK');
+  update public.sources set manual_only = true, automation_restricted = true where slug = 'diamond-peak';
+  update public.sources set enabled = true where slug = 'diamond-peak';
+end $$;
+do $$ begin
+  if exists (select 1 from public.sources where slug = 'ivgid' and manual_only) then return; end if;
+  update public.sources set page_cap = 2, cadence = '24h', trust = 'review',
+         config = '{"base":"https://www.yourtahoeplace.com","tz":"America/Los_Angeles","town":"Incline Village","venues":[{"match":"recreation center","name":"Incline Village Recreation Center","address":"980 Incline Way, Incline Village, NV 89451","lat":39.242816,"lng":-119.943141},{"match":"chateau","name":"The Chateau at Incline Village","address":"955 Fairway Blvd, Incline Village, NV 89451","lat":39.253723,"lng":-119.944251},{"match":"championship golf","name":"Incline Village Championship Golf Course","address":"955 Fairway Blvd, Incline Village, NV 89451","lat":39.253723,"lng":-119.944251}]}'::jsonb
+   where slug = 'ivgid' and family = 'tribe';
+  if not found then raise exception 'manual_sources_state'; end if;
+  perform private.record_source_terms('ivgid', 'permitted', array['api']::text[], 'https://www.yourtahoeplace.com/terms-of-use/',
+    (select terms_hash from public.sources where slug = 'ivgid'), 'owner', '2026-10-31', '2027-10-31',
+    'Manual read only (owner 2026-10-30); terms review 2026-10-15 found permission required for automated use; facts + link only; no venue OK');
+  update public.sources set manual_only = true, automation_restricted = true where slug = 'ivgid';
+  update public.sources set enabled = true where slug = 'ivgid';
+end $$;
+do $$ begin
+  if exists (select 1 from public.sources where slug = 'tahoe-national-brewing') then return; end if;
+  insert into public.sources (slug, name, homepage_url, allowed_hosts, family, class, cadence, page_cap, trust, config) values
+    ('tahoe-national-brewing', 'Tahoe National Brewing', 'https://www.tahoenational.beer/events', array['www.tahoenational.beer'],
+     'squarespace', 'venue'::public.source_class, '24h', 1, 'review',
+     '{"mapper":"manual_squarespace","feedUrl":"https://www.tahoenational.beer/events?format=json","link":"https://www.tahoenational.beer/events","tz":"America/Los_Angeles","town":"Tahoe City","venue":{"name":"Tahoe National Brewing Co.","address":"850 North Lake Blvd, Tahoe City, CA 96145","lat":39.1739451,"lng":-120.1369173}}'::jsonb);
+  perform private.record_source_terms('tahoe-national-brewing', 'permitted', array['feed']::text[], 'https://www.tahoenational.beer/events',
+    (select encode(sha256(convert_to(config::text, 'UTF8')), 'hex') from public.sources where slug = 'tahoe-national-brewing'), 'owner', '2026-10-31', '2027-10-31',
+    'Manual read only (owner 2026-10-30); the events JSON is the site builder''s page API, not a published feed; facts + link only; hash is of our config; no venue OK');
+  update public.sources set manual_only = true, automation_restricted = true where slug = 'tahoe-national-brewing';
+  update public.sources set enabled = true where slug = 'tahoe-national-brewing';
+end $$;
+update public.sources set page_cap = 80 where slug = 'tdrpd-rec1' and page_cap <> 80;
+do $$ begin
+  if (select count(*) from public.sources s join (values
+        ('bar-of-america', 'ics', array['www.barofamerica.com', 'calendar.google.com'], array['feed'], 1, 'manual_gcal'),
+        ('fiftyfifty-brewing', 'elfsight', array['www.fiftyfiftybrewing.com', 'core.service.elfsight.com'], array['feed'], 1, 'manual_elfsight'),
+        ('tahoe-national-brewing', 'squarespace', array['www.tahoenational.beer'], array['feed'], 1, 'manual_squarespace'),
+        ('diamond-peak', 'tribe', array['www.diamondpeak.com', 'diamondpeak.com'], array['api'], 2, null),
+        ('ivgid', 'tribe', array['www.yourtahoeplace.com', 'yourtahoeplace.com'], array['api'], 2, null)
+      ) e(slug, family, hosts, methods, page_cap, mapper)
+      on s.slug = e.slug and s.family = e.family and s.allowed_hosts = e.hosts and s.allowed_methods = e.methods and s.page_cap = e.page_cap
+         and s.config ->> 'mapper' is not distinct from e.mapper and s.manual_only and s.automation_restricted and not s.strict_auto
+         and s.ingest_disposition = 'permitted' and s.terms_reviewed_by = 'owner' and s.terms_note like 'Manual read only (owner 2026-10-30); %'
+         and length(s.terms_note) <= 200) <> 5
+     or exists (select 1 from public.sources where slug = 'glasses-wine-bar' and (manual_only or enabled or trust <> 'link_only'))
+     or exists (select 1 from public.sources where slug = 'tdrpd-rec1' and page_cap <> 80)
+     or exists (select 1 from public.sources where automation_restricted and not manual_only) then
+    raise exception 'manual_sources_state';
+  end if;
+end $$;
+-- END migration copy
+select is((select count(*) from public.sources s join _before b using (slug) where s.updated_at = b.updated_at and s.enabled = b.enabled and s.trust = b.trust
+             and s.config = b.config and s.terms_note = b.terms_note and s.terms_reviewed_at = b.terms_reviewed_at and s.page_cap = b.page_cap), 6::bigint,
+  'AC-M1-07 a full re-run of the migration (guarded writes + self-check) changes nothing');
+select is((select enabled::text || ':' || (select trust::text from public.sources where slug = 'fiftyfifty-brewing') from public.sources where slug = 'bar-of-america'),
+  'false:auto', 'the kill switch and the trust change survive the re-run');
+
+select * from finish();
+rollback;

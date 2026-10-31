@@ -207,14 +207,16 @@ create temp table expect (slug text, disp text, methods text[]);
 insert into expect values
   ('alibi-truckee', 'permitted', '{feed}'), ('truckee-chamber', 'permitted', '{feed,html}'), ('visit-lake-tahoe', 'permitted', '{api}'),
   ('tdrpd', 'permitted', '{feed}'), ('tahoe-donner', 'permitted', '{html}'), ('arts-for-the-schools', 'permitted', '{html}'),
-  ('diamond-peak', 'permission_required', '{}'), ('ivgid', 'permission_required', '{}'), ('truckee-roundhouse', 'permission_required', '{}');
+  ('diamond-peak', 'permitted', '{api}'), ('ivgid', 'permitted', '{api}'), ('truckee-roundhouse', 'permission_required', '{}'); -- M1 manual: diamond-peak, ivgid owner-permitted, manual only
 select pg_temp.eq($$(select count(*) from expect e join public.sources s using (slug)
                       where s.ingest_disposition::text = e.disp and s.allowed_methods <@ e.methods and s.allowed_methods @> e.methods)$$, '9',
   'AC-M1-61 the 9 M1 sources have exactly the dispositions and methods of S1.13a');
-select pg_temp.eq($$(select count(*) from public.sources where slug in ('diamond-peak', 'ivgid', 'truckee-roundhouse') and not enabled and allowed_methods = '{}' and trust = 'link_only')$$, '3',
-  'AC-M1-61 diamond-peak, ivgid, truckee-roundhouse: enabled = false, allowed_methods = {}, trust = link_only');
-select pg_temp.eq($$(select count(*) from (values ('diamond-peak'), ('ivgid'), ('truckee-roundhouse')) g(s)
-                      where pg_temp.x('admin', format('select public.admin_set_source_enabled(%L, true)', g.s)) like 'ERR:23514|source\_not\_permitted|%')$$, '3',
+select pg_temp.eq($$(select count(*) from public.sources where slug in ('truckee-roundhouse') and not enabled and allowed_methods = '{}' and trust = 'link_only')$$, '1',
+  'AC-M1-61 truckee-roundhouse: enabled = false, allowed_methods = {}, trust = link_only');
+select pg_temp.eq($$(select count(*) from public.sources where slug in ('diamond-peak', 'ivgid') and manual_only and automation_restricted and trust <> 'link_only' and terms_reviewed_by = 'owner')$$, '2',
+  'M1 manual: diamond-peak and ivgid are manual-only, restricted, owner-reviewed');
+select pg_temp.eq($$(select count(*) from (values ('truckee-roundhouse')) g(s)
+                      where pg_temp.x('admin', format('select public.admin_set_source_enabled(%L, true)', g.s)) like 'ERR:23514|source\_not\_permitted|%')$$, '1',
   'AC-M1-61 admin_set_source_enabled on each gated source -> source_not_permitted');
 select pg_temp.eq($$(select class::text || '|' || (trust <> 'auto') || '|' || max_cards_7d from public.sources where slug = 'visit-lake-tahoe')$$, 'aggregator|true|3',
   'AC-M1-61 visit-lake-tahoe: class aggregator, trust <> auto, max_cards_7d = 3');
@@ -224,11 +226,11 @@ select pg_temp.x('postgres', $$update public.sources set terms_reviewed_at = now
 select pg_temp.x('postgres', $$update public.sources set next_due_at = now() + interval '1 day' where slug <> 'truckee-chamber' and next_due_at <= now()$$);
 select pg_temp.t($$(select count(*) = 1 from jsonb_array_elements(public.svc_issue_run_grants() -> 'grants') g where g #>> '{source,slug}' = 'truckee-chamber')$$, 'AC-M1-61 the chamber is issued a grant');
 select pg_temp.t($$(select next_due_at = now() + interval '24 hours' from public.sources where slug = 'truckee-chamber')$$, 'AC-M1-61 (A10) ... and its next_due_at is now + 24 h');
-select pg_temp.eq($$(select count(*) from public.sources where family = 'squarespace')$$, '0', 'AC-M1-61 no source has family squarespace');
+select pg_temp.eq($$(select string_agg(slug, ',') from public.sources where family = 'squarespace')$$, 'tahoe-national-brewing', 'AC-M1-61 the only squarespace source is the M1 manual-only tahoe-national-brewing');
 select pg_temp.eq($$(select count(*) from expect e join public.sources s using (slug) where s.terms_hash ~ '^[0-9a-f]{64}$' and s.robots_hash ~ '^[0-9a-f]{64}$' and s.robots_checked_at is not null)$$, '9',
   'AC-M1-61 every terms_hash and robots_hash of the 9 matches ^[0-9a-f]{64}$ and robots was checked');
 select pg_temp.eq($$(select count(*) from public.sources where (terms_hash is not null and terms_hash !~ '^[0-9a-f]{64}$') or (robots_hash is not null and robots_hash !~ '^[0-9a-f]{64}$'))$$, '0', 'AC-M1-61 no source has a malformed hash');
-select is(pg_temp.v('anon', $$(select count(*) from public.list_sources_public() p where p.status = 'link_only' and p.name = any (array['Diamond Peak', 'Incline Village GID', 'Truckee Roundhouse']))$$), '3', 'AC-M1-61 list_sources_public() shows the three gated sources as link_only');
+select is(pg_temp.v('anon', $$(select count(*) from public.list_sources_public() p where p.status = 'link_only' and p.name = any (array['Diamond Peak', 'Incline Village GID', 'Truckee Roundhouse']))$$), '1', 'AC-M1-61 list_sources_public() shows truckee-roundhouse as link_only (M1: diamond-peak, ivgid are manual-only)');
 -- no RPC granted to authenticated or service_role can change strict_auto / max_cards_7d
 select pg_temp.mk_source('seed-h', 'organizer', 'review');
 create temp table cfg0 as select pg_temp.snap($$(select slug, strict_auto, max_cards_7d from public.sources)$$) s;
@@ -253,7 +255,7 @@ select pg_temp.t($$(select config -> 'filter' -> 'excludeCategorySlugs' = '["att
   'AC-M1-61 (A5-1) ... jsonb equality with the exact array');
 select pg_temp.eq($$(select string_agg(k, ',' order by k) from public.sources s, jsonb_object_keys(s.config -> 'filter') k where s.slug = 'visit-lake-tahoe')$$,
   'excludeCategorySlugs,maxDurationDays,maxItems,towns,windowDays', 'AC-M1-61 (A5-1) the filter key set is exactly {windowDays, towns, maxDurationDays, excludeCategorySlugs, maxItems}');
-select pg_temp.eq($$(select count(*) from public.sources where slug in (select slug from expect) and terms_note !~ '^Terms review \d{4}-\d{2}-\d{2}: [a-z_]+\.$')$$, '0',
+select pg_temp.eq($$(select count(*) from public.sources where slug in (select slug from expect) and slug not in ('diamond-peak', 'ivgid') and terms_note !~ '^Terms review \d{4}-\d{2}-\d{2}: [a-z_]+\.$')$$, '0',
   'AC-M1-61 (A5-10) every M1 source terms_note matches the neutral pattern');
 select pg_temp.eq($$(select count(*) from public.sources where slug in (select slug from expect) and terms_note is not null)$$, '9', 'AC-M1-61 (A5-10) ... and all 9 M1 sources have a terms_note');
 

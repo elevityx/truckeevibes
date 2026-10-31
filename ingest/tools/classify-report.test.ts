@@ -39,6 +39,13 @@ describe('classify-report', () => {
     expect(await h.run([row({ terms_recheck_at: null })])).toBe(1);
     expect(h.net.calls).toHaveLength(0);
   });
+  it('M1 review P1-5: a manual-only or automation-restricted row is refused (never fetched with the bot)', async () => {
+    const h = harness();
+    expect(await h.run([row({ slug: 'diamond-peak', manual_only: true }), row({ slug: 'restricted', automation_restricted: true })])).toBe(1);
+    const e = h.err.join('\n');
+    for (const s of ['diamond-peak', 'restricted']) expect(e).toContain(s);
+    expect(h.net.calls).toHaveLength(0);
+  });
   it('one refused row refuses the whole run (nothing is fetched for the good rows)', async () => {
     const h = harness();
     expect(await h.run([row(), row({ slug: 'bad', ingest_disposition: 'blocked' })])).toBe(1);

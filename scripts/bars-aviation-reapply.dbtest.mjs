@@ -28,6 +28,15 @@ async function inTx(fn) {
     try { await c.query('rollback'); } finally { await c.end(); }
   }
 }
+// M1 manual (20261031000100_manual_sources.sql) makes bar-of-america and fiftyfifty-brewing manual-only; the A14 body's self-check
+// still describes them as link-only manifest rows, so a re-apply case first puts them back to their A14 state (rolled back). The same for
+// Crystal Bay's defaultCategories, which 20261030000500_21plus_coverage.sql changed after A14.
+const toA14 = async (c) => {
+  await c.query(`update public.sources set config = jsonb_set(config, '{defaultCategories}', '["nightlife"]'::jsonb) where slug = 'crystal-bay-casino'`);
+  await c.query(`update public.sources set enabled = false, manual_only = false, automation_restricted = false, family = 'html', trust = 'link_only',
+    ingest_disposition = 'unknown', allowed_methods = '{}', allowed_hosts = array[case slug when 'bar-of-america' then 'www.barofamerica.com' else 'www.fiftyfiftybrewing.com' end]
+  where slug in ('bar-of-america', 'fiftyfifty-brewing')`);
+};
 const famDef = async (c) => (await c.query(`select pg_get_constraintdef(oid) d from pg_constraint where conrelid = 'public.sources'::regclass and conname = 'sources_family_check'`)).rows[0].d;
 const SLUGS = ['crystal-bay-casino', 'moodys-bistro', 'eaa-1073-breakfast', 'bar-of-america', 'rmu-truckee', 'tourist-club', 'cottonwood-truckee', 'fiftyfifty-brewing',
   'glasses-wine-bar', 'the-grid-kings-beach', 'gar-woods'];
@@ -42,6 +51,7 @@ after(() => {});
 
 test('(a) applying the body twice on the reset DB succeeds: 11 slugs once each, Crystal Bay at review, CHECK def unchanged (AC-M1-159)', async () => {
   await inTx(async (c) => {
+    await toA14(c);
     const before = await famDef(c);
     await c.query(SQL);
     await c.query(SQL);
@@ -56,6 +66,7 @@ test('(a) applying the body twice on the reset DB succeeds: 11 slugs once each, 
 
 test('(b) the A13 body, then the A14 body, over the post-A14 DB succeeds and keeps both A14 families allowed', async () => {
   await inTx(async (c) => {
+    await toA14(c);
     await c.query(A13_SQL);
     await c.query(SQL);
     const d = await famDef(c);
@@ -67,6 +78,7 @@ test('(b) the A13 body, then the A14 body, over the post-A14 DB succeeds and kee
 
 test('(c) a changed Crystal Bay homepage_url is rejected with bars_aviation_state', async () => {
   await inTx(async (c) => {
+    await toA14(c);
     await c.query(`update public.sources set homepage_url = 'https://example.test/' where slug = 'crystal-bay-casino'`);
     await assert.rejects(() => c.query(SQL), /bars_aviation_state/);
   });
@@ -74,6 +86,7 @@ test('(c) a changed Crystal Bay homepage_url is rejected with bars_aviation_stat
 
 test('(d) a changed manifest homepage_url (gar-woods) is rejected with bars_aviation_state', async () => {
   await inTx(async (c) => {
+    await toA14(c);
     await c.query(`update public.sources set homepage_url = 'https://example.test/' where slug = 'gar-woods'`);
     await assert.rejects(() => c.query(SQL), /bars_aviation_state/);
   });
@@ -81,6 +94,7 @@ test('(d) a changed manifest homepage_url (gar-woods) is rejected with bars_avia
 
 test('(e) an unrelated source paused elsewhere does not break the self-check', async () => {
   await inTx(async (c) => {
+    await toA14(c);
     await c.query(`update public.sources set enabled = false where slug = 'alibi-truckee'`);
     await c.query(SQL);
   });

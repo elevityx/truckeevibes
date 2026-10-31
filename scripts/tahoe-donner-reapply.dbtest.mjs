@@ -81,7 +81,9 @@ const famDef = async (c) => (await c.query(`select pg_get_constraintdef(oid) d f
 
 test('(d) reapplies over a post-A14 database (widen-only CHECK, A14 rows kept) (AC-M1-157)', async () => {
   await inTx(async (c) => {
-    // On the A14 branch the reset DB already has the A14 families and rows; on A13 we simulate A14 here.
+    // On the A14 branch the reset DB already has the A14 families and rows; on A13 we simulate A14 here. Rows of families added after A14
+    // (rss_libcal, rec1_catalog, elfsight) are parked on 'html' first so the narrower CHECK can be built (rolled back).
+    await c.query(`update public.sources set family = 'html' where family not in ('tribe','ics','ics_chambermaster','ics_civicplus','ics_eventsmanager','rss','squarespace','jsonld','html','llm','html_finalsite','html_tahoedonner','wprest_crystalbay','curated_dates')`);
     await setCheck(c, [...A13_FAMILIES, 'wprest_crystalbay', 'curated_dates']);
     await c.query(`insert into public.sources (slug, name, homepage_url, allowed_hosts, family, class) values
       ('r3-cbc', 'R3 CBC', 'https://example.test/', array['example.test'], 'wprest_crystalbay', 'venue'),
@@ -103,7 +105,7 @@ test('(d) reapplies over a post-A14 database (widen-only CHECK, A14 rows kept) (
 test('(e) widens a narrower CHECK to include html_tahoedonner (AC-M1-157)', async () => {
   await inTx(async (c) => {
     // This case's own setup: park the tahoe-donner row (and any later amendment's family rows) on 'html' so the narrower CHECK can be built.
-    await c.query(`update public.sources set family = 'html' where slug = 'tahoe-donner' or family in ('wprest_crystalbay', 'curated_dates')`);
+    await c.query(`update public.sources set family = 'html' where slug = 'tahoe-donner' or family not in ('tribe','ics','ics_chambermaster','ics_civicplus','ics_eventsmanager','rss','squarespace','jsonld','html','llm','html_finalsite')`);
     await setCheck(c, A13_FAMILIES.filter((f) => f !== 'html_tahoedonner'));
     assert.ok(!(await famDef(c)).includes('html_tahoedonner'));
     await c.query(SQL);
