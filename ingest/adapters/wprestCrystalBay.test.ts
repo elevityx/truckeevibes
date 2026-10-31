@@ -414,6 +414,13 @@ describe('AC-21-10 parseCbcAgeLabels', () => {
     const tab = one.replace(/https:\/\/www\.crystalbaycasino\.com\/event\//g, 'https://external.example\t/event/');
     expect(parseCbcAgeLabels(tab).size).toBe(0);
   });
+  it('recheck 4: data-href, an href in text or in an HTML comment never names the event', () => {
+    const a = LIST.indexOf('<article'); const b = LIST.indexOf('<article', a + 1);
+    const bare = LIST.slice(a, b).replace(/href="[^"]*"/g, 'href="#"');
+    for (const extra of ['<span data-href="/event/steely-dead/">x</span>', '<p>href="/event/steely-dead/"</p>', '<!-- <a href="/event/steely-dead/">x</a> -->']) {
+      expect(parseCbcAgeLabels(bare.replace('</ul>', `</ul>${extra}`)).size, extra).toBe(0);
+    }
+  });
   it('an empty, unrelated or article-free page gives no labels', () => {
     expect(parseCbcAgeLabels('').size).toBe(0);
     expect(parseCbcAgeLabels('<html><body>closed</body></html>').size).toBe(0);

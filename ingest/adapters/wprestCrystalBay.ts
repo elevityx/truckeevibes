@@ -3,6 +3,7 @@
 // Facts only: no description text or images are kept, the link goes to the casino's own event page, and Tixr is never fetched or emitted. Trust ships at review (A14 r3-1).
 import type { Adapter, AdapterCtx, AdapterResult, SourceEvent } from '../types';
 import { decodeUtf8, dedupe, makeEvent, sha256Hex, tzOf } from './common';
+import * as cheerio from 'cheerio';
 import { decodeEntities, plainText, toUtcFromLocal } from '../core/normalize';
 
 const API_URL = 'https://www.crystalbaycasino.com/wp-json/wp/v2/event?per_page=100';
@@ -115,55 +116,43 @@ export function parseCbcRoom(title: string, text: string): { title: string; room
 
 /** The only age labels the casino's card field is read for (own keys only: a Map, never an object lookup); anything else gives no age. */
 const AGE_LABELS: ReadonlyMap<string, string> = new Map([['21+', '21+'], ['18+', '18+'], ['all ages', 'All ages']]);
-/**
- * Review F3 / rechecks 1-3: a card's event is read from its `href` attributes only, each resolved the way a browser does (`new URL`
- * strips tabs and newlines and resolves relative values against the casino's origin). Only `https://www.crystalbaycasino.com/event/<slug>/`
- * counts; any href that mentions `/event/` but resolves elsewhere rejects the whole card. Text and data attributes never count.
- */
-const HREF = /\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/gi;
 const ORIGIN = 'https://www.crystalbaycasino.com';
-function cardEvents(card: string): Set<string> | null {
-  const slugs = new Set<string>();
-  for (const m of card.matchAll(HREF)) {
-    const raw = decodeEntities(m[1] ?? m[2] ?? m[3] ?? '');
-    let u: URL;
-    try { u = new URL(raw, `${ORIGIN}/`); } catch { if (/event/i.test(raw)) return null; continue; }
-    const own = u.origin === ORIGIN;
-    const ev = /^\/event\/([^/]+)\/$/.exec(u.pathname);
-    if (own && ev && u.search === '' && u.hash === '') { slugs.add(ev[1]); continue; }
-    if (/\/event\//i.test(u.href) || /\/event\//i.test(raw.replace(/[\t\n\r]/g, ''))) return null;
-  }
-  return slugs;
-}
-const EVENT_SLUG = /^[a-z0-9-]{1,120}$/;
 
 /**
- * Spec_21Plus_Coverage (r2): event link -> the casino's own age label for that show, from the events list page. The page renders each show
- * as one `<article class="ae-post-item …">` card. A card counts only when it links to exactly one event (absolute or relative `/event/…/`)
- * and holds exactly one element whose class list has the `fa-id-card` token, inside an `elementor-post-info__item` whose text is a known
- * label. Anything else on a card (no link, two links, two age fields, an unknown label) gives that card nothing; a link whose cards
- * disagree gets nothing. Fail closed: a missed label leaves the age to the event's own REST text.
+ * Spec_21Plus_Coverage (r3; review F3 and rechecks 1-4): event link -> the casino's own age label for that show, from the events list page,
+ * read through a real HTML parser (cheerio), so comments, text and `data-*` attributes never count. Each show is one
+ * `article.ae-post-item` card. A card counts only when:
+ * - its `<a href>` elements, each resolved the way a browser does (`new URL` against the casino's origin), name exactly one
+ *   `https://www.crystalbaycasino.com/event/<slug>/` (no query or hash), and no `<a href>` mentioning `/event/` resolves anywhere else;
+ * - it holds exactly one element with the `fa-id-card` class, whose list item's `.elementor-post-info__item` text is a known label.
+ * Anything else gives that card nothing; a link whose cards disagree gets nothing. A missed label leaves the age to the REST text.
  */
 export function parseCbcAgeLabels(html: string): Map<string, string> {
   const seen = new Map<string, string | null>();
-  const cards = html.split(/<article\s+class="ae-post-item\b/).slice(1).map((c) => c.split(/<\/article>/)[0]);
-  for (const card of cards) {
-    const slugs = cardEvents(card);
-    if (!slugs || slugs.size !== 1) continue;
-    const slug = [...slugs][0];
-    if (!EVENT_SLUG.test(slug)) continue;
-    const link = `https://www.crystalbaycasino.com/event/${slug}/`;
-    // Exactly one age field: the raw token count, so quoting or extra classes can't hide a second one.
-    const ids = [...card.matchAll(/fa-id-card(?![\w-])/g)];
+  const $ = cheerio.load(html);
+  $('article.ae-post-item').each((_, el) => {
+    const card = $(el);
+    const slugs = new Set<string>();
+    let foreign = false;
+    card.find('a[href]').each((__, a) => {
+      const raw = $(a).attr('href') ?? '';
+      let u: URL | null = null;
+      try { u = new URL(raw, `${ORIGIN}/`); } catch { u = null; }
+      const ev = u ? /^\/event\/([a-z0-9-]{1,120})\/$/.exec(u.pathname) : null;
+      if (u && u.origin === ORIGIN && ev && u.search === '' && u.hash === '') slugs.add(ev[1]);
+      else if (/\/event\//i.test(raw) || (u && /\/event\//i.test(u.href))) foreign = true;
+    });
+    if (foreign || slugs.size !== 1) return;
+    const link = `${ORIGIN}/event/${[...slugs][0]}/`;
+    const ids = card.find('.fa-id-card');
     let label: string | null = null;
     if (ids.length === 1) {
-      const rest = card.slice(ids[0].index! + ids[0][0].length);
-      const t = /^[^>]*>\s*<\/i>\s*<\/span>\s*<span\s+class\s*=\s*(["'])[^"']*\belementor-post-info__item\b[^"']*\1\s*>([^<]{1,40})<\/span>/.exec(rest);
-      if (t) label = AGE_LABELS.get(decodeEntities(t[2]).trim().toLowerCase()) ?? null;
+      const items = ids.first().closest('li').find('.elementor-post-info__item');
+      if (items.length === 1) label = AGE_LABELS.get(items.first().text().replace(/\s+/g, ' ').trim().toLowerCase()) ?? null;
     }
     if (seen.has(link) && seen.get(link) !== label) seen.set(link, null);
     else if (!seen.has(link)) seen.set(link, label);
-  }
+  });
   const out = new Map<string, string>();
   for (const [k, v] of seen) if (typeof v === 'string') out.set(k, v);
   return out;
