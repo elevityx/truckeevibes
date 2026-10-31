@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { availability, chooseTabs, collect, collectSessions, collectTabIds, extractPage, isBlocked, mapSessions, parseGroupAnswer, parseTabAnswer, toSession, parseAges, parseTimes, firstMeeting, runRead, type Rec1Config, type Session } from './rec1';
+import { SKIP_GROUP, availability, chooseTabs, collect, collectSessions, collectTabIds, extractPage, isBlocked, mapSessions, parseGroupAnswer, parseTabAnswer, toSession, parseAges, parseTimes, firstMeeting, runRead, type Rec1Config, type Session } from './rec1';
 
 const FIX = join(__dirname, '..', 'fixtures', 'rec1');
 const fx = (n: string) => readFileSync(join(FIX, n), 'utf8');
@@ -362,7 +362,7 @@ describe('runRead: the request plan (AC-K3-07, DR-K3-5)', () => {
 describe('K3.1 grammars (AC-K3.1-03/04)', () => {
   it('the real saved Welcome-tab answer parses: one deferred activity group with itemCount 3', () => {
     const t = parseTabAnswer(JSON.parse(fx('real-welcome-tab.json')));
-    expect(t).toEqual({ records: [], refs: [{ groupId: '267566', itemCount: 3 }], skipped: 0, hasMore: false });
+    expect(t).toEqual({ records: [], refs: [{ groupId: '267566', itemCount: 3, name: 'TDRPD Events' }], skipped: 0, hasMore: false });
   });
   const real = () => JSON.parse(fx('real-welcome-tab.json'));
   it('an unknown group type, non-empty errors, a nested object in a section, a bad group id are layout_changed', () => {
@@ -403,6 +403,11 @@ describe('K3.1 grammars (AC-K3.1-03/04)', () => {
     { id: '301', name: 'Swim', type: 'activity', deferredLoading: true, itemCount: '12', items: [] },
     { id: '302', name: 'Art', type: 'activity', deferredLoading: true, itemCount: '2', items: [] },
     { id: '303', name: 'Pool', type: 'location', deferredLoading: true, itemCount: '1', items: [] },
+  ] }, { id: '2', name: 'Again', order: 1, groups: [
+    { id: '301', name: 'Swim', type: 'activity', deferredLoading: true, itemCount: '12', items: [] },
+    { id: '304', name: 'Adult Drop ins', type: 'activity', deferredLoading: true, itemCount: '8', items: [] },
+    { id: '305', name: 'Private Swim Lessons | Garrett', type: 'activity', deferredLoading: true, itemCount: '160', items: [] },
+    { id: '306', name: 'Aquatic Center Membership', type: 'activity', deferredLoading: true, itemCount: '21', items: [] },
   ] }] };
   type Call = { method: string; url: string; at: number; form?: string; ua?: string };
   function harness(reply: (c: Call) => { status: number; body: string }) {
@@ -437,7 +442,7 @@ describe('K3.1 grammars (AC-K3.1-03/04)', () => {
     for (let i = 1; i < h.calls.length; i++) expect(h.calls[i].at - h.calls[i - 1].at).toBeGreaterThanOrEqual(6_000);
     expect(h.calls.every((c) => c.ua === undefined)).toBe(true);
     expect(r.sessions.length).toBe(14);
-    expect(r.notes).toMatchObject({ tabs_skipped: 2, groups_skipped: 1, groups: 2, plan: 3 });
+    expect(r.notes).toMatchObject({ tabs_skipped: 2, groups_skipped: 4, groups_repeated: 1, groups: 2, plan: 3 });
     expect(Object.keys(r.raw ?? {}).sort()).toEqual(['group-1001-301-p1.json', 'group-1001-301-p2.json', 'group-1001-302-p1.json', 'manifest.json', 'tab-1001.json', 'tab-1002.json', 'tab-1004.json', 'tab-1005.json', 'tabs.json']);
     expect(JSON.parse(r.raw!['manifest.json'])).toMatchObject({ version: 1, outcome: 'ok', groups: [{ group: '301', itemCount: 12, sessions: 12 }, { group: '302', itemCount: 2, sessions: 2 }] });
   });
@@ -469,6 +474,10 @@ describe('K3.1 grammars (AC-K3.1-03/04)', () => {
     expect((await runRead(CFG, h.deps)).status).toBe('layout_changed');
     const h2 = harness((c) => (c.url.endsWith('/1001/302') ? { status: 200, body: JSON.stringify({ items: group(3, 200), itemCount: 2 }) } : groups(c)));
     expect((await runRead(CFG, h2.deps)).status).toBe('layout_changed');
+  });
+  it('the non-event group rule (r3)', () => {
+    for (const n of ['Adult Drop ins', 'Senior Programs- Goldenfish', 'Fitness Membership', 'Aquatic Punch Cards', 'Drop-in Sports Punch cards', 'Private Swim Lessons | Jenn', 'The Savvy Dog | Dog Training', 'CAC | Creekside Shuttle', 'Swim Level 2 - Teen/Adult']) expect(SKIP_GROUP.test(n)).toBe(true);
+    for (const n of ['Youth Hockey Clinics', 'Swim Level 0 - Parent & Tot', 'Kids Korner and Camps', 'Art Classes', 'Ice Skating  Lessons', 'Group Fitness', 'Safety Classes - Lifeguard']) expect(SKIP_GROUP.test(n)).toBe(false);
   });
   it('session metadata lists (groups) are allowed but never read (review r2-3)', () => {
     expect(toSession(sess('1', { groups: [1, { id: 2, name: 'x' }] })).id).toBe('1');

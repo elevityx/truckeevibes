@@ -259,7 +259,12 @@ export function chooseTabs(json: unknown): { ids: string[]; skipped: number } {
   return { ids: chosen.map((t) => String(t.id)), skipped: tabs.length - chosen.length };
 }
 
-export interface GroupRef { groupId: string; itemCount: number }
+export interface GroupRef { groupId: string; itemCount: number; name?: string }
+/**
+ * K3.1 r3 (first full read, 2026-10-31: 70 groups, plan 103): groups that are never youth events are not requested. Memberships, punch
+ * cards, passes, private (one-to-one) lessons, adult and senior programs, dog training and the shuttle. Ages still decide every kept row.
+ */
+export const SKIP_GROUP = /\b(?:adults?|seniors?|memberships?|punch ?cards?|season pass(?:es)?|private swim lessons|dog training|shuttle)\b/i;
 /** DR-K3.1-3: a getItems answer, closed grammar. Inline session records, deferred activity group refs, and a skip count. */
 export function parseTabAnswer(json: unknown): { records: unknown[]; refs: GroupRef[]; skipped: number; hasMore: boolean } {
   if (!plain(json) || typeof json.hasMoreResults !== 'boolean') shape();
@@ -280,7 +285,7 @@ export function parseTabAnswer(json: unknown): { records: unknown[]; refs: Group
       if (o.type !== 'activity') { skipped++; return; }
       const c = typeof o.itemCount === 'number' ? o.itemCount : typeof o.itemCount === 'string' && /^\d{1,3}$/.test(o.itemCount) ? Number(o.itemCount) : NaN;
       if (!Number.isInteger(c) || c < 0 || c > 500) shape();
-      refs.push({ groupId: id, itemCount: c });
+      refs.push({ groupId: id, itemCount: c, name: typeof o.name === 'string' ? o.name : '' });
     } else if (o.deferredLoading === false || o.deferredLoading === undefined) {
       if (o.type !== 'activity') { skipped++; return; }
       records.push(...items);
@@ -354,7 +359,8 @@ export interface JsonSource { tabs(): Promise<string>; tab(t: string, p: number)
  * failure is remembered and the read goes on, so the saved raw is complete for `--from`; the result is then layout_changed.
  */
 export async function collect(src: JsonSource, raw: Record<string, string> = {}): Promise<Omit<ReadOut, 'requests' | 'httpStatus'>> {
-  const notes: Record<string, number> = { tabs_skipped: 0, groups_skipped: 0, groups: 0, plan: 0 };
+  const notes: Record<string, number> = { tabs_skipped: 0, groups_skipped: 0, groups_repeated: 0, groups: 0, plan: 0 };
+  const skippedIds = new Set<string>();
   let bad = false;
   const parse = (body: string): unknown => { try { return JSON.parse(body); } catch { bad = true; return undefined; } };
   const records: unknown[] = [];
@@ -370,7 +376,12 @@ export async function collect(src: JsonSource, raw: Record<string, string> = {})
       let t;
       try { t = parseTabAnswer(parse(body)); } catch (e) { if (!(e instanceof Rec1Fail)) throw e; bad = true; break; }
       records.push(...t.records);
-      for (const ref of t.refs) refs.push({ tab, ref });
+      for (const ref of t.refs) {
+        // r3: the same group is listed under several sections and tabs; read it once (first tab), skip non-event groups
+        if (refs.some((x) => x.ref.groupId === ref.groupId) || skippedIds.has(ref.groupId)) { notes.groups_repeated++; continue; }
+        if (SKIP_GROUP.test(ref.name ?? '')) { skippedIds.add(ref.groupId); notes.groups_skipped++; continue; }
+        refs.push({ tab, ref });
+      }
       notes.groups_skipped += t.skipped;
       if (!t.hasMore) break;
     }
