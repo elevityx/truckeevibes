@@ -29,10 +29,14 @@ async function inTx(fn) {
   }
 }
 // M1 manual (20261031000100_manual_sources.sql) makes bar-of-america and fiftyfifty-brewing manual-only; the A14 body's self-check
-// still describes them as link-only manifest rows, so a re-apply case first puts them back to their A14 state (rolled back).
-const toA14 = (c) => c.query(`update public.sources set enabled = false, manual_only = false, automation_restricted = false, family = 'html', trust = 'link_only',
+// still describes them as link-only manifest rows, so a re-apply case first puts them back to their A14 state (rolled back). The same for
+// Crystal Bay's defaultCategories, which 20261030000500_21plus_coverage.sql changed after A14.
+const toA14 = async (c) => {
+  await c.query(`update public.sources set config = jsonb_set(config, '{defaultCategories}', '["nightlife"]'::jsonb) where slug = 'crystal-bay-casino'`);
+  await c.query(`update public.sources set enabled = false, manual_only = false, automation_restricted = false, family = 'html', trust = 'link_only',
     ingest_disposition = 'unknown', allowed_methods = '{}', allowed_hosts = array[case slug when 'bar-of-america' then 'www.barofamerica.com' else 'www.fiftyfiftybrewing.com' end]
   where slug in ('bar-of-america', 'fiftyfifty-brewing')`);
+};
 const famDef = async (c) => (await c.query(`select pg_get_constraintdef(oid) d from pg_constraint where conrelid = 'public.sources'::regclass and conname = 'sources_family_check'`)).rows[0].d;
 const SLUGS = ['crystal-bay-casino', 'moodys-bistro', 'eaa-1073-breakfast', 'bar-of-america', 'rmu-truckee', 'tourist-club', 'cottonwood-truckee', 'fiftyfifty-brewing',
   'glasses-wine-bar', 'the-grid-kings-beach', 'gar-woods'];

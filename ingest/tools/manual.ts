@@ -65,11 +65,13 @@ export function withVenue(e: SourceEvent, cfg: Record<string, unknown>): SourceE
   const town = str(cfg.town) || undefined;
   if (typeof e.lat === 'number' && typeof e.lng === 'number') return { ...e, town: e.town ?? town };
   const list = Array.isArray(cfg.venues) ? cfg.venues.map(venueOf) : [];
+  const single = venueOf(cfg.venue);
   let v: VenueCfg | undefined;
   if (e.venueName) {
-    v = list.find((x) => { try { return !!x.match && new RegExp(x.match, 'i').test(e.venueName ?? ''); } catch { return false; } });
+    // a single-venue source (no venues[]) puts every item at its venue (PR review P1-3)
+    v = list.length === 0 ? single : list.find((x) => { try { return !!x.match && new RegExp(x.match, 'i').test(e.venueName ?? ''); } catch { return false; } });
   } else {
-    v = venueOf(cfg.venue);
+    v = single;
   }
   if (!v || !v.name || num(v.lat) === undefined || num(v.lng) === undefined) return { ...e, town: e.town ?? town };
   const out: SourceEvent = { ...e, venueName: v.name, lat: v.lat, lng: v.lng, town: v.town ?? town ?? e.town };
@@ -107,14 +109,22 @@ export function mapGcal(text: string, cfg: Record<string, unknown>, now: Date) {
   const dropped: Record<string, number> = { ...r.dropped };
   const drop = (c: string) => { dropped[c] = (dropped[c] ?? 0) + 1; };
   const items: SourceEvent[] = [];
+  // The venue name goes into makeEvent so the classifier sees it (adult venue words; PR review P1-3).
+  const vName = venueOf(cfg.venue).name;
+  const hints = hintsOf(cfg);
   for (const e of r.items) {
-    if (!e.allDay) { items.push({ ...e, url: link }); continue; }
+    if (!e.allDay) {
+      if (Date.parse(e.startsAt) < now.getTime()) { drop('past'); continue; }
+      items.push(makeEvent({ externalKey: e.externalKey, title: e.title, startsAt: e.startsAt, endsAt: e.endsAt, allDay: false, tz: e.tz, url: link,
+        venueName: vName ?? e.venueName, family: 'ics', hints, cancelled: e.cancelled, seriesUid: e.seriesUid }));
+      continue;
+    }
     const t = titleTime(e.title);
     if (!t || !e.startDate || e.endDate !== addDays(e.startDate, 1)) { drop('no_time'); continue; }
     const startsAt = toUtcFromLocal(e.startDate, t.hhmm, tz);
     if (startsAt === 'dst_gap') { drop('dst_gap'); continue; }
     if (Date.parse(startsAt) < now.getTime()) { drop('past'); continue; }
-    items.push(makeEvent({ externalKey: e.externalKey, title: t.rest, startsAt, allDay: false, tz, url: link, family: 'ics', hints: hintsOf(cfg), cancelled: e.cancelled }));
+    items.push(makeEvent({ externalKey: e.externalKey, title: t.rest, startsAt, allDay: false, tz, url: link, venueName: vName, family: 'ics', hints, cancelled: e.cancelled }));
   }
   return finish(items, dropped, text);
 }
@@ -134,6 +144,8 @@ export function mapElfsight(text: string, cfg: Record<string, unknown>, now: Dat
   if (!link) throw new Error('config_link');
   const today = localDate(now, tz0);
   const last = addDays(today, 120);
+  const winEnd = now.getTime() + 120 * 86_400_000;
+  const vName = venueOf(cfg.venue).name;
   const dropped: Record<string, number> = {};
   const drop = (c: string) => { dropped[c] = (dropped[c] ?? 0) + 1; };
   const items: SourceEvent[] = [];
@@ -151,11 +163,13 @@ export function mapElfsight(text: string, cfg: Record<string, unknown>, now: Dat
     if (ed < today || sd > last) { drop('out_of_window'); continue; }
     const key = `elfsight:${wid}#${id}`;
     if (st === 'date') {
+      if (sd < today) { drop('past'); continue; } // the database refuses a start more than a day back (PR review P2-1)
       // Elfsight's all-day end date is inclusive; the database wants an exclusive end (review P1-6).
       if (ed > addDays(sd, 14)) { drop('long_range'); continue; }
       const mid = toUtcFromLocal(sd, '00:00', tz);
       if (mid === 'dst_gap') { drop('dst_gap'); continue; }
-      items.push(makeEvent({ externalKey: key, title: name, startsAt: mid, allDay: true, startDate: sd, endDate: addDays(ed, 1), tz, url: link, family: 'elfsight', hints: hintsOf(cfg) }));
+      if (Date.parse(mid) > winEnd) { drop('out_of_window'); continue; }
+      items.push(makeEvent({ externalKey: key, title: name, startsAt: mid, allDay: true, startDate: sd, endDate: addDays(ed, 1), tz, url: link, venueName: vName, family: 'elfsight', hints: hintsOf(cfg) }));
       continue;
     }
     if (!T.test(str(e.start?.time)) || !T.test(str(e.end?.time))) { drop('time_unparsed'); continue; }
@@ -165,7 +179,8 @@ export function mapElfsight(text: string, cfg: Record<string, unknown>, now: Dat
     const span = Date.parse(en) - Date.parse(s);
     if (!(span > 0 && span <= 12 * 3_600_000)) { drop('implausible_time'); continue; }
     if (Date.parse(s) < now.getTime()) { drop('past'); continue; }
-    items.push(makeEvent({ externalKey: key, title: name, startsAt: s, endsAt: en, allDay: false, tz, url: link, family: 'elfsight', hints: hintsOf(cfg) }));
+    if (Date.parse(s) > winEnd) { drop('out_of_window'); continue; }
+    items.push(makeEvent({ externalKey: key, title: name, startsAt: s, endsAt: en, allDay: false, tz, url: link, venueName: vName, family: 'elfsight', hints: hintsOf(cfg) }));
   }
   return finish(items, dropped, text);
 }
@@ -194,14 +209,15 @@ export function mapSquarespace(text: string, cfg: Record<string, unknown>, now: 
     if (sMs > end) { drop('out_of_window'); continue; }
     const fu = str(e.fullUrl);
     if (!/^\/(?!\/)/.test(fu)) { drop('off_site_link'); continue; }
-    const url = httpsUrl(`https://${host}${fu}`, host);
-    if (!url) { drop('off_site_link'); continue; }
+    const full = httpsUrl(`https://${host}${fu}`, host);
+    if (!full) { drop('off_site_link'); continue; }
+    const url = full.length <= 300 ? full : page; // a much-duplicated event's slug can outgrow the 300-char URL limit (PR review P2-3)
     const endsAt = eMs !== undefined && eMs - sMs <= 24 * 3_600_000 ? new Date(eMs).toISOString() : undefined;
     const loc = e.location && typeof e.location === 'object' ? e.location : {};
     const lat = num(loc.mapLat), lng = num(loc.mapLng);
     const geo = lat !== undefined && lng !== undefined && lat !== 0 && lng !== 0;
     items.push(makeEvent({ externalKey: `sqs:${host}#${id}`, title, startsAt: new Date(sMs).toISOString(), endsAt, allDay: false, tz, url,
-      venueName: str(loc.addressTitle).trim() || undefined, address: [str(loc.addressLine1), str(loc.addressLine2)].map((x) => x.trim()).filter(Boolean).join(', ') || undefined,
+      venueName: str(loc.addressTitle).trim() || venueOf(cfg.venue).name || undefined, address: [str(loc.addressLine1), str(loc.addressLine2)].map((x) => x.trim()).filter(Boolean).join(', ') || undefined,
       lat: geo ? lat : undefined, lng: geo ? lng : undefined, family: 'squarespace', hints: hintsOf(cfg) }));
   }
   return finish(items, dropped, text);

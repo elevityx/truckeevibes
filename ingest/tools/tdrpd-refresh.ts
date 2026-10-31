@@ -66,6 +66,11 @@ async function main(argv: string[]): Promise<number> {
   let r;
   try {
     r = await runRead(cfg, { http: curlHttp(jar, true, log, 60), now: () => Date.now(), sleep: (ms) => new Promise((res) => setTimeout(res, ms)) });
+  } catch (e) {
+    // PR review P1-2: an unexpected error after the grant still records a zero-item non-ok run (nothing marked missing).
+    await submit(grant, startedAt, 'parse_error', [], { error_code: 'incomplete' });
+    log(`stopped: ${e instanceof Error ? e.constructor.name : 'unknown'}; a zero-item non-ok run was recorded`);
+    return 1;
   } finally {
     rmSync(jar, { recursive: true, force: true }); // the per-run cookie jar never outlives the run
   }

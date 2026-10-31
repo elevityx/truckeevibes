@@ -503,7 +503,7 @@ export async function runRead(cfg: Rec1Config, deps: ReadDeps): Promise<ReadOut>
       requests++;
       r = await deps.http(req);
     }
-    if (isBlocked(r.status, r.body)) throw new Rec1Fail('site_block');
+    if (isBlocked(r.status, r.body)) throw Object.assign(new Rec1Fail('site_block'), { httpStatus: r.status });
     if (r.status !== 200) throw Object.assign(new Rec1Fail('http_error'), { httpStatus: r.status });
     if (json) { try { JSON.parse(r.body); } catch { throw new Rec1Fail('site_block'); } }
     return r.body;

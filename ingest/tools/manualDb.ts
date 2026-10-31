@@ -37,13 +37,16 @@ export interface CurlReq { method: 'GET' | 'POST'; url: string; headers: Record<
 export function curlArgs(req: CurlReq, out: string, jar?: string, maxTime = 30): string[] {
   const args = ['-q', '-sS', '--max-time', String(maxTime), '--max-filesize', '5000000', '--proto', '=https', '-o', out, '-w', '%{http_code}'];
   if (jar) args.push('-b', join(jar, 'cookies'), '-c', join(jar, 'cookies'));
-  for (const [k, v] of Object.entries(req.headers)) args.push('-H', `${k}: ${v}`);
+  for (const [k, v] of Object.entries(req.headers)) {
+    if (!/^[A-Za-z0-9-]+$/.test(k) || /[\r\n]/.test(v)) throw new Error('bad_header');
+    args.push('-H', `${k}: ${v}`);
+  }
   if (req.method === 'POST') for (const [k, v] of Object.entries(req.form ?? {})) args.push('--data-urlencode', `${k}=${v}`);
   args.push(req.url);
   return args;
 }
 
-/** `log` gets one line per curl error (exit code and the first path segments only, never a query string). */
+/** `log` gets one line per curl error (the exit code only: no URL, V11). */
 export function curlHttp(dir: string, useJar: boolean, log: (s: string) => void = () => {}, maxTime = 30) {
   return async (req: CurlReq): Promise<{ status: number; body: string }> => {
     const out = join(dir, 'body');
@@ -51,7 +54,7 @@ export function curlHttp(dir: string, useJar: boolean, log: (s: string) => void 
     let code = '';
     try { code = (await run('curl', curlArgs(req, out, useJar ? dir : undefined, maxTime), { maxBuffer: 1024 * 1024 })).stdout; } catch (e) {
       code = String((e as { stdout?: unknown }).stdout ?? '');
-      log(`curl exit ${String((e as { code?: unknown }).code ?? '?')} on ${new URL(req.url).pathname.split('/').slice(0, 5).join('/')}`);
+      log(`curl exit ${String((e as { code?: unknown }).code ?? '?')}`);
     }
     let body = '';
     try { body = readFileSync(out, 'utf8').slice(0, 5_000_000); } catch { body = ''; }
@@ -91,8 +94,14 @@ export async function submit(grant: string, startedAt: string, status: string, i
 /** Records a block through the grant, then disables the manual-only row (record first: the batch rechecks permission). */
 export async function recordBlock(grant: string, startedAt: string, slug: string, parserVersion: string, httpStatus?: number): Promise<void> {
   if (!SLUG_RE.test(slug)) throw new Error('slug');
-  await submit(grant, startedAt, 'http_error', [], { error_code: 'site_block', ...(httpStatus ? { http_status: httpStatus } : {}) }, parserVersion,
-    `\nupdate public.sources set enabled = false where slug = '${slug}' and manual_only;`);
+  const disable = `update public.sources set enabled = false where slug = '${slug}' and manual_only;`;
+  const status = httpStatus && httpStatus >= 100 && httpStatus <= 599 ? { http_status: httpStatus } : {};
+  try {
+    await submit(grant, startedAt, 'http_error', [], { error_code: 'site_block', ...status }, parserVersion, `\n${disable}`);
+  } catch (e) {
+    await sql(disable); // PR review P1-1: the kill switch holds even when the run record fails (expired grant, clock skew)
+    throw e;
+  }
 }
 
 export async function drain(log: (s: string) => void): Promise<void> {

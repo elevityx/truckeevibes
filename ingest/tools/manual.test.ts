@@ -70,6 +70,13 @@ describe('manual_gcal (AC-M1-01)', () => {
     expect(by('Holiday Party')).toHaveLength(1);
     expect(r.items.every((i) => i.url === BOA.link)).toBe(true);
   });
+  it('timed rows get the config hints and the venue name (the classifier sees it), past timed rows drop', () => {
+    const h = by('Holiday Party')[0];
+    expect(h.categoriesHint).toContain('music');
+    expect(h.venueName).toBe('Bar of America');
+    const late = new Date('2026-12-06T08:00:00Z'); // after the party
+    expect(mapGcal(fx('bar-of-america.ics'), BOA, late).items.some((i) => i.title === 'Holiday Party')).toBe(false);
+  });
   it('a multi-day all-day row with a time drops', () => {
     const multi = fx('bar-of-america.ics').replace('DTEND;VALUE=DATE:20261129', 'DTEND;VALUE=DATE:20261130');
     expect(mapGcal(multi, BOA, NOW).items.some((i) => i.startsAt === '2026-11-29T05:00:00Z')).toBe(false);
@@ -132,6 +139,14 @@ describe('manual_elfsight (AC-M1-02)', () => {
     expect([d.startDate, d.endDate]).toEqual(['2026-11-14', '2026-11-15']);
     expect(r.dropped.long_range).toBe(1);
   });
+  it('a date event that already started, or a start past the 120-day window, drops', () => {
+    const r = mapElfsight(withEvents([
+      ev('ongoing', { start: { type: 'date', date: '2026-10-29' }, end: { type: 'date', date: '2026-11-02' } }),
+      ev('far', { start: { type: 'datetime', date: '2027-02-28', time: '20:00' }, end: { type: 'datetime', date: '2027-02-28', time: '22:00' } }),
+    ]), FF, NOW);
+    expect(r.items.some((i) => i.title.startsWith('Probe'))).toBe(false);
+    expect(r.dropped.past).toBe(1);
+  });
   it('a wrong widget id or no settings.events = layout_changed', () => {
     expect(() => mapElfsight(fx('fiftyfifty-elfsight.json'), { ...FF, widget: '00000000-0000-0000-0000-000000000000' }, NOW)).toThrow('layout_changed');
     const j = structuredClone(base) as { data: { widgets: Record<string, { data: { settings: Record<string, unknown> } }> } };
@@ -165,6 +180,12 @@ describe('manual_squarespace (AC-M1-03)', () => {
     expect(r.items).toHaveLength(4);
     expect(r.dropped.off_site_link).toBe(2);
     expect(r.dropped.implausible_time).toBe(1);
+  });
+  it('a fullUrl longer than the 300-char URL limit falls back to the events page', () => {
+    const j = structuredClone(base);
+    j.upcoming[0].fullUrl = `/events/${'x-abcde'.repeat(50)}`;
+    const r = mapSquarespace(JSON.stringify(j), TNB, NOW);
+    expect(r.items.find((i) => i.externalKey.endsWith(String(j.upcoming[0].id)))!.url).toBe(TNB.link);
   });
   it('no upcoming array = layout_changed', () => {
     expect(() => mapSquarespace(JSON.stringify({ collection: {} }), TNB, NOW)).toThrow('layout_changed');
@@ -237,6 +258,10 @@ describe('the curl fetch shim (AC-M1-05)', () => {
     const t = source({ slug: 'diamond-peak', family: 'tribe', config: { base: 'https://www.diamondpeak.com' }, allowed_hosts: ['www.diamondpeak.com'], allowed_methods: ['api'], page_cap: 2 });
     const f = curlFetch(t, fakeCurl(() => ({ status: 200, body: '<html>Just a moment... challenge-platform</html>' })).deps);
     await expect(manualAdapter(t).fetch({ source: t, fetch: f, now: NOW })).rejects.toBeInstanceOf(ManualBlock);
+  });
+  it('curl argv refuses a header with a line break or a bad name', () => {
+    expect(() => curlArgs({ method: 'GET', url: 'https://a.test/', headers: { Accept: 'x\r\nHost: evil' } }, '/tmp/o')).toThrow('bad_header');
+    expect(() => curlArgs({ method: 'GET', url: 'https://a.test/', headers: { 'A B': 'x' } }, '/tmp/o')).toThrow('bad_header');
   });
   it('curl argv: -q first, https only, no redirects, no user agent', () => {
     const a = curlArgs({ method: 'GET', url: 'https://calendar.google.com/x', headers: {} }, '/tmp/out');
