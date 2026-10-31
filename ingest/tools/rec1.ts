@@ -29,7 +29,7 @@ export function extractPage(html: string): { key: string; csrfKey: string; csrfT
   return { key, csrfKey, csrfToken };
 }
 
-const BLOCK_TEXT = /cf-chl|challenge-platform|attention required!? \||access denied|are you a robot|verify you are human/i;
+const BLOCK_TEXT = /cf-chl|challenge-platform|attention required|access denied|are you a robot|verify you are human/i;
 /** 401/403/429, or a challenge/block page. The normal catalog page loads reCAPTCHA's script and is not a block. */
 export function isBlocked(status: number, body: string): boolean {
   return status === 401 || status === 403 || status === 429 || BLOCK_TEXT.test(body.slice(0, 20000));
@@ -54,7 +54,7 @@ export function collectSessions(json: unknown): Session[] {
         }
       }
       const flags: Record<string, unknown> = {};
-      for (const [k, x] of Object.entries(o)) if (typeof x === 'boolean' || (typeof x === 'string' && k.toLowerCase() === 'status')) flags[k] = x;
+      for (const [k, x] of Object.entries(o)) if (typeof x === 'boolean' || ((typeof x === 'string' || typeof x === 'number') && SPOT_KEY.test(k))) flags[k] = x;
       if (!out.has(id)) out.set(id, { id, name: name.trim(), features, flags });
       return;
     }
@@ -64,24 +64,33 @@ export function collectSessions(json: unknown): Session[] {
   return [...out.values()];
 }
 
+/** Tab ids; any tab without a valid id makes the whole list unusable (review: no silently skipped tab). */
 export function collectTabIds(json: unknown): string[] {
   const tabs = Array.isArray(json) ? json : (json as { tabs?: unknown })?.tabs;
   if (!Array.isArray(tabs)) return [];
-  return tabs.map((t) => (t && typeof t === 'object' ? String((t as { id?: unknown }).id ?? '') : '')).filter((id) => /^\d{1,10}$/.test(id));
+  const ids = tabs.map((t) => (t && typeof t === 'object' ? String((t as { id?: unknown }).id ?? '') : ''));
+  return ids.every((id) => /^\d{1,10}$/.test(id)) ? ids : [];
+}
+
+/** An items answer must carry a boolean `hasMoreResults` and at least one array container (sections, groups or items). */
+export function itemsEnvelopeOk(json: unknown): json is { hasMoreResults: boolean } {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return false;
+  const o = json as Record<string, unknown>;
+  return typeof o.hasMoreResults === 'boolean' && ['sections', 'groups', 'items'].some((k) => Array.isArray(o[k]));
 }
 
 const pick = (f: Record<string, string>, names: string[]) => names.map((n) => f[n]).find((x) => x !== undefined && x !== '') ?? '';
 
-/** Rec1 age text -> years. `18y and up` / `5+` -> max 99. Grades, months-only and anything else -> null. */
+const YU = String.raw`(?:\s*y(?:rs?)?(?:\s*\d{1,2}\s*m)?|\s*(?:years?|yrs?))?`;
+const GENDER = String.raw`(?:\s*[/,]?\s*(?:coed|co-ed|male|female|boys|girls))?`;
+const AGE_RANGE = new RegExp(String.raw`^(?:ages?\s*)?(\d{1,2})${YU}\s*(?:-|–|to)\s*(\d{1,2})${YU}${GENDER}$`);
+const AGE_UP = new RegExp(String.raw`^(?:ages?\s*)?(\d{1,2})${YU}\s*(?:\+|and up|& up|and older|and over)${GENDER}$`);
+/** Rec1 age text -> years, anchored on the whole value. `18y and up` / `5+` -> max 99. Grades, months, several ranges -> null. */
 export function parseAges(s: string): { min: number; max: number } | null {
-  const t = s.toLowerCase();
-  if (/grade/.test(t)) return null;
-  let m = /(\d{1,2})\s*y(?:rs?)?(?:\s*\d{1,2}\s*m)?\s*[-–]\s*(\d{1,2})\s*y/.exec(t);
-  if (!m) {
-    const up = /(\d{1,2})\s*(?:y|yrs?|years?)?\s*(?:\+|and up|& up|and older|and over)/.exec(t);
-    if (up) return { min: +up[1], max: 99 };
-    m = /(?:ages?\s*)?\b(\d{1,2})\s*[-–]\s*(\d{1,2})\b/.exec(t);
-  }
+  const t = s.toLowerCase().replace(/\s+/g, ' ').trim();
+  const up = AGE_UP.exec(t);
+  if (up) return { min: +up[1], max: 99 };
+  const m = AGE_RANGE.exec(t);
   if (!m || +m[1] > +m[2]) return null;
   return { min: +m[1], max: +m[2] };
 }
@@ -157,14 +166,27 @@ export function firstMeeting(dates: string, days: string, today: string): { date
 }
 
 const CLOSED_FLAG = /^(?:is)?(?:full|closed|soldout|registrationclosed|registrationover|cancell?ed|waitlistonly)$/i;
-const CLOSED_TEXT = /^(?:0|full|closed|wait ?list.*|sold out|none|cancell?ed)$/i;
-function isClosed(s: Session): boolean {
+const OPEN_FLAG = /^(?:is)?(?:open|available|registrationopen)$/i;
+const SPOT_KEY = /^(?:spots|openings|spotsavailable|availability|available|remaining|status|spotsleft)$/i;
+/** Explicit availability: any closed signal vetoes; open needs a positive signal; nothing recognized is unknown (dropped). */
+export function availability(s: Session): 'open' | 'closed' | 'unknown' {
+  const signals: string[] = [];
   for (const [k, v] of Object.entries(s.flags)) {
-    if (v === true && CLOSED_FLAG.test(k)) return true;
-    if (typeof v === 'string' && /full|closed|wait|cancel|sold out/i.test(v)) return true;
+    if (typeof v === 'boolean') { if (CLOSED_FLAG.test(k)) signals.push(v ? 'closed' : ''); else if (OPEN_FLAG.test(k)) signals.push(v ? 'open' : 'closed'); }
+    else if (typeof v === 'number' && SPOT_KEY.test(k)) signals.push(v > 0 ? 'open' : 'closed');
+    else if (typeof v === 'string' && SPOT_KEY.test(k)) signals.push(textSignal(v));
   }
-  const spots = pick(s.features, ['spots', 'openings', 'spotsavailable', 'availability', 'available', 'remaining', 'status']);
-  return spots !== '' && CLOSED_TEXT.test(spots);
+  for (const [k, v] of Object.entries(s.features)) if (SPOT_KEY.test(k)) signals.push(textSignal(v));
+  if (signals.includes('closed')) return 'closed';
+  if (signals.includes('unknown')) return 'unknown';
+  return signals.includes('open') ? 'open' : 'unknown';
+}
+function textSignal(v: string): string {
+  const t = v.trim().toLowerCase();
+  if (/^\d{1,4}$/.test(t)) return +t > 0 ? 'open' : 'closed';
+  if (/full|closed|wait|cancel|sold out|^none$/.test(t)) return 'closed';
+  if (/^(?:open|available|\d{1,4} (?:spots?|openings?)(?: left| available)?)$/.test(t)) return /^0 /.test(t) ? 'closed' : 'open';
+  return t === '' ? '' : 'unknown';
 }
 
 export interface MapOut { items: SourceEvent[]; dropped: Record<string, number>; found: number }
@@ -183,7 +205,9 @@ export function mapSessions(sessions: Session[], cfg: Rec1Config, now: Date): Ma
     const ages = parseAges(pick(s.features, ['agegender', 'ages', 'age', 'agerange', 'agegroup']));
     if (!ages) { drop('age_unparsed'); continue; }
     if (ages.max > 17) { drop('not_youth'); continue; }
-    if (isClosed(s)) { drop('full_or_closed'); continue; }
+    const avail = availability(s);
+    if (avail === 'closed') { drop('full_or_closed'); continue; }
+    if (avail === 'unknown') { drop('availability_unknown'); continue; }
     const meet = firstMeeting(pick(s.features, ['dates', 'date', 'daterange', 'sessiondates']), pick(s.features, ['days', 'day', 'daysoftheweek', 'daysofweek']), today);
     if (!meet) { drop('date_unparsed'); continue; }
     if (meet.date < today) { drop('started'); continue; }
@@ -193,6 +217,7 @@ export function mapSessions(sessions: Session[], cfg: Rec1Config, now: Date): Ma
     const startsAt = toUtcFromLocal(meet.date, times.start, cfg.tz);
     const endsAt = toUtcFromLocal(meet.date, times.end, cfg.tz);
     if (startsAt === 'dst_gap') { drop('dst_gap'); continue; }
+    if (Date.parse(startsAt) <= now.getTime()) { drop('started'); continue; }
     const loc = pick(s.features, ['location', 'locations', 'facility']);
     const v = venues.find((x) => x.re.test(loc));
     const key = `rec1:${agency}#${s.id}`;
@@ -244,9 +269,10 @@ export async function runRead(cfg: Rec1Config, deps: ReadDeps): Promise<ReadOut>
         if (requests >= REQUEST_BUDGET) return { status: 'incomplete', sessions: [], raw, requests };
         const body = await call({ method: 'POST', url: `${base}getItems/${page.key}/${tab}`, headers: xhr, form: { page: String(p) } }, true);
         raw[p === 1 ? `items-${tab}.json` : `items-${tab}-p${p}.json`] = body;
-        const j = JSON.parse(body) as { hasMoreResults?: unknown };
+        const j: unknown = JSON.parse(body);
+        if (!itemsEnvelopeOk(j)) throw new Rec1Fail('layout_changed');
         sessions.push(...collectSessions(j));
-        if (j.hasMoreResults !== true) break;
+        if (!j.hasMoreResults) break;
       }
     }
   } catch (e) {

@@ -31,7 +31,7 @@ npm run test:budget # 700-event fixture build: gzipped home HTML <= 100 KiB, <= 
 npm run check:repo # secret scan, workflow rules, fixture size, no raw HTML, tokens up to date
 npm run ingest     # ingest entry point
 npm run classify-report -- --sources <file>  # I3 report: adapters + notices + classifier over live feeds for permitted sources only; submits nothing, output may carry titles so keep it out of CI logs
-scripts/tdrpd-refresh.sh [--dry-run|--from <dir>]  # K3 "read tdrpd": conductor-run only, on the owner's request (manual-only source; see below)
+scripts/tdrpd-refresh.sh [--from <dir>]  # K3 "read tdrpd": conductor-run only, on the owner's request (manual-only source; see below)
 ```
 Local env: copy `.env.example` to `.env.local`. It holds the `NEXT_PUBLIC_*` values (Supabase URL and publishable key, Turnstile site key, site URL), all public. The local stack also reads `SUPABASE_AUTH_SITE_URL` and `SUPABASE_AUTH_CAPTCHA_SECRET` through `supabase/config.toml`; `supabase/start-local.sh` (via `npm run db:start`) defaults them to local-only values. Never put a real captcha secret in the repo.
 

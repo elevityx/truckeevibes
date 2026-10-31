@@ -3,7 +3,6 @@
 // Run by the conductor only when the owner asks. Never scheduled: the source is manual_only, so the cron path never grants it.
 //
 //   scripts/tdrpd-refresh.sh              read, map, submit
-//   scripts/tdrpd-refresh.sh --dry-run    read and map, print counts, submit nothing
 //   scripts/tdrpd-refresh.sh --from DIR   re-map a saved failed read: map only, no grant, no database write
 //
 // Needs: curl, the Supabase CLI linked to the project (run from the repo root; env SUPABASE_BIN overrides ~/.local/bin/supabase).
@@ -50,14 +49,14 @@ function curlHttp(jar: string) {
     for (const [k, v] of Object.entries(req.headers)) args.push('-H', `${k}: ${v}`);
     if (req.method === 'POST') for (const [k, v] of Object.entries(req.form ?? {})) args.push('--data-urlencode', `${k}=${v}`);
     args.push(req.url);
-    try {
-      const { stdout } = await run('curl', args, { maxBuffer: 1024 * 1024 });
-      const body = readFileSync(out, 'utf8');
-      rmSync(out, { force: true });
-      return { status: Number(stdout.trim()) || 0, body };
-    } catch {
-      return { status: 0, body: '' };
-    }
+    // Review: on a curl error (timeout, size cap) keep the HTTP status and the partial body, so a 403/429 still trips the kill switch.
+    let code = '';
+    try { code = (await run('curl', args, { maxBuffer: 1024 * 1024 })).stdout; } catch (e) { code = String((e as { stdout?: unknown }).stdout ?? ''); }
+    let body = '';
+    try { body = readFileSync(out, 'utf8').slice(0, 5_000_000); } catch { body = ''; }
+    rmSync(out, { force: true });
+    const status = /^\d{3}$/.test(code.trim()) ? Number(code.trim()) : 0;
+    return { status, body };
   };
 }
 
@@ -69,7 +68,6 @@ async function submit(grant: string, startedAt: string, status: string, items: u
 }
 
 async function main(argv: string[]): Promise<number> {
-  const dry = argv.includes('--dry-run');
   const fromIdx = argv.indexOf('--from');
   const from = fromIdx >= 0 ? argv[fromIdx + 1] : undefined;
 
@@ -86,14 +84,13 @@ async function main(argv: string[]): Promise<number> {
   if (!src.ok) { log('source is disabled or not manual_only: nothing read'); return 1; }
 
   // Review r2-3: the grant is issued and committed before the first request; a refusal (read in the last 24 h, terms, disabled) reads nothing.
+  // There is no network dry run (review): every read holds a committed grant.
   let grant = '';
-  if (!dry) {
-    try {
-      const [g] = await sql<{ g: string }>(`select public.svc_manual_grant('${SLUG}') ->> 'grant' as g`);
-      grant = g?.g ?? '';
-    } catch { grant = ''; }
-    if (!/^[0-9a-f]{64}$/.test(grant)) { log('grant refused (already read in the last 24 h, or the source is not permitted): nothing read'); return 1; }
-  }
+  try {
+    const [g] = await sql<{ g: string }>(`select public.svc_manual_grant('${SLUG}') ->> 'grant' as g`);
+    grant = g?.g ?? '';
+  } catch { grant = ''; }
+  if (!/^[0-9a-f]{64}$/.test(grant)) { log('grant refused (already read in the last 24 h, or the source is not permitted): nothing read'); return 1; }
   const startedAt = new Date(Date.now() - 2000).toISOString();
 
   const jar = mkdtempSync(join(tmpdir(), 'tv-tdrpd-'));
@@ -113,11 +110,9 @@ async function main(argv: string[]): Promise<number> {
   };
 
   if (r.status === 'site_block') {
-    if (!dry) {
-      await submit(grant, startedAt, 'http_error', [], { error_code: 'site_block', ...(r.httpStatus ? { http_status: r.httpStatus } : {}) },
-        `\nupdate public.sources set enabled = false where slug = '${SLUG}' and manual_only;`);
-      log('BLOCKED: run recorded as site_block and tdrpd-rec1 disabled. Do not retry.');
-    }
+    await submit(grant, startedAt, 'http_error', [], { error_code: 'site_block', ...(r.httpStatus ? { http_status: r.httpStatus } : {}) },
+      `\nupdate public.sources set enabled = false where slug = '${SLUG}' and manual_only;`);
+    log('BLOCKED: run recorded as site_block and tdrpd-rec1 disabled. Do not retry.');
     return 2;
   }
   let mapped: MapOut | undefined;
@@ -127,12 +122,11 @@ async function main(argv: string[]): Promise<number> {
   }
   if (!mapped) {
     keepRaw();
-    if (!dry) await submit(grant, startedAt, failCode === 'http_error' ? 'http_error' : 'parse_error', [], { error_code: failCode, ...(r.httpStatus ? { http_status: r.httpStatus } : {}) });
+    await submit(grant, startedAt, failCode === 'http_error' ? 'http_error' : 'parse_error', [], { error_code: failCode, ...(r.httpStatus ? { http_status: r.httpStatus } : {}) });
     log(`stopped: ${failCode}; a zero-item non-ok run was recorded (nothing marked missing)`);
     return 1;
   }
   const items = report(mapped);
-  if (dry) { log('dry run: nothing submitted'); return 0; }
 
   const contentHash = createHash('sha256').update(Object.values(r.raw ?? {}).join('\n')).digest('hex');
   const batch = await submit(grant, startedAt, 'ok', items, { http_status: 200, content_hash: contentHash });

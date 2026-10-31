@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { collectSessions, collectTabIds, extractPage, isBlocked, mapSessions, parseAges, parseTimes, firstMeeting, runRead, type Rec1Config } from './rec1';
+import { availability, collectSessions, collectTabIds, extractPage, isBlocked, itemsEnvelopeOk, mapSessions, parseAges, parseTimes, firstMeeting, runRead, type Rec1Config, type Session } from './rec1';
 
 const FIX = join(__dirname, '..', 'fixtures', 'rec1');
 const fx = (n: string) => readFileSync(join(FIX, n), 'utf8');
@@ -32,6 +32,7 @@ describe('isBlocked (AC-K3-05)', () => {
     expect(isBlocked(200, '<html><div id="cf-chl-widget"></div></html>')).toBe(true);
     expect(isBlocked(200, '<title>Attention Required! | Cloudflare</title>')).toBe(true);
     expect(isBlocked(503, '<h1>Access denied</h1>')).toBe(true);
+    expect(isBlocked(200, '<h1>Attention Required</h1>')).toBe(true);
     expect(isBlocked(200, fx('catalog.html'))).toBe(false);
     expect(isBlocked(200, fx('items-1001.json'))).toBe(false);
   });
@@ -45,6 +46,10 @@ describe('grammars', () => {
     expect(parseAges('18y and up')).toEqual({ min: 18, max: 99 });
     expect(parseAges('5+')).toEqual({ min: 5, max: 99 });
     expect(parseAges('Grades K-2')).toBeNull();
+    expect(parseAges('Grades 1-3')).toBeNull();
+    expect(parseAges('6-12 months')).toBeNull();
+    expect(parseAges('5y - 8y or 18y and up')).toBeNull();
+    expect(parseAges('5y - 8y Coed')).toEqual({ min: 5, max: 8 });
   });
   it('times', () => {
     expect(parseTimes('3:30 PM - 4:15 PM')).toEqual({ start: '15:30', end: '16:15' });
@@ -60,6 +65,20 @@ describe('grammars', () => {
     expect(firstMeeting('01/05 - 02/09', 'Tue', '2026-10-30')).toEqual({ date: '2027-01-05', multi: true });
     expect(firstMeeting('11/14/2026', '', '2026-10-30')).toEqual({ date: '2026-11-14', multi: false });
     expect(firstMeeting('soon', '', '2026-10-30')).toBeNull();
+  });
+});
+
+describe('availability (fails closed)', () => {
+  const ses = (features: Record<string, string>, flags: Record<string, unknown> = {}): Session => ({ id: '1', name: 'x', features, flags });
+  it('a positive signal is open; any closed signal vetoes; nothing or unrecognized is unknown', () => {
+    expect(availability(ses({ spots: '4' }))).toBe('open');
+    expect(availability(ses({ spots: '4', status: 'Closed' }))).toBe('closed');
+    expect(availability(ses({ spots: '4' }, { isFull: true }))).toBe('closed');
+    expect(availability(ses({}, { spotsAvailable: 0 }))).toBe('closed');
+    expect(availability(ses({}, { spotsAvailable: 3 }))).toBe('open');
+    expect(availability(ses({}))).toBe('unknown');
+    expect(availability(ses({ spots: 'Call us' }))).toBe('unknown');
+    expect(availability(ses({ spots: 'Waitlist' }))).toBe('closed');
   });
 });
 
@@ -101,15 +120,32 @@ describe('mapSessions (AC-K3-04)', () => {
       expect(i.rawSummaryLength).toBe(0);
     }
   });
+  it('a session starting earlier today (or right now) counts as started', () => {
+    const one = all().filter((x) => x.id === '50002'); // 11/14 09:00 Pacific = 17:00Z
+    expect(mapSessions(one, CFG, new Date('2026-11-14T17:00:00Z')).dropped).toEqual({ started: 1 });
+    expect(mapSessions(one, CFG, new Date('2026-11-14T16:59:00Z')).items).toHaveLength(1);
+  });
+  it('a session with no availability field is dropped as unknown', () => {
+    const s = { ...all().find((x) => x.id === '50002')!, features: { ...all().find((x) => x.id === '50002')!.features } };
+    delete s.features.spots;
+    expect(mapSessions([s], CFG, NOW).dropped).toEqual({ availability_unknown: 1 });
+  });
   it('no session objects at all is layout_changed', () => {
     expect(() => mapSessions(collectSessions({ sections: [] }), CFG, NOW)).toThrow('layout_changed');
   });
 });
 
-describe('collectTabIds', () => {
-  it('reads tab ids', () => {
+describe('collectTabIds / itemsEnvelopeOk', () => {
+  it('reads tab ids; one bad tab id voids the list', () => {
     expect(collectTabIds(JSON.parse(fx('tabs.json')))).toEqual(['1001', '1002']);
     expect(collectTabIds({})).toEqual([]);
+    expect(collectTabIds({ tabs: [{ id: '1001' }, { id: 'x' }] })).toEqual([]);
+  });
+  it('an items answer needs a boolean hasMoreResults and an array container', () => {
+    expect(itemsEnvelopeOk(JSON.parse(fx('items-1001.json')))).toBe(true);
+    expect(itemsEnvelopeOk({ hasMoreResults: 'false', items: [] })).toBe(false);
+    expect(itemsEnvelopeOk({ items: [] })).toBe(false);
+    expect(itemsEnvelopeOk({ hasMoreResults: false, rows: [] })).toBe(false);
   });
 });
 
@@ -191,6 +227,13 @@ describe('runRead: the request plan (AC-K3-07, DR-K3-5)', () => {
     const h = harness(normal);
     await expect(runRead({ ...CFG, catalogUrl: 'https://evil.example/CA/tdrpd/catalog' }, h.deps)).rejects.toThrow('config_rec1_invalid');
     expect(h.calls.length).toBe(0);
+  });
+
+  it('an unrecognized items answer on any tab is layout_changed (no partial snapshot)', async () => {
+    const h = harness((c) => (c.url.endsWith('/1002') ? { status: 200, body: JSON.stringify({ results: [] }) } : normal(c)));
+    const r = await runRead(CFG, h.deps);
+    expect(r.status).toBe('layout_changed');
+    expect(r.sessions).toEqual([]);
   });
 
   it('a page without a checkout key is layout_changed (nothing else requested)', async () => {
