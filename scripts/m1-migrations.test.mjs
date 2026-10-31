@@ -966,6 +966,12 @@ describe('21plus_coverage (Crystal Bay age labels)', () => {
     expect(code()).toContain('21plus_coverage_state');
     expect(code()).toMatch(/is distinct from '\["music","nightlife"\]'::jsonb/);
   });
+  it('pgTAP 33 re-runs the migration verbatim (review F4)', () => {
+    const t = readFileSync(join(REPO_ROOT, 'supabase', 'tests', '33_21plus_coverage.test.sql'), 'utf8');
+    const copy = t.split('-- BEGIN migration copy\n')[1].split('\n-- END migration copy')[0];
+    const body = sql().split('\n').filter((l) => l.trim() && !l.trim().startsWith('--')).join('\n');
+    expect(copy).toBe(body);
+  });
   it('data only: no grant, revoke, function, trust or enabled change, no ageRule', () => {
     expect(code()).not.toMatch(/\bgrant\s/i);
     expect(code()).not.toMatch(/\brevoke\s/i);

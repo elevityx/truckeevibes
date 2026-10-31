@@ -115,8 +115,9 @@ export function parseCbcRoom(title: string, text: string): { title: string; room
 
 /** The only age labels the casino's card field is read for (own keys only: a Map, never an object lookup); anything else gives no age. */
 const AGE_LABELS: ReadonlyMap<string, string> = new Map([['21+', '21+'], ['18+', '18+'], ['all ages', 'All ages']]);
-const EVENT_HREF = /\bhref="(?:https:\/\/www\.crystalbaycasino\.com)?(\/event\/[^"]*)"/g;
-const EVENT_PATH = /^\/event\/[a-z0-9-]{1,120}\/$/;
+/** Every mention of an event path in a card, in any attribute form or quoting (review F3): counted as raw text, never by attribute parse. */
+const EVENT_REF = /(?:https?:\/\/www\.crystalbaycasino\.com)?\/event\/([^"'\s<>/]{1,200})\//g;
+const EVENT_SLUG = /^[a-z0-9-]{1,120}$/;
 
 /**
  * Spec_21Plus_Coverage (r2): event link -> the casino's own age label for that show, from the events list page. The page renders each show
@@ -129,18 +130,19 @@ export function parseCbcAgeLabels(html: string): Map<string, string> {
   const seen = new Map<string, string | null>();
   const cards = html.split(/<article\s+class="ae-post-item\b/).slice(1).map((c) => c.split(/<\/article>/)[0]);
   for (const card of cards) {
-    const paths = new Set<string>();
-    for (const m of card.matchAll(EVENT_HREF)) paths.add(m[1]);
-    if (paths.size !== 1) continue;
-    const path = [...paths][0];
-    if (!EVENT_PATH.test(path)) continue;
-    const link = `https://www.crystalbaycasino.com${path}`;
-    const idCards = [...card.matchAll(/\bclass="([^"]*)"/g)].filter((m) => m[1].split(/\s+/).includes('fa-id-card'));
+    const slugs = new Set<string>();
+    for (const m of card.matchAll(EVENT_REF)) slugs.add(m[1]);
+    if (slugs.size !== 1) continue;
+    const slug = [...slugs][0];
+    if (!EVENT_SLUG.test(slug)) continue;
+    const link = `https://www.crystalbaycasino.com/event/${slug}/`;
+    // Exactly one age field: the raw token count, so quoting or extra classes can't hide a second one.
+    const ids = [...card.matchAll(/fa-id-card(?![\w-])/g)];
     let label: string | null = null;
-    if (idCards.length === 1) {
-      const rest = card.slice(idCards[0].index! + idCards[0][0].length);
-      const t = /^[^>]*>\s*<\/i>\s*<\/span>\s*<span class="[^"]*\belementor-post-info__item\b[^"]*">([^<]{1,40})<\/span>/.exec(rest);
-      if (t) label = AGE_LABELS.get(decodeEntities(t[1]).trim().toLowerCase()) ?? null;
+    if (ids.length === 1) {
+      const rest = card.slice(ids[0].index! + ids[0][0].length);
+      const t = /^[^>]*>\s*<\/i>\s*<\/span>\s*<span\s+class\s*=\s*(["'])[^"']*\belementor-post-info__item\b[^"']*\1\s*>([^<]{1,40})<\/span>/.exec(rest);
+      if (t) label = AGE_LABELS.get(decodeEntities(t[2]).trim().toLowerCase()) ?? null;
     }
     if (seen.has(link) && seen.get(link) !== label) seen.set(link, null);
     else if (!seen.has(link)) seen.set(link, label);

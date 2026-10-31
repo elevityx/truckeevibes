@@ -383,6 +383,16 @@ describe('AC-21-10 parseCbcAgeLabels', () => {
     expect(m.has(ev('steely-dead'))).toBe(false);
     expect(m.get(ev('boot-juice'))).toBe('21+');
   });
+  it('F3: mixed quoting cannot hide a second age field or a second event link', () => {
+    const a = LIST.indexOf('<article'); const b = LIST.indexOf('<article', a + 1);
+    const one = LIST.slice(a, b);
+    const twoAges = one.replace('</ul>', `<li><span><i aria-hidden='true' class='far fa-id-card'></i></span><span class='elementor-post-info__item'> 18+ </span></li></ul>`);
+    expect(parseCbcAgeLabels(twoAges).size).toBe(0);
+    const twoLinks = one.replace('</ul>', `</ul><a href='/event/other-show/'>x</a>`);
+    expect(parseCbcAgeLabels(twoLinks).size).toBe(0);
+    const single = one.replace(/class="far fa-id-card"/, `class='far fa-id-card'`).replace(/<span class="elementor-icon-list-text elementor-post-info__item elementor-post-info__item--type-custom"> 21\+/, `<span class='elementor-post-info__item'> 21+`);
+    expect(parseCbcAgeLabels(single).get(ev('steely-dead'))).toBe('21+');
+  });
   it('an empty, unrelated or article-free page gives no labels', () => {
     expect(parseCbcAgeLabels('').size).toBe(0);
     expect(parseCbcAgeLabels('<html><body>closed</body></html>').size).toBe(0);

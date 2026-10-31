@@ -203,7 +203,7 @@ describe('line breaks (AC-R4b-25)', () => {
 describe('c5 admission separators and phrasings (AC-21-01)', () => {
   it.each([
     'More details to come! *21+*$20 Presale here*$25 at the door', 'Comedy Night • 21+ • $20', 'Late show · 21+', 'Guests must be at least 21',
-    'Must be at least 21 years old', '21-and-over show', 'Must be 21 years of age and older', 'This event is 21+', '21 and over', 'Must be 21 to enter.',
+    'Must be at least 21 years old', 'Must be at least 21 years of age and older', '21-and-over show', 'Must be 21 years of age and older', 'This event is 21+', '21 and over', 'Must be 21 to enter.',
     'Comedy Night (21+)', 'Adults 21+ only', 'No one under 21 admitted',
   ])('%s -> 21_plus', (d) => {
     const r = a('Sample Night', { description: d });
@@ -223,6 +223,9 @@ describe('c5 negatives (AC-21-02, incl. review R2/R3/R4)', () => {
     ['9/ 21+ / special guest', 'unknown'], ['Tickets $ 21+ / fees', 'unknown'], ['Collect 21+* stamps', 'unknown'], ['Doors 7pm / 21+ / $15', 'unknown'],
     ['must be at least 21 months old', 'unknown'], ['Must be at least 21 to drink; all ages welcome', 'all_ages'],
     ['21 years of age and older to drink, all ages welcome', 'all_ages'], ['Doors 7pm\n21+ Crown Room', 'unknown'], ['Tickets $ 18+ / fees', 'unknown'],
+    // code review F1/F2
+    ['Must be at least 21 years of age and older to drink; all ages welcome', 'all_ages'], ['Must be at least 18 years of age and older to drink; all ages welcome', 'all_ages'],
+    ['Sat 11/21 + • special guest', 'unknown'], ['9/ 21+ • special guest', 'unknown'], ['Tickets $ *21+* fees', 'unknown'], ['Sat 11/18 + • special guest', 'unknown'],
   ] as const)('%s -> %s', (d, age) => {
     expect(a('Sample Night', { description: d }).age).toBe(age);
   });
