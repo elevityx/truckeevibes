@@ -10,8 +10,8 @@ export interface Rec1Venue { match: string; name: string; address?: string; lat:
 export interface Rec1Config { catalogUrl: string; tz: string; town: string; venues: Rec1Venue[] }
 export interface Session { id: string; name: string; features: Record<string, string>; flags: Record<string, unknown> }
 
-export const REQUEST_BUDGET = 12;
-export const SPACING_MS = 10_000;
+export const REQUEST_BUDGET = 80; // K3.1 (DR-K3.1-2): four youth tabs plus their deferred activity groups
+export const SPACING_MS = 6_000;
 const WINDOW_DAYS = 120;
 const CATALOG_URL = /^https:\/\/secure\.rec1\.com\/[A-Z]{2}\/([a-z0-9-]{2,40})\/catalog$/;
 
@@ -73,59 +73,11 @@ export function collectSessions(json: unknown): Session[] {
   return [...out.values()];
 }
 
-/** Tab ids; any tab without a valid id makes the whole list unusable (review: no silently skipped tab). */
-/**
- * Every leaf object reached through a list (an object with no nested list of objects) must be a valid session; anything else, whatever
- * keys it has, is counted here and fails the read closed (recheck r2-r4 P1: mixed tabs never become a partial snapshot).
- */
-export function unrecognizedRecords(json: unknown): number {
-  let n = 0;
-  const walk = (v: unknown, depth: number, viaList: boolean) => {
-    if (depth > 12) { n++; return; }
-    if (v === null || typeof v !== 'object') { if (viaList) n++; return; } // a scalar list element is not a record we understand
-    if (Array.isArray(v)) { for (const x of v) walk(x, depth + 1, true); return; }
-    const o = v as Record<string, unknown>;
-    if (!viaList && !Object.values(o).some((x) => Array.isArray(x) || (x && typeof x === 'object'))) return; // a plain metadata object
-    if (Array.isArray(o.features)) { // a session candidate: it must meet the collectSessions grammar exactly
-      const named = [o.text, o.name, o.label, o.title].some((x) => typeof x === 'string' && x.trim() !== '');
-      const id = typeof o.id === 'number' || typeof o.id === 'string' ? String(o.id) : '';
-      if (!named || !/^\d{1,12}$/.test(id)) n++;
-      // recheck r5: a session that nests any other list of objects could hide a record, so it fails closed too
-      // recheck r5-r7: a session holds only scalars plus a flat features list; any other nested object could hide a record
-      const scalar = (x: unknown) => x === null || ['string', 'number', 'boolean'].includes(typeof x);
-      if (Object.entries(o).some(([k, x]) => k !== 'features' && !scalar(x))) n++;
-      if (!(o.features as unknown[]).every((f) => f && typeof f === 'object' && !Array.isArray(f) && Object.values(f).every(scalar)
-          && typeof (f as { name?: unknown }).name === 'string' && ['string', 'number'].includes(typeof (f as { value?: unknown }).value))) n++;
-      return;
-    }
-    const nested = Object.values(o).filter((x) => Array.isArray(x) && x.length > 0); // every non-empty list is walked, scalar lists too
-    // plain object properties are metadata unless they hold lists, which are walked (a list anywhere is checked)
-    const props = Object.values(o).filter((x) => x && typeof x === 'object' && !Array.isArray(x));
-    if (nested.length === 0 && depth > 0 && viaList) n++;
-    else if (viaList && props.length > 0) n++; // a list container holds only scalars and lists: a plain object in it could hide a record
-    for (const x of nested) walk(x, depth + 1, true);
-    for (const x of props) walk(x, depth + 1, false);
-  };
-  // the envelope itself: only scalars plus the three list containers; anything else is an unknown shape
-  if (json && typeof json === 'object' && !Array.isArray(json)) {
-    for (const [k, x] of Object.entries(json)) if (x !== null && typeof x === 'object' && !['sections', 'groups', 'items'].includes(k)) n++;
-  }
-  walk(json, 0, false);
-  return n;
-}
-
 export function collectTabIds(json: unknown): string[] {
   const tabs = Array.isArray(json) ? json : (json as { tabs?: unknown })?.tabs;
   if (!Array.isArray(tabs)) return [];
   const ids = tabs.map((t) => (t && typeof t === 'object' ? String((t as { id?: unknown }).id ?? '') : ''));
   return ids.every((id) => /^\d{1,10}$/.test(id)) ? ids : [];
-}
-
-/** An items answer must carry a boolean `hasMoreResults` and at least one array container (sections, groups or items). */
-export function itemsEnvelopeOk(json: unknown): json is { hasMoreResults: boolean } {
-  if (!json || typeof json !== 'object' || Array.isArray(json)) return false;
-  const o = json as Record<string, unknown>;
-  return typeof o.hasMoreResults === 'boolean' && ['sections', 'groups', 'items'].some((k) => Array.isArray(o[k]));
 }
 
 const pick = (f: Record<string, string>, names: string[]) => names.map((n) => f[n]).find((x) => x !== undefined && x !== '') ?? '';
@@ -284,17 +236,188 @@ export function mapSessions(sessions: Session[], cfg: Rec1Config, now: Date): Ma
   return { items, dropped, found: sessions.length };
 }
 
+// ---- K3.1: tab answers -> deferred activity groups -> getActivitySessions (Spec_Kids_Live Amendment K3.1) ----
+
+/** DR-K3.1-1: the youth tabs, by label (lowercased, non-alphanumerics dropped). Everything else is never requested. */
+export const YOUTH_TABS = ['athletics', 'aquatics', 'artdancemusic', 'enrichment'];
+const tabKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '');
+const GROUP_TYPES = ['activity', 'location', 'rentalItemGroup'];
+const PAGE_GUESS = 10; // class.CatalogGroup.js itemsPerPage: an estimate that sizes the plan; the budget still bounds the real read
+const isScalar = (x: unknown) => x === null || ['string', 'number', 'boolean'].includes(typeof x);
+const plain = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
+const shape = (): never => { throw new Rec1Fail('layout_changed'); };
+
+/** The chosen youth tab ids and how many tabs were skipped. Any bad tab id voids the list; none of the four = layout_changed. */
+export function chooseTabs(json: unknown): { ids: string[]; skipped: number } {
+  const ids = collectTabIds(json);
+  if (ids.length === 0) shape();
+  const tabs = (Array.isArray(json) ? json : (json as { tabs: unknown[] }).tabs) as Record<string, unknown>[];
+  // K3.1 r2-2: each of the four youth labels exactly once (a renamed, missing or doubled tab is layout_changed), in getTabs order.
+  const chosen = tabs.filter((t) => typeof t.label === 'string' && YOUTH_TABS.includes(tabKey(t.label)));
+  const keys = chosen.map((t) => tabKey(t.label as string));
+  if (chosen.length !== YOUTH_TABS.length || new Set(keys).size !== YOUTH_TABS.length) shape();
+  return { ids: chosen.map((t) => String(t.id)), skipped: tabs.length - chosen.length };
+}
+
+export interface GroupRef { groupId: string; itemCount: number }
+/** DR-K3.1-3: a getItems answer, closed grammar. Inline session records, deferred activity group refs, and a skip count. */
+export function parseTabAnswer(json: unknown): { records: unknown[]; refs: GroupRef[]; skipped: number; hasMore: boolean } {
+  if (!plain(json) || typeof json.hasMoreResults !== 'boolean') shape();
+  const j = json as Record<string, unknown>;
+  const records: unknown[] = [];
+  const refs: GroupRef[] = [];
+  let skipped = 0;
+  const group = (g: unknown) => {
+    if (!plain(g)) shape();
+    const o = g as Record<string, unknown>;
+    for (const [k, v] of Object.entries(o)) if (!isScalar(v) && k !== 'items') shape();
+    if (!Array.isArray(o.items) || typeof o.type !== 'string' || !GROUP_TYPES.includes(o.type)) shape();
+    const id = typeof o.id === 'string' || typeof o.id === 'number' ? String(o.id) : '';
+    if (!/^\d{1,12}$/.test(id)) shape();
+    const items = o.items as unknown[];
+    if (o.deferredLoading === true) {
+      if (items.length > 0) shape();
+      if (o.type !== 'activity') { skipped++; return; }
+      const c = typeof o.itemCount === 'number' ? o.itemCount : typeof o.itemCount === 'string' && /^\d{1,3}$/.test(o.itemCount) ? Number(o.itemCount) : NaN;
+      if (!Number.isInteger(c) || c < 0 || c > 500) shape();
+      refs.push({ groupId: id, itemCount: c });
+    } else if (o.deferredLoading === false || o.deferredLoading === undefined) {
+      if (o.type !== 'activity') { skipped++; return; }
+      records.push(...items);
+    } else shape();
+  };
+  for (const [k, v] of Object.entries(j)) {
+    if (isScalar(v)) continue;
+    if (k === 'errors') { if (!Array.isArray(v) || v.length > 0) shape(); continue; }
+    if (!Array.isArray(v)) shape();
+    if (k === 'items') records.push(...(v as unknown[]));
+    else if (k === 'groups') (v as unknown[]).forEach(group);
+    else if (k === 'sections') {
+      for (const s of v as unknown[]) {
+        if (!plain(s)) shape();
+        for (const [sk, sv] of Object.entries(s as Record<string, unknown>)) {
+          if (isScalar(sv)) continue;
+          if (sk !== 'groups' || !Array.isArray(sv)) shape();
+          (sv as unknown[]).forEach(group);
+        }
+      }
+    } else shape();
+  }
+  return { records, refs, skipped, hasMore: j.hasMoreResults as boolean };
+}
+
+/** DR-K3.1-4: a getActivitySessions answer, closed grammar: `items`, digit `itemCount`, empty `errors`, `maps` ignored, scalars. */
+export function parseGroupAnswer(json: unknown): { records: unknown[]; itemCount: number } {
+  if (!plain(json) || !Array.isArray(json.items)) shape();
+  const j = json as Record<string, unknown>;
+  const c = typeof j.itemCount === 'number' ? j.itemCount : typeof j.itemCount === 'string' && /^\d{1,3}$/.test(j.itemCount) ? Number(j.itemCount) : NaN;
+  if (!Number.isInteger(c) || c < 0 || c > 500) shape();
+  for (const [k, v] of Object.entries(j)) {
+    if (isScalar(v) || k === 'items' || k === 'maps') continue;
+    if (k === 'errors' && Array.isArray(v) && v.length === 0) continue;
+    shape();
+  }
+  return { records: j.items as unknown[], itemCount: c };
+}
+
+/** One session record, closed grammar: scalars, a flat `features` list, `info` (scalars, never read) and an empty `children`. */
+export function toSession(rec: unknown): Session {
+  if (!plain(rec)) shape();
+  const o = rec as Record<string, unknown>;
+  for (const [k, v] of Object.entries(o)) {
+    if (isScalar(v)) continue;
+    if (k === 'features' && Array.isArray(v) && v.every((f) => plain(f) && Object.values(f).every(isScalar)
+        && typeof f.name === 'string' && (typeof f.value === 'string' || typeof f.value === 'number'))) continue;
+    if (k === 'info' && Array.isArray(v) && v.every(isScalar)) continue;
+    if (k === 'children' && Array.isArray(v) && v.length === 0) continue;
+    // K3.1 r2-3: `groups` (CatalogItem.init) is metadata: scalars or flat scalar-only objects, never read into an item
+    if (k === 'groups' && Array.isArray(v) && v.every((g) => isScalar(g) || (plain(g) && Object.values(g).every(isScalar)))) continue;
+    shape();
+  }
+  if (!Array.isArray(o.features)) shape();
+  const found = collectSessions({ items: [{ ...o, info: undefined, children: undefined, groups: undefined }] });
+  if (found.length !== 1) shape();
+  return found[0];
+}
+
 export interface HttpReq { method: 'GET' | 'POST'; url: string; headers: Record<string, string>; form?: Record<string, string> }
 export interface ReadDeps { http(req: HttpReq): Promise<{ status: number; body: string }>; now(): number; sleep(ms: number): Promise<void> }
-export interface ReadOut { status: 'ok' | 'site_block' | 'http_error' | 'layout_changed' | 'incomplete'; sessions: Session[]; raw?: Record<string, string>; requests: number; httpStatus?: number }
+export interface ReadOut {
+  status: 'ok' | 'site_block' | 'http_error' | 'layout_changed' | 'incomplete'; sessions: Session[]; raw?: Record<string, string>;
+  requests: number; httpStatus?: number; notes?: Record<string, number>;
+}
+/** Where the JSON answers come from: the network (runRead) or a saved read (`--from`). `left()` is the request budget left. */
+export interface JsonSource { tabs(): Promise<string>; tab(t: string, p: number): Promise<string>; group(t: string, g: string, p: number): Promise<string>; left(): number }
 
-/** DR-K3-4/5: page, tabs, then one read-only search per tab (paged), <= 12 requests, >= 10 s apart, stop at once on a block. */
+/**
+ * DR-K3.1-2/5: tabs -> youth tabs (paged) -> each deferred activity group (paged). Blocks and HTTP errors propagate at once; a shape
+ * failure is remembered and the read goes on, so the saved raw is complete for `--from`; the result is then layout_changed.
+ */
+export async function collect(src: JsonSource, raw: Record<string, string> = {}): Promise<Omit<ReadOut, 'requests' | 'httpStatus'>> {
+  const notes: Record<string, number> = { tabs_skipped: 0, groups_skipped: 0, groups: 0, plan: 0 };
+  let bad = false;
+  const parse = (body: string): unknown => { try { return JSON.parse(body); } catch { bad = true; return undefined; } };
+  const records: unknown[] = [];
+  const refs: { tab: string; ref: GroupRef }[] = [];
+  raw['tabs.json'] = await src.tabs();
+  let tabs: string[];
+  try { const c = chooseTabs(parse(raw['tabs.json'])); tabs = c.ids; notes.tabs_skipped = c.skipped; } catch (e) { if (e instanceof Rec1Fail) return { status: 'layout_changed', sessions: [], raw, notes }; throw e; }
+  for (const tab of tabs) {
+    for (let p = 1; ; p++) {
+      if (src.left() <= 0) return { status: 'incomplete', sessions: [], raw, notes };
+      const body = await src.tab(tab, p);
+      raw[p === 1 ? `tab-${tab}.json` : `tab-${tab}-p${p}.json`] = body;
+      let t;
+      try { t = parseTabAnswer(parse(body)); } catch (e) { if (!(e instanceof Rec1Fail)) throw e; bad = true; break; }
+      records.push(...t.records);
+      for (const ref of t.refs) refs.push({ tab, ref });
+      notes.groups_skipped += t.skipped;
+      if (!t.hasMore) break;
+    }
+  }
+  notes.groups = refs.length;
+  const manifest = { version: 1, tabs, groups: [] as { tab: string; group: string; itemCount: number; sessions: number }[], outcome: '' };
+  const finish = <T extends { status: string }>(o: T): T => { manifest.outcome = o.status; raw['manifest.json'] = JSON.stringify(manifest); return o; };
+  notes.plan = refs.reduce((n, r) => n + Math.ceil(r.ref.itemCount / PAGE_GUESS), 0);
+  if (notes.plan > src.left()) return finish({ status: 'incomplete' as const, sessions: [], raw, notes });
+  for (const { tab, ref } of refs) {
+    if (ref.itemCount === 0) continue;
+    const ids = new Set<string>();
+    for (let p = 1; ; p++) {
+      if (src.left() <= 0) return finish({ status: 'incomplete' as const, sessions: [], raw, notes });
+      const body = await src.group(tab, ref.groupId, p);
+      raw[`group-${tab}-${ref.groupId}-p${p}.json`] = body;
+      let g;
+      try { g = parseGroupAnswer(parse(body)); } catch (e) { if (!(e instanceof Rec1Fail)) throw e; bad = true; break; }
+      if (g.itemCount !== ref.itemCount) { bad = true; break; } // K3.1 r2-4: the count must agree with discovery on every page
+      const before = ids.size;
+      for (const r of g.records) {
+        records.push(r);
+        const id = plain(r) && (typeof r.id === 'string' || typeof r.id === 'number') ? String(r.id) : '';
+        if (id) ids.add(id);
+      }
+      if (ids.size >= ref.itemCount) { if (ids.size !== ref.itemCount) bad = true; break; } // r2-1: exactly itemCount unique ids
+      if (ids.size === before) { bad = true; break; } // ended short of itemCount: not a full snapshot of the group
+    }
+    manifest.groups.push({ tab, group: ref.groupId, itemCount: ref.itemCount, sessions: ids.size });
+  }
+  const sessions: Session[] = [];
+  for (const r of records) { try { sessions.push(toSession(r)); } catch (e) { if (!(e instanceof Rec1Fail)) throw e; bad = true; } }
+  if (bad) return finish({ status: 'layout_changed' as const, sessions: [], raw, notes });
+  const seen = new Map<string, Session>();
+  for (const x of sessions) {
+    const prev = seen.get(x.id);
+    if (!prev) seen.set(x.id, x);
+    else if (JSON.stringify(prev) !== JSON.stringify(x)) prev.flags.duplicateConflict = true; // same id, different facts: dropped as conflict
+  }
+  return finish({ status: 'ok' as const, sessions: [...seen.values()], raw, notes });
+}
+
+/** DR-K3-4/5 + K3.1: page, tabs, youth tabs, deferred groups; <= 80 requests, >= 6 s apart; stop at once on a block. */
 export async function runRead(cfg: Rec1Config, deps: ReadDeps): Promise<ReadOut> {
   if (!CATALOG_URL.test(cfg.catalogUrl)) throw new Error('config_rec1_invalid');
   let requests = 0;
   let last = -Infinity;
-  const raw: Record<string, string> = {};
-  const sessions: Session[] = [];
   async function call(req: HttpReq, json: boolean): Promise<string> {
     if (requests >= REQUEST_BUDGET) throw new Error('budget');
     const wait = last + SPACING_MS - deps.now();
@@ -307,39 +430,22 @@ export async function runRead(cfg: Rec1Config, deps: ReadDeps): Promise<ReadOut>
     if (json) { try { JSON.parse(r.body); } catch { throw new Rec1Fail('site_block'); } }
     return r.body;
   }
+  const raw: Record<string, string> = {}; // filled as answers arrive, so a failed read keeps what it got
   try {
     const page = extractPage(await call({ method: 'GET', url: cfg.catalogUrl, headers: { Accept: 'text/html' } }, false));
     const xhr = { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-KEY': page.csrfKey, 'X-CSRF-TOKEN': page.csrfToken };
     const base = `${cfg.catalogUrl}/`;
-    raw['tabs.json'] = await call({ method: 'GET', url: `${base}getTabs/${page.key}`, headers: xhr }, true);
-    const tabs = collectTabIds(JSON.parse(raw['tabs.json']));
-    if (tabs.length === 0) throw new Rec1Fail('layout_changed');
-    for (const tab of tabs) {
-      for (let p = 1; ; p++) {
-        // Review r2-2: a read that cannot finish inside the budget is never submitted as a full snapshot.
-        if (requests >= REQUEST_BUDGET) return { status: 'incomplete', sessions: [], raw, requests };
-        const body = await call({ method: 'POST', url: `${base}getItems/${page.key}/${tab}`, headers: xhr, form: { page: String(p) } }, true);
-        raw[p === 1 ? `items-${tab}.json` : `items-${tab}-p${p}.json`] = body;
-        const j: unknown = JSON.parse(body);
-        if (!itemsEnvelopeOk(j)) throw new Rec1Fail('layout_changed');
-        const found = collectSessions(j);
-        // Recheck P1: a non-empty answer whose records are not recognizable sessions is a shape change, never an empty tab.
-        const o = j as unknown as Record<string, unknown[] | undefined>;
-        if (found.length === 0 && ['sections', 'groups', 'items'].some((k) => Array.isArray(o[k]) && o[k]!.length > 0)) throw new Rec1Fail('layout_changed');
-        if (unrecognizedRecords(j) > 0) throw new Rec1Fail('layout_changed');
-        sessions.push(...found);
-        if (!j.hasMoreResults) break;
-      }
-    }
+    const okId = (s: string) => { if (!/^\d{1,12}$/.test(s)) throw new Rec1Fail('layout_changed'); return s; };
+    const src: JsonSource = {
+      left: () => REQUEST_BUDGET - requests,
+      tabs: () => call({ method: 'GET', url: `${base}getTabs/${page.key}`, headers: xhr }, true),
+      tab: (t, p) => call({ method: 'POST', url: `${base}getItems/${page.key}/${okId(t)}`, headers: xhr, form: { page: String(p) } }, true),
+      group: (t, g, p) => call({ method: 'POST', url: `${base}getActivitySessions/${page.key}/${okId(t)}/${okId(g)}`, headers: xhr, form: { page: String(p) } }, true),
+    };
+    const out = await collect(src, raw);
+    return { ...out, requests };
   } catch (e) {
     if (e instanceof Rec1Fail) return { status: e.code, sessions: [], raw, requests, httpStatus: (e as { httpStatus?: number }).httpStatus };
     throw e;
   }
-  const seen = new Map<string, Session>();
-  for (const x of sessions) {
-    const prev = seen.get(x.id);
-    if (!prev) seen.set(x.id, x);
-    else if (JSON.stringify(prev) !== JSON.stringify(x)) prev.flags.duplicateConflict = true; // same id, different facts: dropped as conflict
-  }
-  return { status: 'ok', sessions: [...seen.values()], raw, requests };
 }
