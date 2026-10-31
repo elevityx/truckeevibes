@@ -69,26 +69,35 @@ export function collectSessions(json: unknown): Session[] {
  * Every leaf object reached through a list (an object with no nested list of objects) must be a valid session; anything else, whatever
  * keys it has, is counted here and fails the read closed (recheck r2-r4 P1: mixed tabs never become a partial snapshot).
  */
+const holdsObjectList = (v: unknown, d: number): boolean => {
+  if (d > 12 || v === null || typeof v !== 'object') return d > 12;
+  if (Array.isArray(v)) return v.some((y) => y && typeof y === 'object');
+  return Object.values(v).some((x) => holdsObjectList(x, d + 1));
+};
 export function unrecognizedRecords(json: unknown): number {
   let n = 0;
-  const walk = (v: unknown, depth: number) => {
+  const walk = (v: unknown, depth: number, viaList: boolean) => {
     if (depth > 12) { n++; return; }
     if (v === null || typeof v !== 'object') return;
-    if (Array.isArray(v)) { for (const x of v) walk(x, depth + 1); return; }
+    if (Array.isArray(v)) { for (const x of v) walk(x, depth + 1, true); return; }
     const o = v as Record<string, unknown>;
+    if (!viaList && !Object.values(o).some((x) => Array.isArray(x) || (x && typeof x === 'object'))) return; // a plain metadata object
     if (Array.isArray(o.features)) { // a session candidate: it must meet the collectSessions grammar exactly
       const named = [o.text, o.name, o.label, o.title].some((x) => typeof x === 'string' && x.trim() !== '');
       const id = typeof o.id === 'number' || typeof o.id === 'string' ? String(o.id) : '';
       if (!named || !/^\d{1,12}$/.test(id)) n++;
       // recheck r5: a session that nests any other list of objects could hide a record, so it fails closed too
-      if (Object.entries(o).some(([k, x]) => k !== 'features' && Array.isArray(x) && x.some((y) => y && typeof y === 'object'))) n++;
+      if (Object.entries(o).some(([k, x]) => k !== 'features' && holdsObjectList(x, 0))) n++;
       return;
     }
     const nested = Object.values(o).filter((x) => Array.isArray(x) && x.some((y) => y && typeof y === 'object'));
-    if (nested.length === 0) { if (depth > 0) n++; return; }
-    for (const x of nested) walk(x, depth + 1);
+    // plain object properties are metadata unless they hold lists, which are walked (a list anywhere is checked)
+    const props = Object.values(o).filter((x) => x && typeof x === 'object' && !Array.isArray(x));
+    if (nested.length === 0 && depth > 0 && viaList) n++;
+    for (const x of nested) walk(x, depth + 1, true);
+    for (const x of props) walk(x, depth + 1, false);
   };
-  walk(json, 0);
+  walk(json, 0, false);
   return n;
 }
 

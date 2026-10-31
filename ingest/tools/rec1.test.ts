@@ -269,6 +269,14 @@ describe('runRead: the request plan (AC-K3-07, DR-K3-5)', () => {
     expect((await runRead(CFG, h.deps)).status).toBe('layout_changed');
   });
 
+  it('a list under a plain object property, or deep inside a session, is still checked', async () => {
+    const valid = JSON.parse(fx('items-1002.json')).items[0];
+    const a = harness((c) => (c.url.endsWith('/1002') ? { status: 200, body: JSON.stringify({ hasMoreResults: false, items: [valid], extra: { more: [{ sessionId: 9 }] } }) } : normal(c)));
+    expect((await runRead(CFG, a.deps)).status).toBe('layout_changed');
+    const b = harness((c) => (c.url.endsWith('/1002') ? { status: 200, body: JSON.stringify({ hasMoreResults: false, items: [{ ...valid, meta: { kids: [{ sessionId: 9 }] } }] }) } : normal(c)));
+    expect((await runRead(CFG, b.deps)).status).toBe('layout_changed');
+  });
+
   it('an empty tab is fine', async () => {
     const h = harness((c) => (c.url.endsWith('/1002') ? { status: 200, body: JSON.stringify({ hasMoreResults: false, items: [] }) } : normal(c)));
     expect((await runRead(CFG, h.deps)).status).toBe('ok');
