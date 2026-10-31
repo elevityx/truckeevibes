@@ -47,15 +47,24 @@ export function collectSessions(json: unknown): Session[] {
     const id = typeof o.id === 'number' || typeof o.id === 'string' ? String(o.id) : '';
     if (Array.isArray(o.features) && name && /^\d{1,12}$/.test(id)) {
       const features: Record<string, string> = {};
+      let conflict = false;
       for (const f of o.features) {
         if (f && typeof f === 'object' && typeof (f as { name?: unknown }).name === 'string') {
           const val = (f as { value?: unknown }).value;
-          if (typeof val === 'string' || typeof val === 'number') features[fname((f as { name: string }).name)] = String(val).trim();
+          if (typeof val === 'string' || typeof val === 'number') {
+            const k = fname((f as { name: string }).name);
+            const v = String(val).trim();
+            if (k === '' || (k in features && features[k] !== v)) conflict = true; // review r10 P2: no silent overwrite
+            features[k] = v;
+          }
         }
       }
       const flags: Record<string, unknown> = {};
-      for (const [k, x] of Object.entries(o)) if (typeof x === 'boolean' || ((typeof x === 'string' || typeof x === 'number') && SPOT_KEY.test(k))) flags[k] = x;
-      if (!out.has(id)) out.set(id, { id, name: name.trim(), features, flags });
+      for (const [k, x] of Object.entries(o)) if (typeof x === 'boolean' || ((typeof x === 'string' || typeof x === 'number') && (SPOT_KEY.test(k) || CLOSED_FLAG.test(k) || OPEN_FLAG.test(k)))) flags[k] = x;
+      if (conflict) flags.featureConflict = true;
+      const prev = out.get(id);
+      if (prev && JSON.stringify(prev) !== JSON.stringify({ id, name: name.trim(), features, flags })) prev.flags.duplicateConflict = true;
+      if (!prev) out.set(id, { id, name: name.trim(), features, flags });
       return;
     }
     for (const x of Object.values(o)) walk(x, depth + 1);
@@ -215,6 +224,7 @@ export function availability(s: Session): 'open' | 'closed' | 'unknown' {
     if (typeof v === 'boolean') { if (CLOSED_FLAG.test(k)) signals.push(v ? 'closed' : ''); else if (OPEN_FLAG.test(k)) signals.push(v ? 'open' : 'closed'); }
     else if (typeof v === 'number' && SPOT_KEY.test(k)) signals.push(v > 0 ? 'open' : 'closed');
     else if (typeof v === 'string' && SPOT_KEY.test(k)) signals.push(textSignal(v));
+    else if (typeof v === 'string' && (CLOSED_FLAG.test(k) || OPEN_FLAG.test(k))) signals.push('unknown'); // a string boolean is not trusted either way
   }
   for (const [k, v] of Object.entries(s.features)) if (SPOT_KEY.test(k)) signals.push(textSignal(v));
   if (signals.includes('closed')) return 'closed';
@@ -242,6 +252,7 @@ export function mapSessions(sessions: Session[], cfg: Rec1Config, now: Date): Ma
   const dropped: Record<string, number> = {};
   const drop = (c: string) => { dropped[c] = (dropped[c] ?? 0) + 1; };
   for (const s of sessions) {
+    if (s.flags.featureConflict || s.flags.duplicateConflict) { drop('conflict'); continue; }
     const ages = parseAges(pick(s.features, ['agegender', 'ages', 'age', 'agerange', 'agegroup']));
     if (!ages) { drop('age_unparsed'); continue; }
     if (ages.max > 17) { drop('not_youth'); continue; }
@@ -324,6 +335,11 @@ export async function runRead(cfg: Rec1Config, deps: ReadDeps): Promise<ReadOut>
     if (e instanceof Rec1Fail) return { status: e.code, sessions: [], raw, requests, httpStatus: (e as { httpStatus?: number }).httpStatus };
     throw e;
   }
-  const seen = new Set<string>();
-  return { status: 'ok', sessions: sessions.filter((s) => (seen.has(s.id) ? false : (seen.add(s.id), true))), raw, requests };
+  const seen = new Map<string, Session>();
+  for (const x of sessions) {
+    const prev = seen.get(x.id);
+    if (!prev) seen.set(x.id, x);
+    else if (JSON.stringify(prev) !== JSON.stringify(x)) prev.flags.duplicateConflict = true; // same id, different facts: dropped as conflict
+  }
+  return { status: 'ok', sessions: [...seen.values()], raw, requests };
 }

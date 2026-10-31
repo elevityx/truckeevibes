@@ -135,6 +135,21 @@ describe('mapSessions (AC-K3-04)', () => {
   });
 });
 
+describe('conflicts (review r10 P2s)', () => {
+  const base = JSON.parse(fx('items-1002.json')).items[0];
+  it('a duplicate id with different facts, or colliding feature names, is dropped as conflict', () => {
+    const dup = collectSessions({ items: [base, { ...base, text: 'Other name' }] });
+    expect(mapSessions(dup, CFG, NOW).dropped).toEqual({ conflict: 1 });
+    const col = collectSessions({ items: [{ ...base, features: [...base.features, { name: 'Age Gender', value: '1y - 3y' }] }] });
+    expect(mapSessions(col, CFG, NOW).dropped).toEqual({ conflict: 1 });
+    const same = collectSessions({ items: [base, base] });
+    expect(mapSessions(same, CFG, NOW).items).toHaveLength(1);
+  });
+  it('a string boolean availability flag is not trusted', () => {
+    expect(availability({ id: '1', name: 'x', features: { spots: '4' }, flags: { isFull: 'true' } })).toBe('unknown');
+  });
+});
+
 describe('collectTabIds / itemsEnvelopeOk', () => {
   it('reads tab ids; one bad tab id voids the list', () => {
     expect(collectTabIds(JSON.parse(fx('tabs.json')))).toEqual(['1001', '1002']);
