@@ -13,6 +13,8 @@ export interface Session { id: string; name: string; features: Record<string, st
 
 export const REQUEST_BUDGET = 80; // K3.1 (DR-K3.1-2): four youth tabs plus their deferred activity groups
 export const SPACING_MS = 6_000;
+export const RETRY_WAIT_MS = 30_000;
+export const MAX_RETRIES = 3;
 const WINDOW_DAYS = 120;
 const CATALOG_URL = /^https:\/\/secure\.rec1\.com\/[A-Z]{2}\/([a-z0-9-]{2,40})\/catalog$/;
 
@@ -483,6 +485,7 @@ export async function collect(src: JsonSource, raw: Record<string, string> = {})
 export async function runRead(cfg: Rec1Config, deps: ReadDeps): Promise<ReadOut> {
   if (!CATALOG_URL.test(cfg.catalogUrl)) throw new Error('config_rec1_invalid');
   let requests = 0;
+  let retries = 0;
   let last = -Infinity;
   async function call(req: HttpReq, json: boolean): Promise<string> {
     if (requests >= REQUEST_BUDGET) throw new Error('budget');
@@ -490,7 +493,16 @@ export async function runRead(cfg: Rec1Config, deps: ReadDeps): Promise<ReadOut>
     if (wait > 0) await deps.sleep(wait);
     last = deps.now();
     requests++;
-    const r = await deps.http(req);
+    let r = await deps.http(req);
+    // K3.1 r6: Rec1 sometimes takes > 30 s on one group (curl exit 28 in reads 2 and 4, different groups). A transport failure (no HTTP
+    // status) is retried once after 30 s, at most 3 times a read, inside the budget. Any HTTP status, block or challenge is never retried.
+    if (r.status === 0 && retries < MAX_RETRIES && requests < REQUEST_BUDGET) {
+      retries++;
+      await deps.sleep(RETRY_WAIT_MS);
+      last = deps.now();
+      requests++;
+      r = await deps.http(req);
+    }
     if (isBlocked(r.status, r.body)) throw new Rec1Fail('site_block');
     if (r.status !== 200) throw Object.assign(new Rec1Fail('http_error'), { httpStatus: r.status });
     if (json) { try { JSON.parse(r.body); } catch { throw new Rec1Fail('site_block'); } }

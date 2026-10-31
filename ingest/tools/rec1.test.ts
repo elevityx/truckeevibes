@@ -490,6 +490,21 @@ describe('K3.1 grammars (AC-K3.1-03/04)', () => {
     expect(toSession(sess('1', { groups: [1, { id: 2, name: 'x' }] })).id).toBe('1');
     expect(() => toSession(sess('1', { groups: [{ items: [] }] }))).toThrow('layout_changed');
   });
+  it('a transport failure (status 0) is retried once after 30 s, at most 3 times a read; an HTTP error never (r6)', async () => {
+    let n = 0;
+    const h = harness((c) => (c.url.endsWith('/1001/302') && n++ === 0 ? { status: 0, body: '' } : groups(c)));
+    const r = await runRead(CFG, h.deps);
+    expect(r.status).toBe('ok');
+    const two = h.calls.filter((c) => c.url.endsWith('/1001/302'));
+    expect(two.length).toBe(2);
+    expect(two[1].at - two[0].at).toBeGreaterThanOrEqual(30_000);
+    const h2 = harness((c) => (c.url.includes('getActivitySessions') ? { status: 0, body: '' } : groups(c)));
+    expect((await runRead(CFG, h2.deps)).status).toBe('http_error');
+    expect(h2.calls.filter((c) => c.url.includes('getActivitySessions')).length).toBe(2); // one retry, then the read stops
+    const h3 = harness((c) => (c.url.endsWith('/1001/302') ? { status: 500, body: '' } : groups(c)));
+    await runRead(CFG, h3.deps);
+    expect(h3.calls.filter((c) => c.url.endsWith('/1001/302')).length).toBe(1);
+  });
   it('a 403 on a group call stops at once', async () => {
     const h = harness((c) => (c.url.endsWith('/1001/301') ? { status: 403, body: '' } : groups(c)));
     const r = await runRead(CFG, h.deps);

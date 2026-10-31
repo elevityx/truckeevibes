@@ -45,7 +45,7 @@ function curlHttp(jar: string) {
   return async (req: HttpReq): Promise<{ status: number; body: string }> => {
     const out = join(jar, 'body');
     // -q: ignore any ~/.curlrc; no -L (a redirect is an http_error); no retries; curl's own default user agent (owner decision).
-    const args = ['-q', '-sS', '--max-time', '30', '--max-filesize', '5000000', '--proto', '=https', '-b', join(jar, 'cookies'), '-c', join(jar, 'cookies'), '-o', out, '-w', '%{http_code}'];
+    const args = ['-q', '-sS', '--max-time', '60', '--max-filesize', '5000000', '--proto', '=https', '-b', join(jar, 'cookies'), '-c', join(jar, 'cookies'), '-o', out, '-w', '%{http_code}'];
     for (const [k, v] of Object.entries(req.headers)) args.push('-H', `${k}: ${v}`);
     if (req.method === 'POST') for (const [k, v] of Object.entries(req.form ?? {})) args.push('--data-urlencode', `${k}=${v}`);
     args.push(req.url);
