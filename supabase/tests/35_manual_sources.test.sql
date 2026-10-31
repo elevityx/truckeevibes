@@ -18,7 +18,7 @@ select is((select allowed_hosts::text from public.sources where slug = 'bar-of-a
 select is((select allowed_hosts::text from public.sources where slug = 'fiftyfifty-brewing'), '{www.fiftyfiftybrewing.com,core.service.elfsight.com}', 'fiftyfifty-brewing: the link host and the feed host');
 select is((select count(*) from public.sources where slug in ('bar-of-america', 'diamond-peak', 'fiftyfifty-brewing', 'tahoe-national-brewing')
              and (config #>> '{venue,lat}')::float8 between 38 and 40 and (config #>> '{venue,lng}')::float8 between -121 and -119), 4::bigint, 'a default venue with coordinates for the four single-venue sources');
-select is((select page_cap from public.sources where slug = 'tdrpd-rec1'), 80, 'tdrpd-rec1 page_cap 80 (K3.1 r2-9)');
+select is((select page_cap::int from public.sources where slug = 'tdrpd-rec1'), 80, 'tdrpd-rec1 page_cap 80 (K3.1 r2-9)');
 select is((select slug || ':' || trust::text || ':' || enabled::text || ':' || manual_only::text || ':' || ingest_disposition::text from public.sources where slug = 'glasses-wine-bar'),
   'glasses-wine-bar:link_only:false:false:unknown', 'AC-M1-07 glasses-wine-bar is unchanged (no feed)');
 select is((select count(*) from public.sources where automation_restricted and not manual_only), 0::bigint, 'no restricted source is schedulable');
