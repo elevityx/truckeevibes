@@ -251,6 +251,12 @@ describe('runRead: the request plan (AC-K3-07, DR-K3-5)', () => {
     expect(r.sessions).toEqual([]);
   });
 
+  it('a mixed tab with a features record that fails the session grammar is layout_changed', async () => {
+    const valid = JSON.parse(fx('items-1002.json')).items[0];
+    const h = harness((c) => (c.url.endsWith('/1002') ? { status: 200, body: JSON.stringify({ hasMoreResults: false, items: [valid, { id: 'abc', text: 'Bad id', features: [] }] }) } : normal(c)));
+    expect((await runRead(CFG, h.deps)).status).toBe('layout_changed');
+  });
+
   it('an empty tab is fine', async () => {
     const h = harness((c) => (c.url.endsWith('/1002') ? { status: 200, body: JSON.stringify({ hasMoreResults: false, items: [] }) } : normal(c)));
     expect((await runRead(CFG, h.deps)).status).toBe('ok');

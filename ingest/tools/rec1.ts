@@ -75,9 +75,13 @@ export function unrecognizedRecords(json: unknown): number {
     if (depth > 12 || v === null || typeof v !== 'object') return;
     if (Array.isArray(v)) { for (const x of v) walk(x, depth + 1); return; }
     const o = v as Record<string, unknown>;
-    if (Array.isArray(o.features)) return; // judged by collectSessions
-    const nested = Object.values(o).filter((x) => Array.isArray(x) && x.some((y) => y && typeof y === 'object'));
     const named = [o.text, o.name, o.label, o.title].some((x) => typeof x === 'string' && x.trim() !== '');
+    if (Array.isArray(o.features)) { // a session candidate: it must meet the collectSessions grammar exactly
+      const id = typeof o.id === 'number' || typeof o.id === 'string' ? String(o.id) : '';
+      if (!named || !/^\d{1,12}$/.test(id)) n++;
+      return;
+    }
+    const nested = Object.values(o).filter((x) => Array.isArray(x) && x.some((y) => y && typeof y === 'object'));
     if (nested.length === 0) { if (named && o.id !== undefined) n++; return; }
     for (const x of nested) walk(x, depth + 1);
   };
