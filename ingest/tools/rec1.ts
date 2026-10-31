@@ -73,7 +73,7 @@ export function unrecognizedRecords(json: unknown): number {
   let n = 0;
   const walk = (v: unknown, depth: number, viaList: boolean) => {
     if (depth > 12) { n++; return; }
-    if (v === null || typeof v !== 'object') return;
+    if (v === null || typeof v !== 'object') { if (viaList) n++; return; } // a scalar list element is not a record we understand
     if (Array.isArray(v)) { for (const x of v) walk(x, depth + 1, true); return; }
     const o = v as Record<string, unknown>;
     if (!viaList && !Object.values(o).some((x) => Array.isArray(x) || (x && typeof x === 'object'))) return; // a plain metadata object
@@ -88,7 +88,7 @@ export function unrecognizedRecords(json: unknown): number {
       if (!(o.features as unknown[]).every((f) => f && typeof f === 'object' && !Array.isArray(f) && Object.values(f).every(scalar))) n++;
       return;
     }
-    const nested = Object.values(o).filter((x) => Array.isArray(x) && x.some((y) => y && typeof y === 'object'));
+    const nested = Object.values(o).filter((x) => Array.isArray(x) && x.length > 0); // every non-empty list is walked, scalar lists too
     // plain object properties are metadata unless they hold lists, which are walked (a list anywhere is checked)
     const props = Object.values(o).filter((x) => x && typeof x === 'object' && !Array.isArray(x));
     if (nested.length === 0 && depth > 0 && viaList) n++;
