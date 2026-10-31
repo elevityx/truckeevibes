@@ -19,6 +19,7 @@
     "db:test:rest": "node --test scripts/manifest-rest.dbtest.mjs scripts/api-rest.dbtest.mjs",
     "ingest": "tsx ingest/run.ts",
     "classify-report": "tsx ingest/tools/classify-report.ts",
+    "tdrpd-refresh": "scripts/tdrpd-refresh.sh",
     "test:static": "cp scripts/fixtures/snapshot-static.json public/data/events.json && next build && node scripts/check-static-snapshot.mjs",
     "build:fixture": "SNAPSHOT_FIXTURE=scripts/fixtures/snapshot-visual.json MANIFEST_FIXTURE=scripts/fixtures/event-pages-visual.json PICKS_PATH=scripts/fixtures/picks-visual.json npm run build",
     "test:visual": "npm run build:fixture && playwright test",

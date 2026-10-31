@@ -274,7 +274,7 @@ select pg_temp.eq($$(select page_cap::text || '|' || cadence || '|' || homepage_
 select pg_temp.eq($$(select config = '{"base":"https://www.moodysbistro.com","tz":"America/Los_Angeles","defaultCategories":["music"]}'::jsonb from public.sources where slug = 'moodys-bistro')$$, 'true', 'AC-M1-140 moodys-bistro config');
 select pg_temp.eq($$(select jsonb_array_length(config -> 'dates') || '|' || (config -> 'dates' -> 0 ->> 'date') || '|' || (config ->> 'provenance') from public.sources where slug = 'eaa-1073-breakfast')$$,
   '3|2026-11-14|listed on tahoe.com, checked 2026-10-19', 'AC-M1-140 the EAA config lists three dates with provenance');
-select pg_temp.eq($$(select count(*) from public.sources where enabled)$$, '17', 'AC-M1-140 fifteen sources enabled; Kids live: +3 libraries, -tdrpd = seventeen');
+select pg_temp.eq($$(select count(*) from public.sources where enabled)$$, '18', 'AC-M1-140 fifteen sources enabled; Kids live: +3 libraries, -tdrpd = seventeen; K3 +tdrpd-rec1 = eighteen');
 
 create temp table manifest (slug text, url text);
 insert into manifest values
@@ -297,7 +297,7 @@ select pg_temp.t($$(select pg_temp.x('postgres', $s$insert into public.sources (
 select pg_temp.t($$(select pg_temp.x('postgres', $s$insert into public.sources (slug, name, homepage_url, allowed_hosts, family, class) values ('bars-ok-2', 'OK Curated', 'https://example.test/', array['example.test'], 'curated_dates', 'community')$s$) = 'OK')$$, 'AC-M1-140 family curated_dates is accepted');
 select pg_temp.eq($$(select count(distinct p.oid) from pg_proc p join pg_namespace n on n.oid = p.pronamespace, lateral aclexplode(p.proacl) a
     where n.nspname in ('public', 'private') and a.grantee in (select oid from pg_roles where rolname in ('anon', 'authenticated', 'service_role')) and a.privilege_type = 'EXECUTE')$$,
-  '25', 'AC-M1-140 the EXECUTE allowlist has 25 functions (A14 keeps A13''s 24; +1 is W1 api_events_v1, migration 20261024000100 sorts after A14)');
+  '26', 'AC-M1-140 the EXECUTE allowlist has 26 functions (A14 keeps A13''s 24; +1 is W1 api_events_v1, +1 is K3 svc_manual_grant)');
 
 -- area boundaries ----------------------------------------------------------------------------------------------------------
 select pg_temp.eq($$private.area_for(39.2275377::double precision, -120.0046979::double precision)$$, 'incline_crystal_bay', 'AC-M1-140 the casino coordinates fall in incline_crystal_bay');

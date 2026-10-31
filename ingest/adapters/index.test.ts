@@ -14,4 +14,7 @@ describe('adapter registry', () => {
   it('has no adapter for squarespace, rss or html (A2)', () => {
     for (const f of ['squarespace', 'rss', 'html']) expect(adapters[f]).toBeUndefined();
   });
+  it('has no scheduled adapter for rec1_catalog: TDRPD is read only on request by scripts/tdrpd-refresh.sh (Amendment K3)', () => {
+    expect(adapters.rec1_catalog).toBeUndefined();
+  });
 });
