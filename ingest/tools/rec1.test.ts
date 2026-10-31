@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SKIP_GROUP, availability, chooseTabs, collect, collectSessions, collectTabIds, extractPage, isBlocked, mapSessions, parseGroupAnswer, parseTabAnswer, toSession, parseAges, parseTimes, firstMeeting, runRead, type Rec1Config, type Session } from './rec1';
+import { SKIP_GROUP, availability, programTitle, chooseTabs, collect, collectSessions, collectTabIds, extractPage, isBlocked, mapSessions, parseGroupAnswer, parseTabAnswer, toSession, parseAges, parseTimes, firstMeeting, runRead, type Rec1Config, type Session } from './rec1';
 
 const FIX = join(__dirname, '..', 'fixtures', 'rec1');
 const fx = (n: string) => readFileSync(join(FIX, n), 'utf8');
@@ -497,5 +497,53 @@ describe('K3.1 grammars (AC-K3.1-03/04)', () => {
     const c = await collect({ left: () => 1e9, tabs: () => get('tabs.json'), tab: (t, p) => get(p === 1 ? `tab-${t}.json` : `tab-${t}-p${p}.json`), group: (t, g, p) => get(`group-${t}-${g}-p${p}.json`) });
     expect(c.status).toBe('ok');
     expect(c.sessions.map((s) => s.id)).toEqual(r.sessions.map((s) => s.id));
+  });
+});
+
+// ---- K3.1 r4: the real session shape (first full read, 2026-10-31) ----
+describe('K3.1 r4: real session fields', () => {
+  const real = (extra: Record<string, unknown> = {}, f: Record<string, string> = {}) => ({
+    id: 4474539, text: '2026 | Session B | Sat 09:05 AM | Guppy', basicInfo: ['Registration: Aug 20 10a-Nov 10 8a', 'Dates: Nov 10-Dec 10'], href: '#', icon: 'group',
+    type: 'registration', registrationType: '2', registrationOpen: true, registrationOver: false, sessionFull: false, regStart: '08/20/2026', price: 160,
+    customDisplayPrice: '', canceled: false, weeklyPricingType: null, online: '1', ...extra,
+    features: Object.entries({ location: 'Truckee Community Pool', ageGender: '3-4', days: 'TU, TH', dates: '11/10-12/10', times: '4:30pm-5:25pm', enrollment: '3/8', ...f })
+      .map(([name, value]) => ({ name, icon: 'x', value, polymerIcon: 'y' })),
+  });
+  it('ages as Rec1 writes them: n-m, n/up, months, grades', () => {
+    expect(parseAges('3-4')).toEqual({ min: 3, max: 4 });
+    expect(parseAges('18/up')).toEqual({ min: 18, max: 99 });
+    expect(parseAges('4m-3')).toEqual({ min: 0, max: 3 });
+    expect(parseAges('1st Grade - 3rd Grade')).toEqual({ min: 6, max: 9 });
+    expect(parseAges('6th Grade - 12th Grade')).toEqual({ min: 11, max: 18 });
+    expect(parseAges('K - 2nd Grade')).toEqual({ min: 5, max: 8 });
+    expect(parseAges('All Ages')).toBeNull();
+    expect(parseAges('3rd Grade')).toBeNull();
+  });
+  it('the real record parses; sessionFull and canceled close it; registration opening later is open', () => {
+    const at = new Date('2026-11-01T19:00:00Z');
+    const one = (x: Record<string, unknown>) => mapSessions([{ ...toSession(real(x)), group: { id: '194816', name: 'Swim Level 0 - Guppy' } }], CFG, at);
+    expect(one({}).items.map((i) => [i.title, i.startsAt])).toEqual([['Swim Level 0 - Guppy', '2026-11-11T00:30:00Z']]);
+    expect(one({ sessionFull: true }).dropped).toEqual({ full_or_closed: 1 });
+    expect(one({ canceled: true }).dropped).toEqual({ full_or_closed: 1 });
+    expect(one({ registrationOpen: false, regStart: '12/08/2026' }).items.length).toBe(1);
+    expect(one({ registrationOpen: false, regStart: '12/08/2026', sessionFull: true }).dropped).toEqual({ full_or_closed: 1 });
+  });
+  it('one row per program (group + title) at its earliest meeting; a > 10 h meeting is implausible', () => {
+    const at = new Date('2026-11-01T19:00:00Z');
+    const g = { id: '194816', name: 'Swim Level 0 - Guppy' };
+    const a = { ...toSession(real({ id: 1 }, { days: 'TH' })), group: g };
+    const b = { ...toSession(real({ id: 2, text: '2026 | Session B | Tue 03:10 PM | Guppy' }, { days: 'TU' })), group: g };
+    const c = { ...toSession(real({ id: 3 }, { times: '12:05am-12:35pm' })), group: { id: '9', name: 'Swim Level 4 - Turtle' } };
+    const m = mapSessions([a, b, c], CFG, at);
+    expect(m.items.length).toBe(1);
+    expect(m.items[0].startsAt).toBe('2026-11-11T00:30:00Z');
+    expect(m.items[0].externalKey).toMatch(/^rec1:tdrpd#g194816-[0-9a-f]{10}$/);
+    expect(m.dropped).toEqual({ same_program: 1, time_implausible: 1 });
+  });
+  it('programTitle keeps organizer text, drops year/season/session/slot segments', () => {
+    expect(programTitle('2026 | Session B | Sat 09:05 AM | Guppy', 'Swim Level 0 - Guppy')).toBe('Swim Level 0 - Guppy');
+    expect(programTitle('2027 | Youth Volleyball League | Grades 3 - 4', 'Youth Volleyball League')).toBe('Youth Volleyball League | Grades 3 - 4');
+    expect(programTitle('2026 | Session 1 | Early Basic | Fridays', 'Ice Skating  Lessons')).toBe('Ice Skating Lessons: Early Basic');
+    expect(programTitle('2026 | Fall | Kids Climb - 1st - 3rd')).toBe('Kids Climb - 1st - 3rd');
   });
 });

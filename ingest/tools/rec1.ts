@@ -2,13 +2,14 @@
 // Pure parts (page, block detection, session grammar, mapping) plus `runRead`, the request plan with an injected HTTP client.
 // Facts only: program name, first upcoming meeting, location, Rec1's own age range, and the catalog URL as the link. Prices,
 // descriptions and images are never read into an item. Every grammar fails closed and every drop is counted by reason.
+import { createHash } from 'node:crypto';
 import { makeEvent, localDate, addDays } from '../adapters/common';
 import { decodeEntities, toUtcFromLocal, validateSourceEvent } from '../core/normalize';
 import type { SourceEvent } from '../types';
 
 export interface Rec1Venue { match: string; name: string; address?: string; lat: number; lng: number }
 export interface Rec1Config { catalogUrl: string; tz: string; town: string; venues: Rec1Venue[] }
-export interface Session { id: string; name: string; features: Record<string, string>; flags: Record<string, unknown> }
+export interface Session { id: string; name: string; features: Record<string, string>; flags: Record<string, unknown>; group?: { id: string; name: string } }
 
 export const REQUEST_BUDGET = 80; // K3.1 (DR-K3.1-2): four youth tabs plus their deferred activity groups
 export const SPACING_MS = 6_000;
@@ -60,7 +61,7 @@ export function collectSessions(json: unknown): Session[] {
         }
       }
       const flags: Record<string, unknown> = {};
-      for (const [k, x] of Object.entries(o)) if (typeof x === 'boolean' || ((typeof x === 'string' || typeof x === 'number') && (SPOT_KEY.test(k) || CLOSED_FLAG.test(k) || OPEN_FLAG.test(k)))) flags[k] = x;
+      for (const [k, x] of Object.entries(o)) if (typeof x === 'boolean' || ((typeof x === 'string' || typeof x === 'number') && (SPOT_KEY.test(k) || CLOSED_FLAG.test(k) || OPEN_FLAG.test(k) || k === 'regStart'))) flags[k] = x;
       if (conflict) flags.featureConflict = true;
       const prev = out.get(id);
       if (prev && JSON.stringify(prev) !== JSON.stringify({ id, name: name.trim(), features, flags })) prev.flags.duplicateConflict = true;
@@ -85,10 +86,29 @@ const pick = (f: Record<string, string>, names: string[]) => names.map((n) => f[
 const YU = String.raw`(?:\s*y(?:rs?)?(?:\s*\d{1,2}\s*m)?|\s*(?:years?|yrs?))?`;
 const GENDER = String.raw`(?:\s*[/,]?\s*(?:coed|co-ed|male|female|boys|girls))?`;
 const AGE_RANGE = new RegExp(String.raw`^(?:ages?\s*)?(\d{1,2})${YU}\s*(?:-|–|to)\s*(\d{1,2})${YU}${GENDER}$`);
-const AGE_UP = new RegExp(String.raw`^(?:ages?\s*)?(\d{1,2})${YU}\s*(?:\+|and up|& up|and older|and over)${GENDER}$`);
+const AGE_UP = new RegExp(String.raw`^(?:ages?\s*)?(\d{1,2})${YU}\s*(?:\+|and up|& up|/\s*up|and older|and over)${GENDER}$`);
+const GRADE = String.raw`(?:(pre-?k\s*[34]?|tk|k|kindergarten)|(\d{1,2})(?:st|nd|rd|th))`;
+const GRADE_RANGE = new RegExp(String.raw`^${GRADE}(?:\s*grade)?\s*(?:-|–|to)\s*${GRADE}(?:\s*grade)?$`);
+const gradeAge = (named: string | undefined, num: string | undefined): number | undefined => {
+  if (named) return /^pre/.test(named) ? (/3/.test(named) ? 3 : 4) : named === 'tk' ? 4 : 5;
+  const n = Number(num);
+  return n >= 1 && n <= 12 ? n + 5 : undefined;
+};
+/** K3.1 r4: TDRPD states many youth ranges as grades (`1st Grade - 3rd Grade`). Grade g is ages g+5 to g+6; K = 5, TK/Pre-K4 = 4. */
+function gradeRange(t: string): { min: number; max: number } | null | undefined {
+  const m = GRADE_RANGE.exec(t);
+  if (!m) return /grade/.test(t) ? null : undefined;
+  const a = gradeAge(m[1], m[2]), b = gradeAge(m[3], m[4]);
+  if (a === undefined || b === undefined || a > b) return null;
+  return { min: a, max: Math.min(b + 1, 18) };
+}
 /** Rec1 age text -> years, anchored on the whole value. `18y and up` / `5+` -> max 99. Grades, months, several ranges -> null. */
 export function parseAges(s: string): { min: number; max: number } | null {
   const t = s.toLowerCase().replace(/\s+/g, ' ').trim();
+  const g = gradeRange(t);
+  if (g !== undefined) return g;
+  const mo = /^(\d{1,2})\s*m\s*(?:-|–|to)\s*(\d{1,2})$/.exec(t); // K3.1 r4: `4m-3` = 4 months to 3 years
+  if (mo) return +mo[1] <= 24 ? { min: 0, max: +mo[2] } : null;
   const up = AGE_UP.exec(t);
   if (up) return { min: +up[1], max: 99 };
   const m = AGE_RANGE.exec(t);
@@ -166,7 +186,7 @@ export function firstMeeting(dates: string, days: string, today: string): { date
   return { date, multi: end > start };
 }
 
-const CLOSED_FLAG = /^(?:is)?(?:full|closed|soldout|registrationclosed|registrationover|cancell?ed|waitlistonly)$/i;
+const CLOSED_FLAG = /^(?:is)?(?:full|sessionfull|closed|soldout|registrationclosed|registrationover|cancell?ed|waitlistonly)$/i;
 const OPEN_FLAG = /^(?:is)?(?:open|available|registrationopen)$/i;
 const SPOT_KEY = /^(?:spots|openings|spotsavailable|availability|available|remaining|status|spotsleft)$/i;
 /** Explicit availability: any closed signal vetoes; open needs a positive signal; nothing recognized is unknown (dropped). */
@@ -179,6 +199,11 @@ export function availability(s: Session): 'open' | 'closed' | 'unknown' {
     else if (typeof v === 'string' && (CLOSED_FLAG.test(k) || OPEN_FLAG.test(k))) signals.push('unknown'); // a string boolean is not trusted either way
   }
   for (const [k, v] of Object.entries(s.features)) if (SPOT_KEY.test(k)) signals.push(textSignal(v));
+  // K3.1 r4: registration not open yet (opens on `regStart`, not over, not full, not cancelled) is an upcoming, open program
+  if (s.flags.registrationOpen === false && s.flags.registrationOver === false && typeof s.flags.regStart === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(s.flags.regStart)) {
+    const i = signals.indexOf('closed');
+    if (i >= 0) signals.splice(i, 1, 'open');
+  }
   if (signals.includes('closed')) return 'closed';
   if (signals.includes('unknown')) return 'unknown';
   return signals.includes('open') ? 'open' : 'unknown';
@@ -189,6 +214,23 @@ function textSignal(v: string): string {
   if (/full|closed|wait|cancel|sold out|^none$/.test(t)) return 'closed';
   if (/^(?:open|available|\d{1,4} (?:spots?|openings?)(?: left| available)?)$/.test(t)) return /^0 /.test(t) ? 'closed' : 'open';
   return t === '' ? '' : 'unknown';
+}
+
+const NOISE_SEG = /^(?:\d{4}(?:\s*-\s*\d{4})?|fall|winter|spring|summer|session\s+[a-z0-9]{1,4}|(?:mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)[a-z]*\.?(?:\s+\d{1,2}:\d{2}\s*[ap]m)?|[a-z]{3}|nov|dec|jan|feb)$/i;
+/**
+ * K3.1 r4: Rec1 session names carry year, season, session and slot segments (`2026 | Session B | Sat 09:05 AM | Guppy`). Those are
+ * dropped; the rest is the program. When the group name already contains it (`Swim Level 0 - Guppy`), the group name is the title;
+ * when the rest contains the group name, the rest is; otherwise `<group>: <rest>`. Organizer text only.
+ */
+export function programTitle(name: string, group?: string): string {
+  const segs = name.split('|').map((x) => x.trim()).filter((x) => x && !NOISE_SEG.test(x));
+  const rest = segs.join(' | ') || name.trim();
+  const g = (group ?? '').replace(/\s+/g, ' ').trim();
+  if (!g) return rest;
+  const lo = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (lo(g).includes(lo(rest))) return g;
+  if (lo(rest).includes(lo(g))) return rest;
+  return `${g}: ${rest}`;
 }
 
 export interface MapOut { items: SourceEvent[]; dropped: Record<string, number>; found: number }
@@ -203,6 +245,7 @@ export function mapSessions(sessions: Session[], cfg: Rec1Config, now: Date): Ma
   const items: SourceEvent[] = [];
   const dropped: Record<string, number> = {};
   const drop = (c: string) => { dropped[c] = (dropped[c] ?? 0) + 1; };
+  const byKey = new Map<string, SourceEvent>();
   for (const s of sessions) {
     if (s.flags.featureConflict || s.flags.duplicateConflict) { drop('conflict'); continue; }
     const ages = parseAges(pick(s.features, ['agegender', 'ages', 'age', 'agerange', 'agegroup']));
@@ -220,18 +263,26 @@ export function mapSessions(sessions: Session[], cfg: Rec1Config, now: Date): Ma
     const startsAt = toUtcFromLocal(meet.date, times.start, cfg.tz);
     const endsAt = toUtcFromLocal(meet.date, times.end, cfg.tz);
     if (startsAt === 'dst_gap') { drop('dst_gap'); continue; }
+    // K3.1 r4: one meeting longer than 10 h is a data-entry error (day camps run ~7 h) (seen: `12:05am-12:35pm` for a 12:05 PM swim class)
+    if (endsAt !== 'dst_gap' && Date.parse(endsAt) - Date.parse(startsAt) > 10 * 3_600_000) { drop('time_implausible'); continue; }
     if (Date.parse(startsAt) <= now.getTime()) { drop('started'); continue; }
     const loc = pick(s.features, ['location', 'locations', 'facility']);
     const v = venues.find((x) => x.re.test(loc));
-    const key = `rec1:${agency}#${s.id}`;
+    const title = programTitle(s.name, s.group?.name);
+    // K3.1 r4: one row per program (group + cleaned title) at its earliest open meeting; Rec1 lists each time slot as a session
+    const key = s.group && /^\d{1,12}$/.test(s.group.id) ? `rec1:${agency}#g${s.group.id}-${createHash('sha256').update(title.toLowerCase()).digest('hex').slice(0, 10)}` : `rec1:${agency}#${s.id}`;
+    const prev = byKey.get(key);
+    if (prev && prev.startsAt <= startsAt) { drop('same_program'); continue; }
+    if (prev) { items.splice(items.indexOf(prev), 1); drop('same_program'); }
     const e = makeEvent({
-      externalKey: key, title: s.name, startsAt, endsAt: endsAt === 'dst_gap' ? undefined : endsAt, allDay: false, tz: cfg.tz,
+      externalKey: key, title, startsAt, endsAt: endsAt === 'dst_gap' ? undefined : endsAt, allDay: false, tz: cfg.tz,
       venueName: v ? v.name : loc || undefined, address: v?.address, town: cfg.town, lat: v?.lat, lng: v?.lng,
       url: cfg.catalogUrl, hints: ages.min <= 12 ? ['audience:kids'] : [], family: 'rec1_catalog', seriesUid: meet.multi ? key : undefined,
     });
     const ok = validateSourceEvent(e);
     if ('invalid' in ok) { drop('invalid'); continue; }
     items.push(ok);
+    byKey.set(key, ok);
   }
   return { items, dropped, found: sessions.length };
 }
@@ -333,14 +384,14 @@ export function toSession(rec: unknown): Session {
     if (isScalar(v)) continue;
     if (k === 'features' && Array.isArray(v) && v.every((f) => plain(f) && Object.values(f).every(isScalar)
         && typeof f.name === 'string' && (typeof f.value === 'string' || typeof f.value === 'number'))) continue;
-    if (k === 'info' && Array.isArray(v) && v.every(isScalar)) continue;
+    if ((k === 'info' || k === 'basicInfo') && Array.isArray(v) && v.every(isScalar)) continue; // r4: basicInfo, never read
     if (k === 'children' && Array.isArray(v) && v.length === 0) continue;
     // K3.1 r2-3: `groups` (CatalogItem.init) is metadata: scalars or flat scalar-only objects, never read into an item
     if (k === 'groups' && Array.isArray(v) && v.every((g) => isScalar(g) || (plain(g) && Object.values(g).every(isScalar)))) continue;
     shape();
   }
   if (!Array.isArray(o.features)) shape();
-  const found = collectSessions({ items: [{ ...o, info: undefined, children: undefined, groups: undefined }] });
+  const found = collectSessions({ items: [{ ...o, info: undefined, basicInfo: undefined, children: undefined, groups: undefined }] });
   if (found.length !== 1) shape();
   return found[0];
 }
@@ -363,7 +414,7 @@ export async function collect(src: JsonSource, raw: Record<string, string> = {})
   const skippedIds = new Set<string>();
   let bad = false;
   const parse = (body: string): unknown => { try { return JSON.parse(body); } catch { bad = true; return undefined; } };
-  const records: unknown[] = [];
+  const records: { rec: unknown; group?: { id: string; name: string } }[] = [];
   const refs: { tab: string; ref: GroupRef }[] = [];
   raw['tabs.json'] = await src.tabs();
   let tabs: string[];
@@ -375,7 +426,7 @@ export async function collect(src: JsonSource, raw: Record<string, string> = {})
       raw[p === 1 ? `tab-${tab}.json` : `tab-${tab}-p${p}.json`] = body;
       let t;
       try { t = parseTabAnswer(parse(body)); } catch (e) { if (!(e instanceof Rec1Fail)) throw e; bad = true; break; }
-      records.push(...t.records);
+      records.push(...t.records.map((rec) => ({ rec })));
       for (const ref of t.refs) {
         // r3: the same group is listed under several sections and tabs; read it once (first tab), skip non-event groups
         if (refs.some((x) => x.ref.groupId === ref.groupId) || skippedIds.has(ref.groupId)) { notes.groups_repeated++; continue; }
@@ -403,7 +454,7 @@ export async function collect(src: JsonSource, raw: Record<string, string> = {})
       if (g.itemCount !== ref.itemCount) { bad = true; break; } // K3.1 r2-4: the count must agree with discovery on every page
       const before = ids.size;
       for (const r of g.records) {
-        records.push(r);
+        records.push({ rec: r, group: { id: ref.groupId, name: ref.name ?? '' } });
         const id = plain(r) && (typeof r.id === 'string' || typeof r.id === 'number') ? String(r.id) : '';
         if (id) ids.add(id);
       }
@@ -413,7 +464,7 @@ export async function collect(src: JsonSource, raw: Record<string, string> = {})
     manifest.groups.push({ tab, group: ref.groupId, itemCount: ref.itemCount, sessions: ids.size });
   }
   const sessions: Session[] = [];
-  for (const r of records) { try { sessions.push(toSession(r)); } catch (e) { if (!(e instanceof Rec1Fail)) throw e; bad = true; } }
+  for (const r of records) { try { sessions.push({ ...toSession(r.rec), ...(r.group ? { group: r.group } : {}) }); } catch (e) { if (!(e instanceof Rec1Fail)) throw e; bad = true; } }
   if (bad) return finish({ status: 'layout_changed' as const, sessions: [], raw, notes });
   const seen = new Map<string, Session>();
   for (const x of sessions) {

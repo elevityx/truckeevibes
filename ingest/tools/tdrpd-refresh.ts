@@ -51,7 +51,7 @@ function curlHttp(jar: string) {
     args.push(req.url);
     // Review: on a curl error (timeout, size cap) keep the HTTP status and the partial body, so a 403/429 still trips the kill switch.
     let code = '';
-    try { code = (await run('curl', args, { maxBuffer: 1024 * 1024 })).stdout; } catch (e) { code = String((e as { stdout?: unknown }).stdout ?? ''); }
+    try { code = (await run('curl', args, { maxBuffer: 1024 * 1024 })).stdout; } catch (e) { code = String((e as { stdout?: unknown }).stdout ?? ''); log(`curl exit ${String((e as { code?: unknown }).code ?? '?')} on ${new URL(req.url).pathname.split('/').slice(0, 5).join('/')}`); }
     let body = '';
     try { body = readFileSync(out, 'utf8').slice(0, 5_000_000); } catch { body = ''; }
     rmSync(out, { force: true });
