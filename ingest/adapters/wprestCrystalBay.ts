@@ -6,6 +6,8 @@ import { decodeUtf8, dedupe, makeEvent, sha256Hex, tzOf } from './common';
 import { decodeEntities, plainText, toUtcFromLocal } from '../core/normalize';
 
 const API_URL = 'https://www.crystalbaycasino.com/wp-json/wp/v2/event?per_page=100';
+/** Spec_21Plus_Coverage: the casino's events list page. Read only for each card's age label (the `fa-id-card` post-info item). */
+export const LIST_URL = 'https://www.crystalbaycasino.com/entertainment/events/';
 const LINK = /^https:\/\/www\.crystalbaycasino\.com\/[a-z0-9/-]{1,120}\/$/;
 const MAX_BODY = 1_048_576;
 const MAX_EVENTS = 100;
@@ -111,6 +113,43 @@ export function parseCbcRoom(title: string, text: string): { title: string; room
   return rooms.size === 1 ? { title, room: ROOM_NAME[[...rooms][0]] } : { title };
 }
 
+/** The only age labels the casino's card field is read for (own keys only: a Map, never an object lookup); anything else gives no age. */
+const AGE_LABELS: ReadonlyMap<string, string> = new Map([['21+', '21+'], ['18+', '18+'], ['all ages', 'All ages']]);
+const EVENT_HREF = /\bhref="(?:https:\/\/www\.crystalbaycasino\.com)?(\/event\/[^"]*)"/g;
+const EVENT_PATH = /^\/event\/[a-z0-9-]{1,120}\/$/;
+
+/**
+ * Spec_21Plus_Coverage (r2): event link -> the casino's own age label for that show, from the events list page. The page renders each show
+ * as one `<article class="ae-post-item …">` card. A card counts only when it links to exactly one event (absolute or relative `/event/…/`)
+ * and holds exactly one element whose class list has the `fa-id-card` token, inside an `elementor-post-info__item` whose text is a known
+ * label. Anything else on a card (no link, two links, two age fields, an unknown label) gives that card nothing; a link whose cards
+ * disagree gets nothing. Fail closed: a missed label leaves the age to the event's own REST text.
+ */
+export function parseCbcAgeLabels(html: string): Map<string, string> {
+  const seen = new Map<string, string | null>();
+  const cards = html.split(/<article\s+class="ae-post-item\b/).slice(1).map((c) => c.split(/<\/article>/)[0]);
+  for (const card of cards) {
+    const paths = new Set<string>();
+    for (const m of card.matchAll(EVENT_HREF)) paths.add(m[1]);
+    if (paths.size !== 1) continue;
+    const path = [...paths][0];
+    if (!EVENT_PATH.test(path)) continue;
+    const link = `https://www.crystalbaycasino.com${path}`;
+    const idCards = [...card.matchAll(/\bclass="([^"]*)"/g)].filter((m) => m[1].split(/\s+/).includes('fa-id-card'));
+    let label: string | null = null;
+    if (idCards.length === 1) {
+      const rest = card.slice(idCards[0].index! + idCards[0][0].length);
+      const t = /^[^>]*>\s*<\/i>\s*<\/span>\s*<span class="[^"]*\belementor-post-info__item\b[^"]*">([^<]{1,40})<\/span>/.exec(rest);
+      if (t) label = AGE_LABELS.get(decodeEntities(t[1]).trim().toLowerCase()) ?? null;
+    }
+    if (seen.has(link) && seen.get(link) !== label) seen.set(link, null);
+    else if (!seen.has(link)) seen.set(link, label);
+  }
+  const out = new Map<string, string>();
+  for (const [k, v] of seen) if (typeof v === 'string') out.set(k, v);
+  return out;
+}
+
 interface Entry { id: number; link: string; title: string; content: string }
 
 function entriesOf(body: Uint8Array, headers: Headers): Entry[] {
@@ -128,7 +167,7 @@ function entriesOf(body: Uint8Array, headers: Headers): Entry[] {
 
 export const adapter: Adapter = {
   family: 'wprest_crystalbay',
-  version: 'wprest_crystalbay.1',
+  version: 'wprest_crystalbay.2',
   async fetch(ctx: AdapterCtx): Promise<AdapterResult> {
     const { source, now } = ctx;
     for (const k of Object.keys(source.config)) if (!CONFIG_KEYS.has(k)) throw new Error('config_key_unknown');
@@ -140,6 +179,12 @@ export const adapter: Adapter = {
       if (res.status !== 200) return { items: [], status: 'http_error', httpStatus: res.status };
       if (res.body.byteLength > MAX_BODY) throw new Fail('page_too_large');
       const entries = entriesOf(res.body, res.headers);
+      // The list page is best effort: any failure leaves every age to the event's own text (unknown), never to a guess.
+      let ageLabels = new Map<string, string>();
+      try {
+        const list = await ctx.fetch(LIST_URL, { kind: 'html' });
+        if (list.status === 200 && list.body.byteLength <= 2 * MAX_BODY) ageLabels = parseCbcAgeLabels(decodeUtf8(list.body));
+      } catch { /* ageLabels stays empty */ }
 
       const items: SourceEvent[] = [];
       const filteredBy: Record<string, number> = {};
@@ -162,7 +207,7 @@ export const adapter: Adapter = {
         items.push(makeEvent({
           externalKey: `cbc:${entry.id}`, title, startsAt, allDay: false, tz,
           venueName: room ? `Crystal Bay Casino ${room}` : 'Crystal Bay Casino', ...VENUE,
-          url: entry.link, ticketUrl: entry.link, family: 'wprest_crystalbay',
+          url: entry.link, ticketUrl: entry.link, family: 'wprest_crystalbay', ageText: ageLabels.get(entry.link),
         }, text.replace(/https?:\/\/\S+/g, '').slice(0, CLASSIFIER_CAP)));
       }
 

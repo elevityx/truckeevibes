@@ -922,7 +922,9 @@ describe('kids_sources (Kids live K1)', () => {
   const code = () => sql().split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
   it('exists, sorts after every merged migration, unique versions', () => {
     expect(files).toContain(NAME);
-    for (const f of files.filter((x) => x.endsWith('.sql') && x !== NAME)) expect(NAME > f, f).toBe(true);
+    // Pinned to the migrations merged before it (later ones, e.g. 21plus_coverage, sort after it by design).
+    for (const f of files.filter((x) => x.endsWith('.sql') && x !== NAME && x.slice(0, 14) < NAME.slice(0, 14))) expect(NAME > f, f).toBe(true);
+    expect(files.filter((x) => x.endsWith('.sql') && x.slice(0, 14) < NAME.slice(0, 14)).at(-1)).toBe('20261024000300_ingest_quality.sql');
     const versions = files.filter((f) => f.endsWith('.sql')).map((f) => f.slice(0, 14));
     expect(new Set(versions).size).toBe(versions.length);
   });
@@ -943,5 +945,32 @@ describe('kids_sources (Kids live K1)', () => {
     expect(sql()).toMatch(/set enabled = true, trust = 'auto' where slug in \('libcal-truckee', 'libcal-kings-beach', 'libcal-tahoe-city'\)/);
     expect(sql()).toMatch(/update public\.sources set enabled = false,[\s\S]*?where slug = 'tdrpd'/);
     expect(sql()).not.toMatch(/update public\.sources set[^;]*\btrust\b[^;]*where slug = 'tdrpd'/);
+  });
+});
+
+// Spec_21Plus_Coverage AC-21-20: data-only migration text.
+describe('21plus_coverage (Crystal Bay age labels)', () => {
+  const NAME = '20261030000500_21plus_coverage.sql';
+  const sql = () => readFileSync(join(DIR, NAME), 'utf8');
+  const code = () => sql().split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
+  it('exists, sorts after every other migration, unique versions', () => {
+    expect(files).toContain(NAME);
+    for (const f of files.filter((x) => x.endsWith('.sql') && x !== NAME)) expect(NAME > f, f).toBe(true);
+    const versions = files.filter((f) => f.endsWith('.sql')).map((f) => f.slice(0, 14));
+    expect(new Set(versions).size).toBe(versions.length);
+  });
+  it('records html for crystal-bay-casino, sets music + nightlife defaults, self-checks', () => {
+    expect(code()).toContain("record_source_terms('crystal-bay-casino'");
+    expect(code()).toContain("array['api','html']");
+    expect(code()).toContain('["music","nightlife"]');
+    expect(code()).toContain('21plus_coverage_state');
+    expect(code()).toMatch(/is distinct from '\["music","nightlife"\]'::jsonb/);
+  });
+  it('data only: no grant, revoke, function, trust or enabled change, no ageRule', () => {
+    expect(code()).not.toMatch(/\bgrant\s/i);
+    expect(code()).not.toMatch(/\brevoke\s/i);
+    expect(code()).not.toMatch(/create\s+(?:or\s+replace\s+)?function/i);
+    expect(code()).not.toMatch(/\b(?:trust|enabled)\s*=/);
+    expect(code()).not.toContain('ageRule');
   });
 });

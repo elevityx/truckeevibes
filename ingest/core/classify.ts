@@ -1,4 +1,4 @@
-// Classifier v4 (plan 3.3; A15 adds source-free labels, $0 and description price phrases, and explicit kids/family phrases; Spec_Kids_Live c4
+// Classifier v5 (Spec_21Plus_Coverage c5: age separators, `music` title word, Events Manager labels; v4 plan 3.3; A15 adds source-free labels, $0 and description price phrases, and explicit kids/family phrases; Spec_Kids_Live c4
 // adds kids title keywords, a kids-safe `club` exemption for the word-list check, and audience-authoritative families): fail-closed. Description text is read here, in memory, and never returned; every output
 // that explains a tag is a closed reason code. When unsure, no tag.
 import type { AgeKind, PriceKind } from '../types';
@@ -9,7 +9,7 @@ import { capReasons, type ReasonCode } from './reasonCodes';
 
 /** Whole-word title keywords. `kids` and `family` never come from the title (plan 3.3 step 1b). */
 const TABLES: [string, RegExp][] = [
-  ['music', /\b(?:concert|live music|band|dj|open mic|bluegrass|jazz)(?:s|es)?\b/],
+  ['music', /\b(?:concert|live music|music|band|dj|open mic|bluegrass|jazz|orchestra|symphony)(?:s|es)?\b/], // c5: + music, orchestra, symphony
   ['food-drink', /\b(?:beer|brew|brewery|breweries|brewing|wine|tasting|dinner|brunch|food truck)(?:s|es)?\b/],
   ['outdoors', /\b(?:hike|hiking|trail|paddle|paddling|ski|skiing|snowshoe|bike|biking|run|running|race)(?:s|es)?\b/],
   ['arts', /\b(?:art|gallery|theater|theatre|film|dance|craft)(?:s|es)?\b/],

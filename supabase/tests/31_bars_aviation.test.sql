@@ -258,7 +258,7 @@ create function pg_temp.vlt(p_key text, p_title text, p_day int, p_hh int) retur
 -- AC-M1-140 migration ---------------------------------------------------------------------------------------------------
 select pg_temp.eq($$(select string_agg(slug || ':' || enabled || ':' || trust || ':' || ingest_disposition || ':' || array_to_string(allowed_methods, ',') || ':' || family || ':' || class || ':'
     || (terms_recheck_at at time zone 'UTC')::date, ';' order by slug) from public.sources where slug in ('crystal-bay-casino', 'moodys-bistro', 'eaa-1073-breakfast'))$$,
-  'crystal-bay-casino:true:review:permitted:api:wprest_crystalbay:venue:2027-10-18;eaa-1073-breakfast:true:auto:permitted:feed:curated_dates:community:2027-01-10;moodys-bistro:true:auto:permitted:api:tribe:venue:2027-10-18',
+  'crystal-bay-casino:true:review:permitted:api,html:wprest_crystalbay:venue:2027-10-18;eaa-1073-breakfast:true:auto:permitted:feed:curated_dates:community:2027-01-10;moodys-bistro:true:auto:permitted:api:tribe:venue:2027-10-18',
   'AC-M1-151 the three sources: enabled, Crystal Bay at review, Moody''s and EAA auto, permitted, methods, family, class, recheck dates');
 select pg_temp.eq($$(select count(*) from public.sources where slug in ('crystal-bay-casino', 'moodys-bistro', 'eaa-1073-breakfast') and strict_auto)$$, '0', 'AC-M1-151 none of the three has strict_auto');
 select pg_temp.eq($$(select count(*) from public.sources where slug in ('crystal-bay-casino', 'moodys-bistro', 'eaa-1073-breakfast') and char_length(terms_note) <= 200)$$, '3', 'AC-M1-160 each of the three terms notes is at most 200 characters');
