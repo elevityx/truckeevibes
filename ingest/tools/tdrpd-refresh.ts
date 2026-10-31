@@ -15,7 +15,7 @@ import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { applyNotices } from '../core/notices';
-import { collectSessions, mapSessions, Rec1Fail, runRead, type HttpReq, type MapOut, type Rec1Config } from './rec1';
+import { collect, mapSessions, Rec1Fail, runRead, type HttpReq, type JsonSource, type MapOut, type Rec1Config } from './rec1';
 
 const run = promisify(execFile);
 const SLUG = 'tdrpd-rec1';
@@ -51,7 +51,7 @@ function curlHttp(jar: string) {
     args.push(req.url);
     // Review: on a curl error (timeout, size cap) keep the HTTP status and the partial body, so a 403/429 still trips the kill switch.
     let code = '';
-    try { code = (await run('curl', args, { maxBuffer: 1024 * 1024 })).stdout; } catch (e) { code = String((e as { stdout?: unknown }).stdout ?? ''); }
+    try { code = (await run('curl', args, { maxBuffer: 1024 * 1024 })).stdout; } catch (e) { code = String((e as { stdout?: unknown }).stdout ?? ''); log(`curl exit ${String((e as { code?: unknown }).code ?? '?')} on ${new URL(req.url).pathname.split('/').slice(0, 5).join('/')}`); }
     let body = '';
     try { body = readFileSync(out, 'utf8').slice(0, 5_000_000); } catch { body = ''; }
     rmSync(out, { force: true });
@@ -61,7 +61,7 @@ function curlHttp(jar: string) {
 }
 
 async function submit(grant: string, startedAt: string, status: string, items: unknown[], extra: Record<string, unknown>, then = ''): Promise<Record<string, unknown>> {
-  const runMeta = { status, started_at: startedAt, parser_version: 'rec1_catalog.1-c5', ...extra };
+  const runMeta = { status, started_at: startedAt, parser_version: 'rec1_catalog.2-c5', ...extra };
   const rows = await sql<{ batch: Record<string, unknown> }>(
     `select public.svc_ingest_batch(${lit(grant)}, ${lit(JSON.stringify(runMeta))}::jsonb, ${lit(JSON.stringify(items))}::jsonb) as batch;${then}`);
   return rows[0]?.batch ?? {};
@@ -76,9 +76,24 @@ async function main(argv: string[]): Promise<number> {
   const cfg = src.config;
 
   if (from) { // map only: no grant, no write (review r2-5)
-    const files = readdirSync(from).filter((f) => /^items-\d+(?:-p\d+)?\.json$/.test(f)).sort();
-    const sessions = files.flatMap((f) => collectSessions(JSON.parse(readFileSync(join(from, f), 'utf8'))));
-    report(mapSessions(sessions, cfg, new Date()));
+    // K3.1 (DR-K3.1-6): the same parser over the saved answers; K3's items-<tab>.json names still read.
+    const have = new Set(readdirSync(from));
+    const file = (...names: string[]) => {
+      const n = names.find((x) => have.has(x));
+      if (!n) throw new Rec1Fail('layout_changed');
+      return Promise.resolve(readFileSync(join(from, n), 'utf8'));
+    };
+    const src: JsonSource = {
+      left: () => Number.MAX_SAFE_INTEGER,
+      tabs: () => file('tabs.json'),
+      tab: (t, p) => (p === 1 ? file(`tab-${t}.json`, `items-${t}.json`) : file(`tab-${t}-p${p}.json`, `items-${t}-p${p}.json`)),
+      group: (t, g, p) => file(`group-${t}-${g}-p${p}.json`),
+    };
+    let c;
+    try { c = await collect(src); } catch (e) { if (e instanceof Rec1Fail) { log(`replay ${e.code}`); return 1; } throw e; }
+    log(`replay status=${c.status} notes=${JSON.stringify(c.notes)}`);
+    if (c.status !== 'ok') return 1;
+    report(mapSessions(c.sessions, cfg, new Date()));
     return 0;
   }
   if (!src.ok) { log('source is disabled or not manual_only: nothing read'); return 1; }
@@ -101,7 +116,7 @@ async function main(argv: string[]): Promise<number> {
   } finally {
     rmSync(jar, { recursive: true, force: true }); // the per-run cookie jar never outlives the run
   }
-  log(`read status=${r.status} requests=${r.requests} http=${r.httpStatus ?? '-'}`);
+  log(`read status=${r.status} requests=${r.requests} http=${r.httpStatus ?? '-'} notes=${JSON.stringify(r.notes ?? {})}`);
   const keepRaw = () => {
     const dir = join(homedir(), '.truckeevibes', 'tdrpd', new Date().toISOString().replace(/[:.]/g, '-'));
     mkdirSync(dir, { recursive: true, mode: 0o700 });
