@@ -277,6 +277,13 @@ describe('runRead: the request plan (AC-K3-07, DR-K3-5)', () => {
     expect((await runRead(CFG, b.deps)).status).toBe('layout_changed');
   });
 
+  it('a record hidden inside a feature entry is layout_changed', async () => {
+    const valid = JSON.parse(fx('items-1002.json')).items[0];
+    const bad = { ...valid, features: [...valid.features, { name: 'Ages', value: '5-12', children: [{ sessionId: 9, title: 'Mystery' }] }] };
+    const h = harness((c) => (c.url.endsWith('/1002') ? { status: 200, body: JSON.stringify({ hasMoreResults: false, items: [bad] }) } : normal(c)));
+    expect((await runRead(CFG, h.deps)).status).toBe('layout_changed');
+  });
+
   it('an empty tab is fine', async () => {
     const h = harness((c) => (c.url.endsWith('/1002') ? { status: 200, body: JSON.stringify({ hasMoreResults: false, items: [] }) } : normal(c)));
     expect((await runRead(CFG, h.deps)).status).toBe('ok');

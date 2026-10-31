@@ -88,6 +88,9 @@ export function unrecognizedRecords(json: unknown): number {
       if (!named || !/^\d{1,12}$/.test(id)) n++;
       // recheck r5: a session that nests any other list of objects could hide a record, so it fails closed too
       if (Object.entries(o).some(([k, x]) => k !== 'features' && holdsObjectList(x, 0))) n++;
+      // recheck r6: each feature must be a flat {name, value, ...scalars} entry, so nothing can hide inside the features list either
+      const scalar = (x: unknown) => x === null || ['string', 'number', 'boolean'].includes(typeof x);
+      if (!(o.features as unknown[]).every((f) => f && typeof f === 'object' && !Array.isArray(f) && Object.values(f).every(scalar))) n++;
       return;
     }
     const nested = Object.values(o).filter((x) => Array.isArray(x) && x.some((y) => y && typeof y === 'object'));
