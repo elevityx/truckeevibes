@@ -92,6 +92,7 @@ export function unrecognizedRecords(json: unknown): number {
     // plain object properties are metadata unless they hold lists, which are walked (a list anywhere is checked)
     const props = Object.values(o).filter((x) => x && typeof x === 'object' && !Array.isArray(x));
     if (nested.length === 0 && depth > 0 && viaList) n++;
+    else if (viaList && props.length > 0) n++; // a list container holds only scalars and lists: a plain object in it could hide a record
     for (const x of nested) walk(x, depth + 1, true);
     for (const x of props) walk(x, depth + 1, false);
   };
