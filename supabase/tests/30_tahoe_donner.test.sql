@@ -250,14 +250,14 @@ select pg_temp.eq($$(select count(*) from public.sources where slug = 'tahoe-don
     and allowed_hosts = array['www.tahoedonner.com'] and class = 'organizer' and ai_bots_blocked = false and robots_checked_at = '2026-10-19'
     and robots_hash = '0fe5c745546c76471ae5c41caeede4f3e6bf08a51c87aaf8bc6fd22b0ad11eb9'
     and config = '{"listUrl":"https://www.tahoedonner.com/events/","tz":"America/Los_Angeles"}'::jsonb)$$, '1', 'AC-M1-130 tahoe-donner row is enabled/review/24h/html_tahoedonner/permitted/{html}/page_cap 45/recheck 2027-10-17/hosts/config');
-select pg_temp.eq($$(select count(*) from public.sources where enabled)$$, '17', 'AC-M1-130 fifteen sources enabled (A14 adds three); Kids live: +3 libraries, -tdrpd = seventeen');
+select pg_temp.eq($$(select count(*) from public.sources where enabled)$$, '18', 'AC-M1-130 fifteen sources enabled (A14 adds three); Kids live: +3 libraries, -tdrpd = seventeen; K3 +tdrpd-rec1 = eighteen');
 select pg_temp.t($$(select pg_temp.x('postgres', $s$insert into public.sources (slug, name, homepage_url, allowed_hosts, family, class) values ('td-bogus', 'Bogus Family', 'https://example.test/', array['example.test'], 'html_bogus', 'organizer')$s$)) like 'ERR:23514%'$$,
   'AC-M1-130 family html_bogus fails the CHECK');
 select pg_temp.t($$(select pg_temp.x('postgres', $s$insert into public.sources (slug, name, homepage_url, allowed_hosts, family, class) values ('td-ok-fam', 'Tahoe Donner Family', 'https://example.test/', array['example.test'], 'html_tahoedonner', 'organizer')$s$)) = 'OK'$$,
   'AC-M1-130 family html_tahoedonner passes the CHECK');
 select pg_temp.eq($$(select count(distinct p.oid) from pg_proc p join pg_namespace n on n.oid = p.pronamespace, lateral aclexplode(p.proacl) a
-   where n.nspname in ('public', 'private') and a.privilege_type = 'EXECUTE' and a.grantee in (select oid from pg_roles where rolname in ('anon', 'authenticated', 'service_role')))$$, '25',
-  'AC-M1-130 the EXECUTE grants are unchanged (24 from A13 + 1 for W1 api_events_v1 = 25)');
+   where n.nspname in ('public', 'private') and a.privilege_type = 'EXECUTE' and a.grantee in (select oid from pg_roles where rolname in ('anon', 'authenticated', 'service_role')))$$, '26',
+  'AC-M1-130 the EXECUTE grants are unchanged (24 from A13 + 1 for W1 api_events_v1 = 25, + 1 for K3 svc_manual_grant = 26)');
 -- 25 = A13's 24 (unchanged by this migration) + public.api_events_v1, granted by W1's 20261024000100 which sorts after this migration.
 
 -- AC-M1-133 (r4) members-only category -----------------------------------------------------------------------------------

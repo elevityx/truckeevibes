@@ -132,8 +132,8 @@ select is(cardinality(pg_temp.fn_list('authenticated', 'public')), 19, 'AC-W1-17
 select is(pg_temp.fn_list('service_role', 'public'),
   (select array_agg(x order by x) from unnest(array[
      'svc_cluster_and_publish(integer)', 'svc_ingest_batch(text, jsonb, jsonb)', 'svc_ingest_nonce(text)', 'svc_issue_run_grants()',
-     'svc_set_venue_geocode(uuid, double precision, double precision, text)', 'svc_weekly_report()']) x),
-  'AC-M1-05 service_role EXECUTE in public is exactly the six svc_* routines');
+     'svc_manual_grant(text)', 'svc_set_venue_geocode(uuid, double precision, double precision, text)', 'svc_weekly_report()']) x),
+  'AC-M1-05 service_role EXECUTE in public is exactly the seven svc_* routines (K3 adds svc_manual_grant)');
 select is(pg_temp.fn_list('service_role', 'private'), '{}'::text[], 'service_role executes nothing in private');
 select is(pg_temp.fn_list('anon', 'private'), '{}'::text[], 'anon executes nothing in private');
 select is(pg_temp.fn_list('authenticated', 'private'), '{}'::text[], 'authenticated executes nothing in private');
