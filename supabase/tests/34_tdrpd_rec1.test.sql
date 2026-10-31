@@ -33,11 +33,13 @@ select throws_ok($$select public.svc_manual_grant('alibi-truckee')$$, 'P0001', '
 select throws_ok($$select public.svc_manual_grant('no-such-source')$$, 'P0001', 'manual_grant_refused', 'an unknown slug is refused');
 update public.sources set enabled = false where slug = 'tdrpd-rec1';
 select throws_ok($$select public.svc_manual_grant('tdrpd-rec1')$$, 'P0001', 'manual_grant_refused', 'a disabled (kill-switched) source is refused');
-update public.sources set enabled = true, terms_recheck_at = now() - interval '1 day' where slug = 'tdrpd-rec1';
-select throws_ok($$select public.svc_manual_grant('tdrpd-rec1')$$, 'P0001', 'manual_grant_refused', 'a source whose terms recheck has passed is refused');
+-- (an enabled source with an expired terms recheck cannot exist: sources_gate refuses it, and the nightly job disables expired rows)
+select throws_ok($$update public.sources set enabled = true, terms_recheck_at = now() - interval '1 day' where slug = 'tdrpd-rec1'$$, '23514', null,
+  'sources_gate refuses re-enabling with an expired terms recheck');
+update public.sources set enabled = true where slug = 'tdrpd-rec1';
 
 -- a non-ok, zero-item run through the manual grant records itself and touches no item (the kill-switch record)
-update public.sources set terms_recheck_at = '2027-10-30', next_due_at = now() - interval '1 hour' where slug = 'tdrpd-rec1';
+update public.sources set next_due_at = now() - interval '1 hour' where slug = 'tdrpd-rec1';
 select is((select public.svc_ingest_batch((public.svc_manual_grant('tdrpd-rec1') ->> 'grant'),
              jsonb_build_object('status', 'http_error', 'started_at', now() - interval '1 minute', 'error_code', 'site_block', 'http_status', 403), '[]'::jsonb) ->> 'status'),
   'http_error', 'a site_block run records through the manual grant');
