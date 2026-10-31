@@ -69,11 +69,6 @@ export function collectSessions(json: unknown): Session[] {
  * Every leaf object reached through a list (an object with no nested list of objects) must be a valid session; anything else, whatever
  * keys it has, is counted here and fails the read closed (recheck r2-r4 P1: mixed tabs never become a partial snapshot).
  */
-const holdsObjectList = (v: unknown, d: number): boolean => {
-  if (d > 12 || v === null || typeof v !== 'object') return d > 12;
-  if (Array.isArray(v)) return v.some((y) => y && typeof y === 'object');
-  return Object.values(v).some((x) => holdsObjectList(x, d + 1));
-};
 export function unrecognizedRecords(json: unknown): number {
   let n = 0;
   const walk = (v: unknown, depth: number, viaList: boolean) => {
@@ -87,9 +82,9 @@ export function unrecognizedRecords(json: unknown): number {
       const id = typeof o.id === 'number' || typeof o.id === 'string' ? String(o.id) : '';
       if (!named || !/^\d{1,12}$/.test(id)) n++;
       // recheck r5: a session that nests any other list of objects could hide a record, so it fails closed too
-      if (Object.entries(o).some(([k, x]) => k !== 'features' && holdsObjectList(x, 0))) n++;
-      // recheck r6: each feature must be a flat {name, value, ...scalars} entry, so nothing can hide inside the features list either
+      // recheck r5-r7: a session holds only scalars plus a flat features list; any other nested object could hide a record
       const scalar = (x: unknown) => x === null || ['string', 'number', 'boolean'].includes(typeof x);
+      if (Object.entries(o).some(([k, x]) => k !== 'features' && !scalar(x))) n++;
       if (!(o.features as unknown[]).every((f) => f && typeof f === 'object' && !Array.isArray(f) && Object.values(f).every(scalar))) n++;
       return;
     }
