@@ -1,0 +1,4 @@
+{"hasMoreResults":false,"items":[
+ {"id":"60001","type":"session","text":"Thanksgiving Break Day Camp","features":[{"name":"dates","value":"11/23/2026 - 11/25/2026"},{"name":"days","value":"Mon-Wed"},{"name":"times","value":"8:30 AM - 3:30 PM"},{"name":"ageGender","value":"6y 0m - 12y 11m"},{"name":"location","value":"Old Greenwood Clubhouse"},{"name":"spots","value":"12"}]},
+ {"id":"60002","type":"session","text":"Winter Break Camp","isFull":true,"features":[{"name":"dates","value":"12/21/2026 - 12/23/2026"},{"name":"times","value":"8:30 AM - 3:30 PM"},{"name":"ageGender","value":"6y - 12y"},{"name":"location","value":"Steve Randall Community Recreation Center"},{"name":"spots","value":"5"}]}
+]}

@@ -68,6 +68,8 @@ export const CATEGORY_MAPS: Record<string, Record<string, string>> = {
   html_finalsite: { ...COMMON },
   wprest_crystalbay: { ...COMMON },
   rss_libcal: libcalMap(),
+  // Rec1 catalog (Amendment K3): kids only from the reserved `audience:kids` hint (Rec1's own minimum age <= 12), as LibCal.
+  rec1_catalog: libcalMap(),
   curated_dates: { ...COMMON },
   // `family`/`kids` only from Tahoe Donner's own Family Events / Kids Programming lists; `dining` and `live music` resolve through COMMON.
   html_tahoedonner: {
