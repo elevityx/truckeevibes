@@ -271,7 +271,11 @@ export async function runRead(cfg: Rec1Config, deps: ReadDeps): Promise<ReadOut>
         raw[p === 1 ? `items-${tab}.json` : `items-${tab}-p${p}.json`] = body;
         const j: unknown = JSON.parse(body);
         if (!itemsEnvelopeOk(j)) throw new Rec1Fail('layout_changed');
-        sessions.push(...collectSessions(j));
+        const found = collectSessions(j);
+        // Recheck P1: a non-empty answer whose records are not recognizable sessions is a shape change, never an empty tab.
+        const o = j as unknown as Record<string, unknown[] | undefined>;
+        if (found.length === 0 && ['sections', 'groups', 'items'].some((k) => Array.isArray(o[k]) && o[k]!.length > 0)) throw new Rec1Fail('layout_changed');
+        sessions.push(...found);
         if (!j.hasMoreResults) break;
       }
     }

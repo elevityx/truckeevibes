@@ -236,6 +236,18 @@ describe('runRead: the request plan (AC-K3-07, DR-K3-5)', () => {
     expect(r.sessions).toEqual([]);
   });
 
+  it('a non-empty tab with unrecognized records next to a valid tab is layout_changed', async () => {
+    const h = harness((c) => (c.url.endsWith('/1002') ? { status: 200, body: JSON.stringify({ hasMoreResults: false, items: [{ sessionId: 9, title: 'x', attrs: {} }] }) } : normal(c)));
+    const r = await runRead(CFG, h.deps);
+    expect(r.status).toBe('layout_changed');
+    expect(r.sessions).toEqual([]);
+  });
+
+  it('an empty tab is fine', async () => {
+    const h = harness((c) => (c.url.endsWith('/1002') ? { status: 200, body: JSON.stringify({ hasMoreResults: false, items: [] }) } : normal(c)));
+    expect((await runRead(CFG, h.deps)).status).toBe('ok');
+  });
+
   it('a page without a checkout key is layout_changed (nothing else requested)', async () => {
     const h = harness((c) => (c.url.endsWith('/catalog') ? { status: 200, body: '<html></html>' } : normal(c)));
     expect((await runRead(CFG, h.deps)).status).toBe('layout_changed');
