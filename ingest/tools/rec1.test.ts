@@ -469,9 +469,16 @@ describe('K3.1 grammars (AC-K3.1-03/04)', () => {
     expect(Object.keys(r.raw ?? {})).toContain('group-1001-302-p1.json');
     expect(h.calls.length).toBe(9);
   });
-  it('a group page whose itemCount disagrees with discovery, or more ids than itemCount, is layout_changed (review r2-1/4)', async () => {
+  it("the group answer's own itemCount is the authority (r5); it must hold on every page; more ids than it is layout_changed", async () => {
     const h = harness((c) => (c.url.endsWith('/1001/302') ? { status: 200, body: JSON.stringify({ items: group(2, 200), itemCount: 3 }) } : groups(c)));
-    expect((await runRead(CFG, h.deps)).status).toBe('layout_changed');
+    expect((await runRead(CFG, h.deps)).status).toBe('layout_changed'); // 2 of 3, then a page with no new id
+    const h1 = harness((c) => (c.url.endsWith('/1001/302') ? { status: 200, body: JSON.stringify({ items: group(3, 200), itemCount: 3 }) } : groups(c)));
+    expect((await runRead(CFG, h1.deps)).status).toBe('ok'); // discovery said 2, the group says 3 and delivers 3
+    const h3 = harness((c) => {
+      const p = Number(new URLSearchParams(c.form).get('page'));
+      return c.url.endsWith('/1001/301') ? { status: 200, body: JSON.stringify({ items: p === 1 ? group(10, 100) : group(2, 110), itemCount: p === 1 ? 12 : 13 }) } : groups(c);
+    });
+    expect((await runRead(CFG, h3.deps)).status).toBe('layout_changed'); // the count moved between pages
     const h2 = harness((c) => (c.url.endsWith('/1001/302') ? { status: 200, body: JSON.stringify({ items: group(3, 200), itemCount: 2 }) } : groups(c)));
     expect((await runRead(CFG, h2.deps)).status).toBe('layout_changed');
   });

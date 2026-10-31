@@ -445,23 +445,27 @@ export async function collect(src: JsonSource, raw: Record<string, string> = {})
   for (const { tab, ref } of refs) {
     if (ref.itemCount === 0) continue;
     const ids = new Set<string>();
+    let authority = ref.itemCount;
     for (let p = 1; ; p++) {
       if (src.left() <= 0) return finish({ status: 'incomplete' as const, sessions: [], raw, notes });
       const body = await src.group(tab, ref.groupId, p);
       raw[`group-${tab}-${ref.groupId}-p${p}.json`] = body;
       let g;
       try { g = parseGroupAnswer(parse(body)); } catch (e) { if (!(e instanceof Rec1Fail)) throw e; bad = true; break; }
-      if (g.itemCount !== ref.itemCount) { bad = true; break; } // K3.1 r2-4: the count must agree with discovery on every page
+      // K3.1 r5 (third read: discovery said 15, the group answered 18): the group endpoint's own count is the authority; it must
+      // stay the same on every page of that group. The discovery count only sizes the plan.
+      if (p === 1) authority = g.itemCount;
+      else if (g.itemCount !== authority) { bad = true; break; }
       const before = ids.size;
       for (const r of g.records) {
         records.push({ rec: r, group: { id: ref.groupId, name: ref.name ?? '' } });
         const id = plain(r) && (typeof r.id === 'string' || typeof r.id === 'number') ? String(r.id) : '';
         if (id) ids.add(id);
       }
-      if (ids.size >= ref.itemCount) { if (ids.size !== ref.itemCount) bad = true; break; } // r2-1: exactly itemCount unique ids
+      if (ids.size >= authority) { if (ids.size !== authority) bad = true; break; } // r2-1: exactly itemCount unique ids
       if (ids.size === before) { bad = true; break; } // ended short of itemCount: not a full snapshot of the group
     }
-    manifest.groups.push({ tab, group: ref.groupId, itemCount: ref.itemCount, sessions: ids.size });
+    manifest.groups.push({ tab, group: ref.groupId, itemCount: authority, sessions: ids.size });
   }
   const sessions: Session[] = [];
   for (const r of records) { try { sessions.push({ ...toSession(r.rec), ...(r.group ? { group: r.group } : {}) }); } catch (e) { if (!(e instanceof Rec1Fail)) throw e; bad = true; } }
