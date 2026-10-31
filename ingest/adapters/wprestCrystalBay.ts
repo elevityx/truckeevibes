@@ -115,8 +115,12 @@ export function parseCbcRoom(title: string, text: string): { title: string; room
 
 /** The only age labels the casino's card field is read for (own keys only: a Map, never an object lookup); anything else gives no age. */
 const AGE_LABELS: ReadonlyMap<string, string> = new Map([['21+', '21+'], ['18+', '18+'], ['all ages', 'All ages']]);
-/** Every mention of an event path in a card, in any attribute form or quoting (review F3): counted as raw text, never by attribute parse. */
-const EVENT_REF = /(?:https?:\/\/www\.crystalbaycasino\.com)?\/event\/([^"'\s<>/]{1,200})\//g;
+/**
+ * Every mention of an event path in a card, in any attribute form or quoting (review F3), counted as raw text. Group 1 is whatever
+ * precedes `/event/` in the same token: it must be empty (relative) or the casino's own origin, else the card is rejected (recheck P1).
+ */
+const EVENT_REF = /([^\s"'=<>()]*)\/event\/([^"'\s<>/]{1,200})\//g;
+const OWN_ORIGIN = new Set(['', 'https://www.crystalbaycasino.com', '//www.crystalbaycasino.com']);
 const EVENT_SLUG = /^[a-z0-9-]{1,120}$/;
 
 /**
@@ -131,8 +135,9 @@ export function parseCbcAgeLabels(html: string): Map<string, string> {
   const cards = html.split(/<article\s+class="ae-post-item\b/).slice(1).map((c) => c.split(/<\/article>/)[0]);
   for (const card of cards) {
     const slugs = new Set<string>();
-    for (const m of card.matchAll(EVENT_REF)) slugs.add(m[1]);
-    if (slugs.size !== 1) continue;
+    let foreign = false;
+    for (const m of card.matchAll(EVENT_REF)) { if (!OWN_ORIGIN.has(m[1])) foreign = true; slugs.add(m[2]); }
+    if (foreign || slugs.size !== 1) continue;
     const slug = [...slugs][0];
     if (!EVENT_SLUG.test(slug)) continue;
     const link = `https://www.crystalbaycasino.com/event/${slug}/`;

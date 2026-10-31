@@ -393,6 +393,14 @@ describe('AC-21-10 parseCbcAgeLabels', () => {
     const single = one.replace(/class="far fa-id-card"/, `class='far fa-id-card'`).replace(/<span class="elementor-icon-list-text elementor-post-info__item elementor-post-info__item--type-custom"> 21\+/, `<span class='elementor-post-info__item'> 21+`);
     expect(parseCbcAgeLabels(single).get(ev('steely-dead'))).toBe('21+');
   });
+  it('recheck P1: an off-domain /event/ link never names a casino event', () => {
+    const a = LIST.indexOf('<article'); const b = LIST.indexOf('<article', a + 1);
+    const offOnly = LIST.slice(a, b).replace(/https:\/\/www\.crystalbaycasino\.com\/event\//g, 'https://external.example/event/');
+    expect(parseCbcAgeLabels(offOnly).size).toBe(0);
+    const mixed = LIST.slice(a, b).replace('</ul>', '</ul><a href="https://external.example/event/steely-dead/">x</a>');
+    expect(parseCbcAgeLabels(mixed).size).toBe(0);
+    expect(parseCbcAgeLabels(LIST.slice(a, b).replace(/https:\/\/www\.crystalbaycasino\.com\/event\//g, '//www.crystalbaycasino.com/event/')).get(ev('steely-dead'))).toBe('21+');
+  });
   it('an empty, unrelated or article-free page gives no labels', () => {
     expect(parseCbcAgeLabels('').size).toBe(0);
     expect(parseCbcAgeLabels('<html><body>closed</body></html>').size).toBe(0);
