@@ -96,6 +96,10 @@ export function unrecognizedRecords(json: unknown): number {
     for (const x of nested) walk(x, depth + 1, true);
     for (const x of props) walk(x, depth + 1, false);
   };
+  // the envelope itself: only scalars plus the three list containers; anything else is an unknown shape
+  if (json && typeof json === 'object' && !Array.isArray(json)) {
+    for (const [k, x] of Object.entries(json)) if (x !== null && typeof x === 'object' && !['sections', 'groups', 'items'].includes(k)) n++;
+  }
   walk(json, 0, false);
   return n;
 }

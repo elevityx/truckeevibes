@@ -297,6 +297,11 @@ describe('runRead: the request plan (AC-K3-07, DR-K3-5)', () => {
     expect((await runRead(CFG, h.deps)).status).toBe('layout_changed');
   });
 
+  it('an unknown object or list on the envelope is layout_changed', async () => {
+    const h = harness((c) => (c.url.endsWith('/1002') ? { status: 200, body: JSON.stringify({ ...JSON.parse(fx('items-1002.json')), featured: { id: 2, title: 'Mystery' } }) } : normal(c)));
+    expect((await runRead(CFG, h.deps)).status).toBe('layout_changed');
+  });
+
   it('an empty tab is fine', async () => {
     const h = harness((c) => (c.url.endsWith('/1002') ? { status: 200, body: JSON.stringify({ hasMoreResults: false, items: [] }) } : normal(c)));
     expect((await runRead(CFG, h.deps)).status).toBe('ok');
