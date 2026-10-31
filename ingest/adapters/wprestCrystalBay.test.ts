@@ -404,6 +404,16 @@ describe('AC-21-10 parseCbcAgeLabels', () => {
     expect(parseCbcAgeLabels(mixed).size).toBe(0);
     expect(parseCbcAgeLabels(LIST.slice(a, b).replace(/https:\/\/www\.crystalbaycasino\.com\/event\//g, '//www.crystalbaycasino.com/event/')).get(ev('steely-dead'))).toBe('21+');
   });
+  it('recheck 3: only href attributes name the event; text, data attributes and whitespace-split foreign hrefs never do', () => {
+    const a = LIST.indexOf('<article'); const b = LIST.indexOf('<article', a + 1);
+    const one = LIST.slice(a, b);
+    const noHref = one.replace(/href="[^"]*"/g, 'href="#"').replace('</ul>', '</ul><span data-x="/event/steely-dead/">/event/steely-dead/</span>');
+    expect(parseCbcAgeLabels(noHref).size).toBe(0);
+    const split = one.replace(/https:\/\/www\.crystalbaycasino\.com\/event\//g, 'https://external.example\n/event/');
+    expect(parseCbcAgeLabels(split).size).toBe(0);
+    const tab = one.replace(/https:\/\/www\.crystalbaycasino\.com\/event\//g, 'https://external.example\t/event/');
+    expect(parseCbcAgeLabels(tab).size).toBe(0);
+  });
   it('an empty, unrelated or article-free page gives no labels', () => {
     expect(parseCbcAgeLabels('').size).toBe(0);
     expect(parseCbcAgeLabels('<html><body>closed</body></html>').size).toBe(0);

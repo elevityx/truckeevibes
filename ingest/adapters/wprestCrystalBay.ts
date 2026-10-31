@@ -116,11 +116,25 @@ export function parseCbcRoom(title: string, text: string): { title: string; room
 /** The only age labels the casino's card field is read for (own keys only: a Map, never an object lookup); anything else gives no age. */
 const AGE_LABELS: ReadonlyMap<string, string> = new Map([['21+', '21+'], ['18+', '18+'], ['all ages', 'All ages']]);
 /**
- * Every mention of an event path in a card, in any attribute form or quoting (review F3), counted as raw text. Group 1 is whatever
- * precedes `/event/` in the same token: it must be empty (relative) or the casino's own origin, else the card is rejected (recheck P1).
+ * Review F3 / rechecks 1-3: a card's event is read from its `href` attributes only, each resolved the way a browser does (`new URL`
+ * strips tabs and newlines and resolves relative values against the casino's origin). Only `https://www.crystalbaycasino.com/event/<slug>/`
+ * counts; any href that mentions `/event/` but resolves elsewhere rejects the whole card. Text and data attributes never count.
  */
-const EVENT_REF = /([^\s"'<>()]*)\/event\/([^"'\s<>/]{1,200})\//g; // the token includes `=`, `?`, `&`: a query-embedded path is foreign
-const OWN_ORIGIN = new Set(['', 'https://www.crystalbaycasino.com', '//www.crystalbaycasino.com']);
+const HREF = /\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/gi;
+const ORIGIN = 'https://www.crystalbaycasino.com';
+function cardEvents(card: string): Set<string> | null {
+  const slugs = new Set<string>();
+  for (const m of card.matchAll(HREF)) {
+    const raw = decodeEntities(m[1] ?? m[2] ?? m[3] ?? '');
+    let u: URL;
+    try { u = new URL(raw, `${ORIGIN}/`); } catch { if (/event/i.test(raw)) return null; continue; }
+    const own = u.origin === ORIGIN;
+    const ev = /^\/event\/([^/]+)\/$/.exec(u.pathname);
+    if (own && ev && u.search === '' && u.hash === '') { slugs.add(ev[1]); continue; }
+    if (/\/event\//i.test(u.href) || /\/event\//i.test(raw.replace(/[\t\n\r]/g, ''))) return null;
+  }
+  return slugs;
+}
 const EVENT_SLUG = /^[a-z0-9-]{1,120}$/;
 
 /**
@@ -134,10 +148,8 @@ export function parseCbcAgeLabels(html: string): Map<string, string> {
   const seen = new Map<string, string | null>();
   const cards = html.split(/<article\s+class="ae-post-item\b/).slice(1).map((c) => c.split(/<\/article>/)[0]);
   for (const card of cards) {
-    const slugs = new Set<string>();
-    let foreign = false;
-    for (const m of card.matchAll(EVENT_REF)) { if (!OWN_ORIGIN.has(m[1])) foreign = true; slugs.add(m[2]); }
-    if (foreign || slugs.size !== 1) continue;
+    const slugs = cardEvents(card);
+    if (!slugs || slugs.size !== 1) continue;
     const slug = [...slugs][0];
     if (!EVENT_SLUG.test(slug)) continue;
     const link = `https://www.crystalbaycasino.com/event/${slug}/`;
