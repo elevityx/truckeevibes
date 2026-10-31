@@ -80,6 +80,8 @@ export function unrecognizedRecords(json: unknown): number {
       const named = [o.text, o.name, o.label, o.title].some((x) => typeof x === 'string' && x.trim() !== '');
       const id = typeof o.id === 'number' || typeof o.id === 'string' ? String(o.id) : '';
       if (!named || !/^\d{1,12}$/.test(id)) n++;
+      // recheck r5: a session that nests any other list of objects could hide a record, so it fails closed too
+      if (Object.entries(o).some(([k, x]) => k !== 'features' && Array.isArray(x) && x.some((y) => y && typeof y === 'object'))) n++;
       return;
     }
     const nested = Object.values(o).filter((x) => Array.isArray(x) && x.some((y) => y && typeof y === 'object'));
