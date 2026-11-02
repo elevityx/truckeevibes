@@ -32,6 +32,9 @@ describe('W1.4 AGENTS.md', () => {
   it('V13 states the Pages Function rules', () => {
     expect(agents).toMatch(/- V13 Pages Functions are GET\/HEAD\/OPTIONS only, hold no secret, call only anon-granted read RPCs with the publishable key, log counts only/);
   });
+  it('V14 states the admin Functions rules', () => {
+    expect(agents).toMatch(/- V14 Admin Pages Functions under `\/api\/admin\/` accept only same-origin requests/);
+  });
   it('V6 notes the lights_mirror description exception', () => {
     expect(agents.split('\n').find((l) => l.startsWith('- V6 '))).toContain('lights_mirror');
   });

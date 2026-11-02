@@ -3,7 +3,7 @@
 // Spec leaves unspecified (not tested): lastSuccessAt = null, disabled sources, a success exactly at the threshold.
 import { describe, expect, it } from 'vitest';
 import type { SourceHealthRow } from '@/lib/data/adminQueue';
-import { sourceHealth } from './sourceHealth';
+import { offReason, redReason, sourceHealth } from './sourceHealth';
 
 const NOW = new Date('2026-11-05T18:00:00Z');
 const H = 3_600_000;
@@ -15,7 +15,9 @@ function row(over: Partial<SourceHealthRow> = {}): SourceHealthRow {
     slug: 's', name: 'S', enabled: true, trust: 'auto', strictAuto: false, maxCards7d: null, ingestDisposition: 'permitted',
     termsRecheckAt: inDays(300), cadence: '24h', consecutiveFailures: 0, lastSuccessAt: ago(1),
     lastRuns: [{ status: 'ok', finishedAt: ago(1), found: 5, new: 0, changed: 0, errorCode: null }],
-    openCards7d: 0, openCards14d: 0, heldRunsPending: 0, ...over,
+    openCards7d: 0, openCards14d: 0, heldRunsPending: 0,
+    manualOnly: false, automationRestricted: false, nextDueAt: null, lastGrantAt: null, forceDueAt: null, forceDueServedAt: null,
+    readRequestedAt: null, readRequestServedAt: null, requestGrant: null, ...over,
   };
 }
 const zeroItemOk = [{ status: 'ok', finishedAt: ago(1), found: 0, new: 0, changed: 0, errorCode: null }] as SourceHealthRow['lastRuns'];
@@ -123,5 +125,45 @@ describe('judgment calls (AC-M1-80)', () => {
   });
   it('red wins over amber', () => {
     expect(sourceHealth(row({ termsRecheckAt: inDays(-3), lastSuccessAt: null }), NOW)).toBe('red');
+  });
+});
+
+// AC-SV2-33 (Spec_Sources_V2 §10): manual-only sources are read on command; quiet is not a fault.
+describe('read on command (Sources V2)', () => {
+  const man = (over: Partial<SourceHealthRow> = {}) => row({ manualOnly: true, automationRestricted: true, cadence: '24h', ...over });
+  const run = (status: string, errorCode: string | null = null) =>
+    [{ status, finishedAt: ago(1), found: 0, new: 0, changed: 0, errorCode }] as SourceHealthRow['lastRuns'];
+
+  it('a quiet enabled manual-only source is oncommand', () => {
+    expect(sourceHealth(man(), NOW)).toBe('oncommand');
+  });
+  it('never red for "never read": no success and no runs is oncommand', () => {
+    expect(redReason(man({ lastSuccessAt: null, lastRuns: [] }), NOW)).toBeNull();
+    expect(sourceHealth(man({ lastSuccessAt: null, lastRuns: [] }), NOW)).toBe('oncommand');
+  });
+  it('never red for staleness (a last success 30 days ago)', () => {
+    expect(redReason(man({ lastSuccessAt: ago(30 * 24) }), NOW)).toBeNull();
+    expect(sourceHealth(man({ lastSuccessAt: ago(30 * 24) }), NOW)).toBe('oncommand');
+  });
+  it('red on >= 2 consecutive failures', () => {
+    expect(sourceHealth(man({ consecutiveFailures: 2 }), NOW)).toBe('red');
+  });
+  it.each(['anomaly', 'parse_error', 'http_error'])('red when the last run is %s', (status) => {
+    expect(sourceHealth(man({ lastRuns: run(status, 'x') }), NOW)).toBe('red');
+  });
+  it('amber on terms re-check within 14 days, and on >= 5 open cards', () => {
+    expect(sourceHealth(man({ termsRecheckAt: inDays(5) }), NOW)).toBe('amber');
+    expect(sourceHealth(man({ openCards7d: 5 }), NOW)).toBe('amber');
+  });
+  it('disabled is off; offReason says "blocked by the site" after a site_block run', () => {
+    const blocked = man({ enabled: false, lastRuns: run('site_block', 'site_block') });
+    expect(sourceHealth(blocked, NOW)).toBe('off');
+    expect(offReason(blocked)).toBe('blocked by the site');
+    expect(offReason(man({ enabled: false }))).toBeNull();
+    expect(offReason(man({ enabled: false, lastRuns: [] }))).toBeNull();
+  });
+  it('scheduled sources are unchanged: still green, still red when never read', () => {
+    expect(sourceHealth(row(), NOW)).toBe('green');
+    expect(sourceHealth(row({ lastSuccessAt: null }), NOW)).toBe('red');
   });
 });

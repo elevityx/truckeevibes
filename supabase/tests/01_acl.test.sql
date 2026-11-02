@@ -122,18 +122,20 @@ select is(pg_temp.fn_list('anon', 'public'),
   'anon EXECUTE is exactly api_events_v1(...) + list_event_pages() + list_events(integer) + list_sources_public() (W1: 4)');
 select is(pg_temp.fn_list('authenticated', 'public'),
   (select array_agg(x order by x) from unnest(array[
-     'admin_add_suppression(text, text, text)', 'admin_card_open(uuid)', 'admin_decide_card(uuid, text, text, integer)', 'admin_list_sources()',
+     'admin_add_suppression(text, text, text)', 'admin_card_open(uuid)', 'admin_decide_card(uuid, text, text, integer)', 'admin_jobs(integer)', 'admin_list_sources()',
      'admin_log_activity(text, integer)', 'admin_merge_events(uuid, uuid)', 'admin_owner_minutes_7d()', 'admin_queue(text, integer)', 'admin_set_event_status(uuid, text, text)',
-     'admin_set_source_enabled(text, boolean)', 'admin_set_source_trust(text, text)', 'admin_source_health()', 'admin_unlock_field(uuid, text)',
+     'admin_set_force_due(text, boolean)', 'admin_set_read_request(text, boolean)', 'admin_set_source_enabled(text, boolean)', 'admin_set_source_trust(text, text)', 'admin_source_health()', 'admin_unlock_field(uuid, text)',
      'admin_update_event(uuid, jsonb)', 'admin_whoami()', 'api_events_v1(text, text, integer, date, date, text[], text[], integer, text)',
      'list_event_pages()', 'list_events(integer)', 'list_sources_public()']) x),
-  'authenticated EXECUTE is the four public reads + the M0 and M1 admin RPCs (exact, W1: 19)');
-select is(cardinality(pg_temp.fn_list('authenticated', 'public')), 19, 'AC-W1-17 authenticated EXECUTE count is 19');
+  'authenticated EXECUTE is the four public reads + the M0 and M1 admin RPCs (exact, Sources V2: 22)');
+select is(cardinality(pg_temp.fn_list('authenticated', 'public')), 22, 'AC-W1-17 / Sources V2 authenticated EXECUTE count is 22');
 select is(pg_temp.fn_list('service_role', 'public'),
-  (select array_agg(x order by x) from unnest(array[
+  -- collate "C": the have side sorts format(proname, ...) text, which inherits proname's C collation
+  (select array_agg(x order by x collate "C") from unnest(array[
      'svc_cluster_and_publish(integer)', 'svc_ingest_batch(text, jsonb, jsonb)', 'svc_ingest_nonce(text)', 'svc_issue_run_grants()',
-     'svc_manual_grant(text)', 'svc_set_venue_geocode(uuid, double precision, double precision, text)', 'svc_weekly_report()']) x),
-  'AC-M1-05 service_role EXECUTE in public is exactly the seven svc_* routines (K3 adds svc_manual_grant)');
+     'svc_manual_grant(text)', 'svc_manual_grant_requested(text)', 'svc_set_venue_geocode(uuid, double precision, double precision, text)',
+     'svc_weekly_report()']) x),
+  'AC-M1-05 service_role EXECUTE in public is exactly the eight svc_* routines (Sources V2 adds svc_manual_grant_requested)');
 select is(pg_temp.fn_list('service_role', 'private'), '{}'::text[], 'service_role executes nothing in private');
 select is(pg_temp.fn_list('anon', 'private'), '{}'::text[], 'anon executes nothing in private');
 select is(pg_temp.fn_list('authenticated', 'private'), '{}'::text[], 'authenticated executes nothing in private');

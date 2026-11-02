@@ -1021,9 +1021,11 @@ describe('manual_sources (M1 manual)', () => {
   const NAME = '20261031000100_manual_sources.sql';
   const sql = () => readFileSync(join(DIR, NAME), 'utf8');
   const code = () => sql().split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
-  it('exists, sorts after every other migration, unique versions', () => {
+  it('exists, sorts after every migration merged before it, unique versions', () => {
     expect(files).toContain(NAME);
-    for (const f of files.filter((x) => x.endsWith('.sql') && x !== NAME)) expect(NAME > f, f).toBe(true);
+    // Pinned to the migrations merged before it (later ones, e.g. sources_v2, sort after it by design).
+    for (const f of files.filter((x) => x.endsWith('.sql') && x !== NAME && x.slice(0, 14) < NAME.slice(0, 14))) expect(NAME > f, f).toBe(true);
+    expect(files.filter((x) => x.endsWith('.sql') && x.slice(0, 14) < NAME.slice(0, 14)).at(-1)).toBe('20261030000700_tdrpd_rec1.sql');
     const versions = files.filter((f) => f.endsWith('.sql')).map((f) => f.slice(0, 14));
     expect(new Set(versions).size).toBe(versions.length);
   });
@@ -1053,6 +1055,128 @@ describe('manual_sources (M1 manual)', () => {
   });
   it('pgTAP 35 re-runs the migration verbatim', () => {
     const t = readFileSync(join(REPO_ROOT, 'supabase', 'tests', '35_manual_sources.test.sql'), 'utf8');
+    const copy = t.split('-- BEGIN migration copy\n')[1].split('\n-- END migration copy')[0];
+    const body = sql().split('\n').filter((l) => l.trim() && !l.trim().startsWith('--')).join('\n');
+    expect(copy).toBe(body);
+  });
+});
+
+// Spec_Sources_V2 §4: Run now / Read request stamps, the used_at trigger, the request generations, three admin RPCs.
+describe('sources_v2 (Spec_Sources_V2)', () => {
+  const NAME = '20261101000100_sources_v2.sql';
+  const sql = () => readFileSync(join(DIR, NAME), 'utf8');
+  const code = () => sql().split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
+  /** The body of one created function: from its `create or replace function <name>(` to the next `end $$;`. */
+  const fnBody = (name) => {
+    const m = new RegExp(`create or replace function ${name.replace(/\./g, '\\.')}\\([\\s\\S]*?end \\$\\$;`).exec(code());
+    if (!m) throw new Error(`${name} not found in ${NAME}`);
+    return m[0];
+  };
+  const count = (text, re) => (text.match(re) ?? []).length;
+
+  it('1 exists, is the newest migration, follows manual_sources, unique versions (AC-SV2-01)', () => {
+    expect(files).toContain(NAME);
+    for (const f of files.filter((x) => x.endsWith('.sql') && x !== NAME)) expect(NAME > f, f).toBe(true);
+    expect(files.filter((x) => x.endsWith('.sql') && x.slice(0, 14) < NAME.slice(0, 14)).at(-1)).toBe('20261031000100_manual_sources.sql');
+    const versions = files.filter((f) => f.endsWith('.sql')).map((f) => f.slice(0, 14));
+    expect(new Set(versions).size).toBe(versions.length);
+  });
+
+  it('2 idempotent DDL only: the eight add-column lines, create or replace, index if not exists (AC-SV2-18)', () => {
+    for (const line of [
+      'alter table public.sources add column if not exists force_due_at timestamptz;',
+      'alter table public.sources add column if not exists force_due_served_at timestamptz;',
+      'alter table public.sources add column if not exists read_requested_at timestamptz;',
+      'alter table public.sources add column if not exists read_request_served_at timestamptz;',
+      'alter table public.sources add column if not exists force_due_gen bigint not null default 0;',
+      'alter table public.sources add column if not exists read_request_gen bigint not null default 0;',
+      'alter table private.ingest_grants add column if not exists force_due_gen bigint;',
+      'alter table private.ingest_grants add column if not exists read_request_gen bigint;',
+    ]) expect(code().split('\n').map((l) => l.trim()), line).toContain(line);
+    expect(count(code(), /add column(?! if not exists)/gi)).toBe(0);
+    expect(code()).not.toMatch(/create\s+function/i);
+    expect(code()).not.toMatch(/create\s+trigger/i);
+    expect(code()).toMatch(/create or replace trigger ingest_grants_used after update of used_at on private\.ingest_grants/);
+    const idx = [...code().matchAll(/create\s+(?:unique\s+)?index[^\n]*/gi)].map((m) => m[0]);
+    expect(idx.length).toBe(2);
+    for (const i of idx) expect(i, i).toMatch(/^create index if not exists /);
+    expect(code()).not.toMatch(/\bdrop\s+(?:table|column|function|trigger|index)\b/i);
+  });
+
+  it('3 the cron copy keeps every old predicate, adds the force-due branch, never writes the stamp (AC-SV2-08/18, grok r3 P1)', () => {
+    const b = fnBody('public.svc_issue_run_grants');
+    expect(b).toContain("x.enabled and not x.opt_out and x.trust <> 'link_only' and not x.manual_only");
+    expect(b).toContain("x.ingest_disposition in ('permitted', 'official_api_only') and x.terms_recheck_at > now()");
+    expect(b).toContain('cardinality(x.allowed_methods) > 0');
+    expect(b).toContain("or (x.force_due_at > now() - interval '24 hours'");
+    expect(b).toContain('g.used_at is null and g.expires_at > now()');
+    expect(b).toContain('then s.force_due_gen end');
+    expect(b).toContain('for update skip locked');
+    expect(b).not.toMatch(/force_due_at\s*=/);
+    expect(b).not.toMatch(/force_due_gen\s*=/);
+    expect(b).not.toMatch(/force_due_served_at/);
+  });
+
+  it('4 only the admin RPCs write stamps and generations; the trigger matches by generation, never by issued_at (AC-SV2-10)', () => {
+    const c = code();
+    const fd = fnBody('public.admin_set_force_due');
+    const rr = fnBody('public.admin_set_read_request');
+    const used = fnBody('private.ingest_grant_used');
+    expect(count(c, /force_due_at = null/g)).toBe(1);
+    expect(count(fd, /force_due_at = null/g)).toBe(1);
+    expect(count(c, /read_requested_at = null/g)).toBe(1);
+    expect(count(rr, /read_requested_at = null/g)).toBe(1);
+    expect(count(c, /force_due_gen = force_due_gen \+ 1/g)).toBe(2);
+    expect(count(fd, /force_due_gen = force_due_gen \+ 1/g)).toBe(2);
+    expect(count(c, /read_request_gen = read_request_gen \+ 1/g)).toBe(2);
+    expect(count(rr, /read_request_gen = read_request_gen \+ 1/g)).toBe(2);
+    expect(used).toContain('s.force_due_gen = new.force_due_gen');
+    expect(used).toContain('s.read_request_gen = new.read_request_gen');
+    expect(used).not.toContain('issued_at');
+    expect(used).not.toMatch(/security definer/i);
+    // the served-path clear exists only as the trigger body's `case … then null` lines
+    const caseNull = [...c.matchAll(/then null else s\.(\w+) end/g)].map((m) => m[1]).sort();
+    expect(caseNull).toEqual(['force_due_at', 'read_requested_at']);
+    for (const m of c.matchAll(/then null else s\.\w+ end/g)) {
+      const at = m.index;
+      expect(at > c.indexOf(used) && at < c.indexOf(used) + used.length, 'case … then null outside ingest_grant_used').toBe(true);
+    }
+    // no other function body in the file writes a stamp, a served time or a generation
+    const writers = /\b(?:force_due_at|force_due_served_at|read_requested_at|read_request_served_at|force_due_gen|read_request_gen)\s*=(?!=)/;
+    for (const m of c.matchAll(/create or replace function ([\w.]+)\(/g)) {
+      const name = m[1];
+      if (['public.admin_set_force_due', 'public.admin_set_read_request', 'private.ingest_grant_used', 'private.sources_gate',
+           'public.admin_source_health'].includes(name)) continue;
+      expect(fnBody(name), name).not.toMatch(writers);
+    }
+  });
+
+  it('5 ends with the canonical block: the tdrpd_rec1 set plus exactly the four new grants (AC-SV2-18)', () => {
+    const prev = canonicalGrants(readFileSync(join(DIR, '20261030000700_tdrpd_rec1.sql'), 'utf8'));
+    const cur = canonicalGrants(sql());
+    expect(cumulativeProblems(prev, cur, createdFns(sql()))).toEqual([]);
+    expect([...cur].filter((x) => !prev.has(x)).sort()).toEqual([
+      'public.admin_jobs(integer)->authenticated', 'public.admin_set_force_due(text,boolean)->authenticated',
+      'public.admin_set_read_request(text,boolean)->authenticated', 'public.svc_manual_grant_requested(text)->service_role',
+    ]);
+    expect(cur.size).toBe(prev.size + 4);
+  });
+
+  it('6 every admin_* body starts with the is_admin() check (AC-SV2-04)', () => {
+    const names = [...code().matchAll(/create or replace function (public\.admin_\w+)\(/g)].map((m) => m[1]).sort();
+    expect(names).toEqual(['public.admin_jobs', 'public.admin_set_force_due', 'public.admin_set_read_request', 'public.admin_source_health']);
+    for (const n of names) {
+      const after = fnBody(n).split(/\n\s*begin\n/)[1] ?? '';
+      expect(after.trimStart().startsWith("if not private.is_admin() then raise exception 'forbidden' using errcode = '42501'; end if;"), n).toBe(true);
+    }
+  });
+
+  it('no granted body mentions strict_auto or max_cards_7d (16_sources_seed:247-249)', () => {
+    expect(code()).not.toMatch(/strict_auto|max_cards_7d/);
+  });
+
+  it('7 pgTAP 36 re-runs the migration verbatim (AC-SV2-17)', () => {
+    const t = readFileSync(join(REPO_ROOT, 'supabase', 'tests', '36_sources_v2.test.sql'), 'utf8');
     const copy = t.split('-- BEGIN migration copy\n')[1].split('\n-- END migration copy')[0];
     const body = sql().split('\n').filter((l) => l.trim() && !l.trim().startsWith('--')).join('\n');
     expect(copy).toBe(body);

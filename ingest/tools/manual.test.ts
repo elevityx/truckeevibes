@@ -305,17 +305,34 @@ describe('scripts/manual-read.sh all (AC-M1-06)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'tv-manual-sh-'));
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
   const script = (name: string, body: string) => { const p = join(dir, name); writeFileSync(p, `#!/usr/bin/env bash\n${body}\n`); chmodSync(p, 0o755); return p; };
-  const run = (list: string, codes: Record<string, number>, tdrpd: number, listFails = false) => {
+  // Sources V2 (§7): the stub reader also answers `--requests` (REQ lines) and `--requests --slugs` (the requested slugs), and logs
+  // `read --requested <slug>` for a request-bound read; the stub tdrpd logs its arguments.
+  const stubs = (o: { list: string; codes: Record<string, number>; tdrpd: number; listFails?: boolean; reqSlugs?: string; reqFails?: boolean }) => {
     const log = join(dir, `calls-${Math.random().toString(36).slice(2)}`);
-    const cases = Object.entries(codes).map(([s, c]) => `  ${s}) exit ${c} ;;`).join('\n');
-    const reader = script(`read-${Math.random().toString(36).slice(2)}.sh`,
-      `if [ "$1" = "--list" ]; then ${listFails ? 'exit 1' : `printf '${list}'`}; exit 0; fi\necho "read $1" >> ${log}\ncase "$1" in\n${cases}\n  *) exit 9 ;;\nesac`);
-    const td = script(`tdrpd-${Math.random().toString(36).slice(2)}.sh`, `echo "read tdrpd-rec1" >> ${log}\nexit ${tdrpd}`);
-    const r = spawnSync('bash', [join(process.cwd(), 'scripts', 'manual-read.sh'), 'all'], { env: { ...process.env, MANUAL_READ_TS: reader, MANUAL_TDRPD: td }, encoding: 'utf8' });
+    const cases = Object.entries(o.codes).map(([s, c]) => `  ${s}) exit ${c} ;;`).join('\n');
+    const reqs = (o.reqSlugs ?? '').split('\\n').filter(Boolean);
+    const reqLines = reqs.length ? reqs.map((s) => `REQ ${s} · requested`).join('\\n') + '\\n' : 'no pending read requests\\n';
+    const reader = script(`read-${Math.random().toString(36).slice(2)}.sh`, [
+      `if [ "$1" = "--list" ]; then ${o.listFails ? 'exit 1' : `printf '${o.list}'`}; exit 0; fi`,
+      `if [ "$1" = "--requests" ]; then`,
+      `  ${o.reqFails ? 'exit 1' : ':'}`,
+      `  if [ "\${2:-}" = "--slugs" ]; then printf '${o.reqSlugs ?? ''}'; exit 0; fi`,
+      `  printf '${reqLines}'; exit 0`,
+      `fi`,
+      `if [ "$1" = "--requested" ]; then echo "read --requested $2" >> ${log}; slug="$2"; else echo "read $1" >> ${log}; slug="$1"; fi`,
+      `case "$slug" in\n${cases}\n  *) exit 9 ;;\nesac`,
+    ].join('\n'));
+    const td = script(`tdrpd-${Math.random().toString(36).slice(2)}.sh`, `echo "read tdrpd-rec1\${*:+ $*}" >> ${log}\nexit ${o.tdrpd}`);
+    return { log, reader, td };
+  };
+  const sh = (mode: string, o: Parameters<typeof stubs>[0]) => {
+    const { log, reader, td } = stubs(o);
+    const r = spawnSync('bash', [join(process.cwd(), 'scripts', 'manual-read.sh'), mode], { env: { ...process.env, MANUAL_READ_TS: reader, MANUAL_TDRPD: td }, encoding: 'utf8' });
     let calls: string[] = [];
     try { calls = readFileSync(log, 'utf8').trim().split('\n'); } catch { calls = []; }
     return { code: r.status, out: r.stdout, calls };
   };
+  const run = (list: string, codes: Record<string, number>, tdrpd: number, listFails = false) => sh('all', { list, codes, tdrpd, listFails });
   it('reads each listed source once, delegates tdrpd-rec1, skips a refused grant, exits with the worst other code', () => {
     const r = run('bar-of-america\\ndiamond-peak\\ntdrpd-rec1\\nivgid\\n', { 'bar-of-america': 0, 'diamond-peak': 3, ivgid: 2 }, 3);
     expect(r.calls).toEqual(['read bar-of-america', 'read diamond-peak', 'read tdrpd-rec1', 'read ivgid']);
@@ -332,4 +349,86 @@ describe('scripts/manual-read.sh all (AC-M1-06)', () => {
     expect(r.code).toBe(1);
     expect(r.calls).toEqual([]);
   });
+
+  it('Sources V2: `all` prints the pending read requests first, then reads as before (AC-SV2-23)', () => {
+    const r = sh('all', { list: 'a-one\\n', codes: { 'a-one': 0 }, tdrpd: 0, reqSlugs: 'b-two\\n' });
+    const lines = r.out.split('\n');
+    expect(lines[0]).toBe('manual-read all: pending read requests:');
+    expect(lines[1]).toBe('REQ b-two · requested');
+    expect(r.calls).toEqual(['read a-one']); // `all` reads the --list set, never --requested
+    expect(r.code).toBe(0);
+  });
+  it('Sources V2: `all` still reads when the request list fails (it only prints a line)', () => {
+    const r = sh('all', { list: 'a-one\\n', codes: { 'a-one': 0 }, tdrpd: 0, reqFails: true });
+    expect(r.out.split('\n')[0]).toBe('manual-read all: pending read requests:');
+    expect(r.out).toContain('manual-read all: could not list requests');
+    expect(r.calls).toEqual(['read a-one']);
+    expect(r.code).toBe(0);
+  });
 });
+
+describe('scripts/manual-read.sh requests / requested (Sources V2, AC-SV2-21, AC-SV2-22)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'tv-manual-req-'));
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  const script = (name: string, body: string) => { const p = join(dir, name); writeFileSync(p, `#!/usr/bin/env bash\n${body}\n`); chmodSync(p, 0o755); return p; };
+  const sh = (mode: string, o: { reqSlugs?: string; codes?: Record<string, number>; tdrpd?: number; reqFails?: boolean }) => {
+    const log = join(dir, `calls-${Math.random().toString(36).slice(2)}`);
+    const cases = Object.entries(o.codes ?? {}).map(([s, c]) => `  ${s}) exit ${c} ;;`).join('\n');
+    const reqs = (o.reqSlugs ?? '').split('\\n').filter(Boolean);
+    const reqLines = reqs.length ? reqs.map((s) => `REQ ${s} · requested`).join('\\n') + '\\n' : 'no pending read requests\\n';
+    const reader = script(`read-${Math.random().toString(36).slice(2)}.sh`, [
+      `if [ "$1" = "--list" ]; then echo "list" >> ${log}; exit 0; fi`,
+      `if [ "$1" = "--requests" ]; then`,
+      `  ${o.reqFails ? 'exit 1' : ':'}`,
+      `  if [ "\${2:-}" = "--slugs" ]; then printf '${o.reqSlugs ?? ''}'; exit 0; fi`,
+      `  printf '${reqLines}'; exit 0`,
+      `fi`,
+      `if [ "$1" = "--requested" ]; then echo "read --requested $2" >> ${log}; slug="$2"; else echo "read $1" >> ${log}; slug="$1"; fi`,
+      `case "$slug" in\n${cases}\n  *) exit 9 ;;\nesac`,
+    ].join('\n'));
+    const td = script(`tdrpd-${Math.random().toString(36).slice(2)}.sh`, `echo "read tdrpd-rec1\${*:+ $*}" >> ${log}\nexit ${o.tdrpd ?? 0}`);
+    const r = spawnSync('bash', [join(process.cwd(), 'scripts', 'manual-read.sh'), mode], { env: { ...process.env, MANUAL_READ_TS: reader, MANUAL_TDRPD: td }, encoding: 'utf8' });
+    let calls: string[] = [];
+    try { calls = readFileSync(log, 'utf8').trim().split('\n'); } catch { calls = []; }
+    return { code: r.status, out: r.stdout, calls };
+  };
+  it('requested: a refused first slug (exit 3) is skipped and the second is still read; exit 0 (grok r3 P2)', () => {
+    const r = sh('requested', { reqSlugs: 'a-one\\nb-two\\n', codes: { 'a-one': 3, 'b-two': 0 } });
+    expect(r.calls).toEqual(['read --requested a-one', 'read --requested b-two']);
+    expect(r.out).toContain('manual-read a-one: skipped');
+    expect(r.code).toBe(0);
+  });
+  it('requested: tdrpd-rec1 is delegated to the tdrpd reader with --requested', () => {
+    const r = sh('requested', { reqSlugs: 'a-one\\ntdrpd-rec1\\n', codes: { 'a-one': 0 }, tdrpd: 0 });
+    expect(r.calls).toEqual(['read --requested a-one', 'read tdrpd-rec1 --requested']);
+    expect(r.code).toBe(0);
+  });
+  it('requested: codes 3 then 2 -> exit 2 (the worst non-3 code)', () => {
+    const r = sh('requested', { reqSlugs: 'a-one\\nb-two\\n', codes: { 'a-one': 3, 'b-two': 2 } });
+    expect(r.calls).toEqual(['read --requested a-one', 'read --requested b-two']);
+    expect(r.code).toBe(2);
+  });
+  it('requested: an empty list -> exit 0, "no pending read requests", no reads', () => {
+    const r = sh('requested', { reqSlugs: '' });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain('no pending read requests');
+    expect(r.calls).toEqual([]);
+  });
+  it('requested: a failing list -> exit 1, no reads', () => {
+    const r = sh('requested', { reqSlugs: 'a-one\\n', codes: { 'a-one': 0 }, reqFails: true });
+    expect(r.code).toBe(1);
+    expect(r.calls).toEqual([]);
+  });
+  it("requests: prints the reader's list and exits 0, reading nothing", () => {
+    const r = sh('requests', { reqSlugs: 'a-one\\nb-two\\n' });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain('REQ a-one · requested\nREQ b-two · requested');
+    expect(r.calls).toEqual([]);
+  });
+  it('requests: a failing list exits 1', () => {
+    const r = sh('requests', { reqFails: true });
+    expect(r.code).toBe(1);
+    expect(r.calls).toEqual([]);
+  });
+});
+
