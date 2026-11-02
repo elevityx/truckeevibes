@@ -8,7 +8,8 @@ const ROBOTS_TOKEN = 'TruckeeVibesBot';
 const MAX_HOPS = 5;
 const MAX_BODY = 5 * 1024 * 1024;
 const TIMEOUT_MS = 20_000;
-const MAX_CRAWL_DELAY_S = 30;
+export const MAX_CRAWL_DELAY_S = 30;
+export const START_WAIT_MS = MAX_CRAWL_DELAY_S * 1000;
 
 export type FetchErrorCode =
   | 'terms_gate' | 'method_gate' | 'host_not_allowed' | 'robots_blocked' | 'page_cap' | 'crawl_delay'

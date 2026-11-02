@@ -4,7 +4,7 @@ import { realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { adapters as defaultAdapters } from './adapters/index';
 import { callIngest, IngestHttpError } from './core/hmacClient';
-import { createPoliteFetch, FetchError, spacingKey } from './core/politeFetch';
+import { createPoliteFetch, FetchError, spacingKey, START_WAIT_MS } from './core/politeFetch';
 import { createSpacer } from './core/rateLimit';
 import { validateSourceEvent } from './core/normalize';
 import { applyNotices } from './core/notices';
@@ -89,6 +89,11 @@ export async function main(deps: RunDeps): Promise<number> {
     return 1;
   }
   log(`ingest: ${grants.length} source(s) due`);
+  // Sources V2: a dispatched run can start seconds after the previous job; wait out the longest crawl delay we honor.
+  if (grants.length > 0) {
+    log(`ingest: start wait ${START_WAIT_MS / 1000}s`);
+    await sleep(START_WAIT_MS);
+  }
 
   let fatal = false;
   const nowMs = () => nowDate().getTime();

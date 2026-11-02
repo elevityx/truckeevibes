@@ -4,26 +4,37 @@
 //
 //   scripts/tdrpd-refresh.sh              read, map, submit
 //   scripts/tdrpd-refresh.sh --from DIR   re-map a saved failed read: map only, no grant, no database write
-// Exit: 0 ok, 1 failed, 2 blocked (recorded, source disabled), 3 grant refused (nothing read; `manual-read.sh all` skips it).
+//   scripts/tdrpd-refresh.sh --requested  read through the request-bound grant (svc_manual_grant_requested, Sources V2)
+// Exit: 0 ok, 1 failed, 2 blocked (recorded, source disabled), 3 grant refused or request withdrawn (nothing read; `manual-read.sh`
+// `all` and `requested` skip it).
 //
 // Needs: curl, the Supabase CLI linked to the project (run from the repo root; env SUPABASE_BIN overrides ~/.local/bin/supabase).
 // Prints counts and codes only. Raw JSON is kept under ~/.truckeevibes/tdrpd/<stamp>/ (mode 700, outside the repo) only when a read
 // fails, for the mapper fix; it never enters the database (V6).
 import { createHash } from 'node:crypto';
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { applyNotices } from '../core/notices';
 import { collect, mapSessions, Rec1Fail, runRead, type JsonSource, type MapOut, type Rec1Config } from './rec1';
 import { curlHttp, drain, manualGrant, recordBlock, sql, submit as submitBatch } from './manualDb';
 
 const SLUG = 'tdrpd-rec1';
 const PARSER = 'rec1_catalog.2-c5';
-const log = (s: string) => console.log(`tdrpd-refresh: ${s}`);
-const submit = (grant: string, startedAt: string, status: string, items: unknown[], extra: Record<string, unknown>) =>
-  submitBatch(grant, startedAt, status, items, extra, PARSER);
 
-async function main(argv: string[]): Promise<number> {
+export interface TdrpdDeps {
+  sql: typeof sql; manualGrant: typeof manualGrant; curlHttp: typeof curlHttp; submit: typeof submitBatch;
+  recordBlock: typeof recordBlock; drain: typeof drain; log: (line: string) => void;
+}
+const REAL: TdrpdDeps = { sql, manualGrant, curlHttp, submit: submitBatch, recordBlock, drain, log: (line) => console.log(line) };
+
+export async function main(argv: string[], deps: TdrpdDeps = REAL): Promise<number> {
+  const { sql, manualGrant, curlHttp, recordBlock, drain } = deps;
+  const log = (s: string) => deps.log(`tdrpd-refresh: ${s}`);
+  const submit = (grant: string, startedAt: string, status: string, items: unknown[], extra: Record<string, unknown>) =>
+    deps.submit(grant, startedAt, status, items, extra, PARSER);
+  const report = (m: MapOut) => reportOf(m, log);
   const fromIdx = argv.indexOf('--from');
   const from = fromIdx >= 0 ? argv[fromIdx + 1] : undefined;
 
@@ -57,7 +68,9 @@ async function main(argv: string[]): Promise<number> {
   // Review r2-3: the grant is issued and committed before the first request; a refusal (read in the last 24 h, terms, disabled) reads nothing.
   // There is no network dry run (review): every read holds a committed grant.
   // A refusal exits 3 (manual-read.sh all counts it as skipped); any other CLI or database error throws and exits 1 (M1 review P0-1).
-  const { grant } = await manualGrant(SLUG);
+  const requested = argv.includes('--requested');
+  const { grant, refused } = await manualGrant(SLUG, { requested });
+  if (refused === 'withdrawn') { log('request withdrawn: nothing read'); return 3; }
   if (!grant) { log('grant refused (already read in the last 24 h, or the source is not permitted): nothing read'); return 3; }
   const startedAt = new Date(Date.now() - 2000).toISOString();
 
@@ -107,11 +120,16 @@ async function main(argv: string[]): Promise<number> {
   return 0;
 }
 
-function report(m: MapOut) {
+function reportOf(m: MapOut, log: (s: string) => void) {
   const noticed = applyNotices(m.items);
   const kids = noticed.items.filter((i) => i.categoriesHint.includes('kids')).length;
   log(`sessions=${m.found} kept=${noticed.items.length} kids=${kids} dropped=${JSON.stringify(m.dropped)}`);
   return noticed.items;
 }
 
-main(process.argv.slice(2)).then((c) => process.exit(c), (e) => { log(`error ${e instanceof Error ? e.constructor.name : 'unknown'}`); process.exit(1); });
+const entry = process.argv[1];
+if (entry) {
+  let self = false;
+  try { self = import.meta.url === pathToFileURL(realpathSync(entry)).href; } catch { self = false; }
+  if (self) main(process.argv.slice(2)).then((c) => process.exit(c), (e) => { console.log(`tdrpd-refresh: error ${e instanceof Error ? e.constructor.name : 'unknown'}`); process.exit(1); });
+}
