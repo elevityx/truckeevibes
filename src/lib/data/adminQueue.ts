@@ -27,6 +27,10 @@ export interface SourceHealthRow {
   slug: string; name: string; enabled: boolean; trust: SourceTrust; strictAuto: boolean; maxCards7d: number | null;
   ingestDisposition: string; termsRecheckAt: string | null; cadence: string; consecutiveFailures: number;
   lastSuccessAt: string | null; lastRuns: SourceRun[]; openCards7d: number; openCards14d: number; heldRunsPending: number;
+  // Sources V2: read on command, Run now and read-request stamps; requestGrant = the newest unused grant issued for the current request
+  manualOnly: boolean; automationRestricted: boolean; nextDueAt: string | null; lastGrantAt: string | null; forceDueAt: string | null;
+  forceDueServedAt: string | null; readRequestedAt: string | null; readRequestServedAt: string | null;
+  requestGrant: { issuedAt: string; live: boolean } | null;
 }
 
 type Raw = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any -- PostgREST jsonb rows, mapped field by field below
@@ -131,5 +135,10 @@ export async function adminSourceHealth(): Promise<SourceHealthRow[]> {
       status: x.status, finishedAt: x.finished_at, found: num(x.found), new: num(x.new), changed: num(x.changed), errorCode: x.error_code ?? null,
     })),
     openCards7d: num(r.open_cards_7d), openCards14d: num(r.open_cards_14d), heldRunsPending: num(r.held_runs_pending),
+    manualOnly: !!r.manual_only, automationRestricted: !!r.automation_restricted, nextDueAt: r.next_due_at ?? null,
+    lastGrantAt: r.last_grant_at ?? null, forceDueAt: r.force_due_at ?? null, forceDueServedAt: r.force_due_served_at ?? null,
+    readRequestedAt: r.read_requested_at ?? null, readRequestServedAt: r.read_request_served_at ?? null,
+    requestGrant: r.request_grant && typeof r.request_grant === 'object'
+      ? { issuedAt: (r.request_grant as Raw).issued_at, live: !!(r.request_grant as Raw).live } : null,
   }));
 }
