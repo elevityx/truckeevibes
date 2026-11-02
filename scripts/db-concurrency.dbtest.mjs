@@ -445,3 +445,386 @@ test('AC-M1-68 two sessions ingesting the same townless venue end up on one venu
   const ids = await q(obs, `select distinct venue_id from public.source_events where external_key = any($1)`, [[`v1-${sfx}`, `v2-${sfx}`]]);
   assert.equal(ids.rows.length, 1, 'both occurrences share its id');
 });
+
+// ----------------------------------------------------------------------------------------------------------------------
+// Spec_Sources_V2 §5 / AC-SV2-19: Run now and Read request stamps vs the grant paths, Cancel and batch completion.
+// Committed fixtures, separate sessions. Each timestamp-inversion case first asserts its precondition (the inversion really
+// happened, so a timestamp rule would have failed): that precondition is the case's control.
+// ----------------------------------------------------------------------------------------------------------------------
+/** Fail with a plain message when the Sources V2 migration is not applied (TDD: the right reason, not a lock timeout). */
+async function needSourcesV2() {
+  const { rows } = await q(obs, `select
+      to_regprocedure('public.admin_set_force_due(text, boolean)') is not null as fd,
+      to_regprocedure('public.admin_set_read_request(text, boolean)') is not null as rr,
+      to_regprocedure('public.svc_manual_grant_requested(text)') is not null as mg,
+      (select count(*)::int from information_schema.columns where table_schema = 'public' and table_name = 'sources'
+          and column_name in ('force_due_at', 'force_due_served_at', 'read_requested_at', 'read_request_served_at', 'force_due_gen', 'read_request_gen')) as cols,
+      (select count(*)::int from information_schema.columns where table_schema = 'private' and table_name = 'ingest_grants'
+          and column_name in ('force_due_gen', 'read_request_gen')) as gcols`);
+  const r = rows[0];
+  assert.ok(r.fd && r.rr && r.mg && r.cols === 6 && r.gcols === 2,
+    `Sources V2 migration not applied: admin_set_force_due=${r.fd} admin_set_read_request=${r.rr} svc_manual_grant_requested=${r.mg} source columns=${r.cols}/6 grant columns=${r.gcols}/2`);
+}
+/** A committed fixture source, not cadence-due; `manual` makes it manual-only; `due` makes it cadence-due. Other due sources are pushed out. */
+async function mkSv2(tag, { manual = false, due = false } = {}) {
+  const slug = `conc-sv2-${tag}-${sfx}`;
+  await mkSource(slug, 'organizer', 'review');
+  if (manual) await q(obs, 'update public.sources set manual_only = true where slug = $1', [slug]);
+  await q(obs, `update public.sources set next_due_at = now() + interval '1 day' where next_due_at <= now() and slug <> $1`, [slug]);
+  await q(obs, `update public.sources set next_due_at = now() + (case when $2 then interval '-1 minute' else interval '1 day' end) where slug = $1`, [slug, due]);
+  return slug;
+}
+// timestamps come back as text: a JS Date keeps only milliseconds, and the comparisons below need the exact microseconds
+const svState = async (slug) => (await q(obs, `select force_due_at::text, force_due_served_at::text, read_requested_at::text,
+    read_request_served_at::text, force_due_gen::int as fd_gen, read_request_gen::int as rr_gen, next_due_at::text from public.sources where slug = $1`, [slug])).rows[0];
+const svGrants = async (slug) => (await q(obs, `select g.run_id, g.issued_at::text, g.used_at::text, g.force_due_gen::int as fd_gen, g.read_request_gen::int as rr_gen
+    from private.ingest_grants g join public.sources s on s.id = g.source_id where s.slug = $1 order by g.issued_at`, [slug])).rows;
+/** Run one admin RPC in its own committed transaction. */
+async function adminCommitted(text, params) {
+  await beginAdmin(obs);
+  try {
+    const { rows } = await q(obs, text, params);
+    await q(obs, 'commit');
+    return rows[0].r;
+  } catch (e) {
+    await q(obs, 'rollback').catch(() => {});
+    throw e;
+  }
+}
+/** Run one service call in its own committed transaction. */
+async function serviceCommitted(text, params) {
+  await beginService(obs);
+  try {
+    const { rows } = await q(obs, text, params);
+    await q(obs, 'commit');
+    return rows[0].r;
+  } catch (e) {
+    await q(obs, 'rollback').catch(() => {});
+    throw e;
+  }
+}
+const FORCE = 'select public.admin_set_force_due($1, $2) as r';
+const READ_REQ = 'select public.admin_set_read_request($1, $2) as r';
+const ISSUE = 'select public.svc_issue_run_grants() as r';
+const MANUAL_REQ = 'select public.svc_manual_grant_requested($1) as r';
+const MANUAL = 'select public.svc_manual_grant($1) as r';
+const tokenFor = (r, slug) => r.grants.find((x) => x.source.slug === slug)?.grant;
+/** REQUESTS_SQL's predicate (ingest/tools/requests.ts), inlined for one slug. */
+const pendingRequest = async (slug) => (await q(obs, `select count(*)::int as n from public.sources
+    where enabled and manual_only and read_requested_at > now() - interval '7 days' and slug = $1`, [slug])).rows[0].n === 1;
+const sameTime = async (a, b) => (await q(obs, 'select $1::timestamptz = $2::timestamptz as eq', [a, b])).rows[0].eq;
+const lt = async (a, b) => (await q(obs, 'select $1::timestamptz < $2::timestamptz as lt', [a, b])).rows[0].lt;
+/** Resolve to the promise's value, or fail after ms (the call must not block). */
+const within = (p, ms, what) => Promise.race([p, sleep(ms).then(() => assert.fail(`${what} blocked for ${ms} ms`))]);
+
+test('AC-SV2-19(a) a grant holds the row: the Run now stamp waits, then gets rate_limited/too_soon', { timeout: 30_000 }, async () => {
+  await needSourcesV2();
+  const slug = await mkSv2('19a', { due: true });
+  const pidB = await pidOf(B);
+  let pB;
+  try {
+    await beginService(A);
+    const g = await q(A, ISSUE);
+    assert.ok(tokenFor(g.rows[0].r, slug), 'fixture: the cadence-due source is granted');
+    await beginAdmin(B);
+    pB = start(B, FORCE, [slug, true]);
+    await waitsOn(pidB);
+    await q(A, 'commit');
+    const res = await pB;
+    assert.ok(res.err, 'the stamp must be refused');
+    assert.equal(res.err.message, 'rate_limited');
+    assert.equal(res.err.code, 'P0001');
+    assert.equal(res.err.detail, 'too_soon');
+  } finally {
+    await cleanup([pB]);
+  }
+  assert.equal((await svGrants(slug)).length, 1, 'exactly one grant row');
+  assert.equal((await svState(slug)).force_due_at, null, 'no stamp');
+});
+
+test('AC-SV2-19(b) a stamp holds the row: the grant skips it without blocking; the next call grants once with the generation', { timeout: 30_000 }, async () => {
+  await needSourcesV2();
+  const slug = await mkSv2('19b');
+  try {
+    await beginAdmin(B);
+    await q(B, FORCE, [slug, true]);
+    await beginService(A);
+    const g = await within(q(A, ISSUE), 3000, 'svc_issue_run_grants');
+    assert.equal(tokenFor(g.rows[0].r, slug), undefined, 'no grant while the stamp is uncommitted');
+    await q(A, 'commit');
+    await q(B, 'commit');
+  } finally {
+    await cleanup();
+  }
+  const r = await serviceCommitted(ISSUE);
+  assert.equal(r.grants.filter((x) => x.source.slug === slug).length, 1, 'the next call grants it once');
+  const [gr] = await svGrants(slug);
+  const s = await svState(slug);
+  assert.ok(s.fd_gen >= 1);
+  assert.equal(gr.fd_gen, s.fd_gen, 'the grant carries the source generation');
+  assert.notEqual(s.force_due_at, null, 'the grant does not clear the stamp');
+});
+
+test('AC-SV2-19(c) two stamps: the second waits, returns already true, and its time wins; still no grant', { timeout: 30_000 }, async () => {
+  await needSourcesV2();
+  const slug = await mkSv2('19c');
+  const pidB = await pidOf(B);
+  let pB; let second;
+  try {
+    await beginAdmin(A);
+    const first = await q(A, FORCE, [slug, true]);
+    assert.equal(first.rows[0].r.already, false);
+    await beginAdmin(B);
+    pB = start(B, FORCE, [slug, true]);
+    await waitsOn(pidB);
+    await q(A, 'commit');
+    const res = await pB;
+    assert.ok(res.ok, `the second stamp failed: ${res.err?.message}`);
+    second = res.rows[0].r;
+    assert.equal(second.already, true);
+    await q(B, 'commit');
+  } finally {
+    await cleanup([pB]);
+  }
+  const s = await svState(slug);
+  assert.ok(await sameTime(s.force_due_at, second.force_due_at), 'DB force_due_at is the second stamp\'s time');
+  assert.equal(s.fd_gen, 2, 'two stamps, two generations');
+  assert.equal((await svGrants(slug)).length, 0, 'no grant');
+});
+
+test('AC-SV2-19(d) Cancel first: the requested grant waits, then fails manual_request_withdrawn; no grant', { timeout: 30_000 }, async () => {
+  await needSourcesV2();
+  const slug = await mkSv2('19d', { manual: true, due: true });
+  await adminCommitted(READ_REQ, [slug, true]);
+  const pidB = await pidOf(B);
+  let pB;
+  try {
+    await beginAdmin(A);
+    await q(A, READ_REQ, [slug, false]);
+    await beginService(B);
+    pB = start(B, MANUAL_REQ, [slug]);
+    await waitsOn(pidB);
+    await q(A, 'commit');
+    const res = await pB;
+    assert.ok(res.err, 'the requested grant must fail');
+    assert.equal(res.err.message, 'manual_request_withdrawn');
+    assert.equal(res.err.code, 'P0001');
+  } finally {
+    await cleanup([pB]);
+  }
+  assert.equal((await svGrants(slug)).length, 0, 'no grant row');
+});
+
+test('AC-SV2-19(e) grant first: Cancel waits; one grant; the request is withdrawn and nothing is served', { timeout: 30_000 }, async () => {
+  await needSourcesV2();
+  const slug = await mkSv2('19e', { manual: true, due: true });
+  await adminCommitted(READ_REQ, [slug, true]);
+  const pidA = await pidOf(A);
+  let pA;
+  try {
+    await beginService(B);
+    const g = await q(B, MANUAL_REQ, [slug]);
+    assert.match(g.rows[0].r.grant, /^[0-9a-f]{64}$/);
+    await beginAdmin(A);
+    pA = start(A, READ_REQ, [slug, false]);
+    await waitsOn(pidA);
+    await q(B, 'commit');
+    const res = await pA;
+    assert.ok(res.ok, `Cancel failed: ${res.err?.message}`);
+    assert.equal(res.rows[0].r.read_requested_at, null);
+    await q(A, 'commit');
+  } finally {
+    await q(B, 'rollback').catch(() => {});
+    await Promise.allSettled([pA]);
+    await q(A, 'rollback').catch(() => {});
+  }
+  assert.equal((await svGrants(slug)).length, 1, 'one grant row');
+  const s = await svState(slug);
+  assert.equal(s.read_requested_at, null);
+  assert.equal(s.read_request_served_at, null, 'withdrawn before any result: nothing served');
+});
+
+test('AC-SV2-19(f) inversion 1: a grant whose transaction began before the stamp still consumes it on completion', { timeout: 30_000 }, async () => {
+  await needSourcesV2();
+  const slug = await mkSv2('19f');
+  let tok;
+  try {
+    await beginService(A);
+    await q(A, 'select now() as t0');
+    await sleep(50);
+    await adminCommitted(FORCE, [slug, true]);
+    const g = await q(A, ISSUE);
+    tok = tokenFor(g.rows[0].r, slug);
+    assert.ok(tok, 'A\'s statement sees the committed stamp and grants the source');
+    await q(A, 'commit');
+  } finally {
+    await cleanup();
+  }
+  const [gr] = await svGrants(slug);
+  const before = await svState(slug);
+  assert.ok(await lt(gr.issued_at, before.force_due_at), 'precondition (control): the grant\'s issued_at is earlier than the stamp');
+  await serviceCommitted(ingestSql, [tok, runJson(), '[]']);
+  const s = await svState(slug);
+  assert.equal(s.force_due_at, null, 'the request it observed was consumed');
+  assert.notEqual(s.force_due_served_at, null, 'served is set');
+});
+
+test('AC-SV2-19(g) inversion 2: a request written after a manual grant by an earlier-started transaction survives completion', { timeout: 30_000 }, async () => {
+  await needSourcesV2();
+  const slug = await mkSv2('19g', { manual: true, due: true });
+  const pidB = await pidOf(B);
+  let pB; let tok;
+  try {
+    await beginAdmin(B);
+    await q(B, 'select now() as t1');
+    await sleep(50);
+    await beginService(A);
+    const g = await q(A, MANUAL, [slug]);
+    tok = g.rows[0].r.grant;
+    pB = start(B, READ_REQ, [slug, true]);
+    await waitsOn(pidB);
+    await q(A, 'commit');
+    const res = await pB;
+    assert.ok(res.ok, `the request failed: ${res.err?.message}`);
+    await q(B, 'commit');
+  } finally {
+    await cleanup([pB]);
+  }
+  const [gr] = await svGrants(slug);
+  assert.equal(gr.rr_gen, null, 'the grant saw no request');
+  const before = await svState(slug);
+  assert.ok(await lt(before.read_requested_at, gr.issued_at), 'precondition (control): read_requested_at is earlier than the grant\'s issued_at');
+  await serviceCommitted(ingestSql, [tok, runJson(), '[]']);
+  const s = await svState(slug);
+  assert.ok(await sameTime(s.read_requested_at, before.read_requested_at), 'the later request is still pending');
+  assert.equal(s.read_request_served_at, null);
+  assert.equal(await pendingRequest(slug), true, 'REQUESTS_SQL still lists it');
+});
+
+/** A manual fixture with a committed request (generation g) and a committed request-bound grant. */
+async function mkRequestedGrant(tag) {
+  const slug = await mkSv2(tag, { manual: true, due: true });
+  await adminCommitted(READ_REQ, [slug, true]);
+  const g = (await svState(slug)).rr_gen;
+  const tok = (await serviceCommitted(MANUAL_REQ, [slug])).grant;
+  assert.match(tok, /^[0-9a-f]{64}$/);
+  return { slug, g, tok };
+}
+
+test('AC-SV2-19(h) completion first, then re-stamp: the new request stays pending; served is the completion time', { timeout: 30_000 }, async () => {
+  await needSourcesV2();
+  const { slug, g, tok } = await mkRequestedGrant('19h');
+  const pidB = await pidOf(B);
+  let pB; let tA; let restamp;
+  try {
+    await beginService(A);
+    tA = (await q(A, 'select now()::text as t')).rows[0].t;
+    await q(A, ingestSql, [tok, runJson(), '[]']);
+    await beginAdmin(B);
+    pB = start(B, READ_REQ, [slug, true]);
+    await waitsOn(pidB);
+    await q(A, 'commit');
+    const res = await pB;
+    assert.ok(res.ok, `the re-stamp failed: ${res.err?.message}`);
+    restamp = res.rows[0].r;
+    assert.equal(restamp.already, false, 'the request was already consumed');
+    await q(B, 'commit');
+  } finally {
+    await cleanup([pB]);
+  }
+  const s = await svState(slug);
+  assert.equal(s.rr_gen, g + 1, 'the clear does not bump the generation; the re-stamp bumps it once');
+  assert.ok(await sameTime(s.read_requested_at, restamp.read_requested_at), 'the new request is pending');
+  assert.ok(await sameTime(s.read_request_served_at, tA), 'served = the completing batch\'s time');
+});
+
+test('AC-SV2-19(i) re-stamp first, then completion: the batch waits; the new request stays pending; nothing served', { timeout: 30_000 }, async () => {
+  await needSourcesV2();
+  const { slug, tok } = await mkRequestedGrant('19i');
+  const pidA = await pidOf(A);
+  let pA; let restamp;
+  try {
+    await beginAdmin(B);
+    restamp = (await q(B, READ_REQ, [slug, true])).rows[0].r;
+    await beginService(A);
+    pA = start(A, ingestSql, [tok, runJson(), '[]']);
+    await waitsOn(pidA);
+    await q(B, 'commit');
+    const res = await pA;
+    assert.ok(res.ok, `the batch failed: ${res.err?.message}`);
+    await q(A, 'commit');
+  } finally {
+    await q(B, 'rollback').catch(() => {});
+    await Promise.allSettled([pA]);
+    await q(A, 'rollback').catch(() => {});
+  }
+  const s = await svState(slug);
+  assert.ok(await sameTime(s.read_requested_at, restamp.read_requested_at), 'the newer request is pending');
+  assert.equal(s.read_request_served_at, null, 'served only when the completion came first');
+  const [gr] = await svGrants(slug);
+  const run = await q(obs, 'select count(*)::int as n from public.source_runs where id = $1', [gr.run_id]);
+  assert.equal(run.rows[0].n, 1, 'the run row exists');
+});
+
+/** A Run-now fixture: stamped and granted, both committed. */
+async function mkStampedGrant(tag) {
+  const slug = await mkSv2(tag);
+  await adminCommitted(FORCE, [slug, true]);
+  const tok = tokenFor(await serviceCommitted(ISSUE), slug);
+  assert.ok(tok, 'fixture: the stamped source is granted');
+  return { slug, tok, g: (await svState(slug)).fd_gen };
+}
+
+test('AC-SV2-19(j) completion first, then Cancel: Cancel waits and changes nothing; served is set', { timeout: 30_000 }, async () => {
+  await needSourcesV2();
+  const { slug, tok, g } = await mkStampedGrant('19j');
+  const pidB = await pidOf(B);
+  let pB;
+  try {
+    await beginService(A);
+    await q(A, ingestSql, [tok, runJson(), '[]']);
+    await beginAdmin(B);
+    pB = start(B, FORCE, [slug, false]);
+    await waitsOn(pidB);
+    await q(A, 'commit');
+    const res = await pB;
+    assert.ok(res.ok, `Cancel failed: ${res.err?.message}`);
+    assert.equal(res.rows[0].r.force_due_at, null);
+    await q(B, 'commit');
+  } finally {
+    await cleanup([pB]);
+  }
+  const s = await svState(slug);
+  assert.equal(s.force_due_at, null);
+  assert.notEqual(s.force_due_served_at, null, 'served is set (the completion came first)');
+  assert.equal(s.fd_gen, g, 'no stamp was left, so Cancel did not bump the generation');
+});
+
+test('AC-SV2-19(k) Cancel first, then completion: the batch waits and is recorded; nothing is served', { timeout: 30_000 }, async () => {
+  await needSourcesV2();
+  const { slug, tok, g } = await mkStampedGrant('19k');
+  const pidA = await pidOf(A);
+  let pA;
+  try {
+    await beginAdmin(B);
+    await q(B, FORCE, [slug, false]);
+    await beginService(A);
+    pA = start(A, ingestSql, [tok, runJson(), '[]']);
+    await waitsOn(pidA);
+    await q(B, 'commit');
+    const res = await pA;
+    assert.ok(res.ok, `the batch failed: ${res.err?.message}`);
+    await q(A, 'commit');
+  } finally {
+    await q(B, 'rollback').catch(() => {});
+    await Promise.allSettled([pA]);
+    await q(A, 'rollback').catch(() => {});
+  }
+  const s = await svState(slug);
+  assert.equal(s.force_due_at, null);
+  assert.equal(s.force_due_served_at, null, 'served only when the completion came first');
+  assert.equal(s.fd_gen, g + 1, 'Cancel bumped the generation');
+  const [gr] = await svGrants(slug);
+  const run = await q(obs, 'select count(*)::int as n from public.source_runs where id = $1', [gr.run_id]);
+  assert.equal(run.rows[0].n, 1, 'the batch is recorded');
+});

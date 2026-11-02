@@ -99,6 +99,11 @@
 .hdot.green{background:var(--ok)}
 .hdot.amber{background:var(--accent)}
 .hdot.red{background:var(--danger)}
+.hdot.oncommand{background:transparent; border:2px solid var(--muted)}
+.hrow .run-now{color:var(--text)}
+.jobs-sec{display:flex; flex-direction:column; gap:8px}
+.jobs-sec h4{margin:0; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted)}
+.jobs-row{border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); padding:10px 14px; overflow-wrap:anywhere}
 .hctl{display:flex; flex-wrap:wrap; gap:8px; align-items:center}
 .hctl .field{width:auto; min-height:40px; padding:6px 10px}
 .hctl .btn{min-height:40px; padding:0 14px; font-size:14px}

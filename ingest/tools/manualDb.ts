@@ -6,6 +6,9 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { grantRefusal, grantSql, parseRequests, REQUESTS_SQL, SLUG_RE, type GrantRefusal, type PendingRequest } from './requests';
+
+export { SLUG_RE } from './requests';
 
 const run = promisify(execFile);
 const SUPABASE = process.env.SUPABASE_BIN || join(homedir(), '.local', 'bin', 'supabase');
@@ -29,8 +32,6 @@ export function lit(s: string): string {
   do tag = `tv_${randomBytes(6).toString('hex')}`; while (s.includes(tag));
   return `$${tag}$${s}$${tag}$`;
 }
-
-export const SLUG_RE = /^[a-z0-9-]{2,60}$/;
 
 export interface CurlReq { method: 'GET' | 'POST'; url: string; headers: Record<string, string>; form?: Record<string, string> }
 /** Plain curl with curl's own default user agent (owner decision): -q (no curlrc), https only, no -L, no retry, 30 s (TDRPD 60 s), 5 MB. */
@@ -65,23 +66,30 @@ export function curlHttp(dir: string, useJar: boolean, log: (s: string) => void 
 }
 
 /**
- * One committed grant for one due manual-only source. `refused` only for the database's own `manual_grant_refused` (read in the last
- * 24 h, not permitted, disabled); any other CLI or database error throws (M1 review P0-1: an unlinked CLI must never look like a skip).
+ * One committed grant for one due manual-only source (`requested`: through svc_manual_grant_requested, Sources V2). `refused` only for
+ * the database's own refusals: `gate` = `manual_grant_refused` (read in the last 24 h, not permitted, disabled), `withdrawn` =
+ * `manual_request_withdrawn`. Any other CLI or database error throws (M1 review P0-1: an unlinked CLI must never look like a skip).
  */
-export async function manualGrant<S = Record<string, unknown>>(slug: string): Promise<{ grant: string; source?: S; refused?: boolean }> {
-  if (!SLUG_RE.test(slug)) return { grant: '', refused: true };
+export async function manualGrant<S = Record<string, unknown>>(slug: string, opts: { requested?: boolean } = {}): Promise<{ grant: string; source?: S; refused?: GrantRefusal }> {
+  if (!SLUG_RE.test(slug)) return { grant: '', refused: 'gate' };
   let rows;
   try {
-    rows = await sql<{ g: { grant?: string; source?: S } }>(`select public.svc_manual_grant('${slug}') as g`);
+    rows = await sql<{ g: { grant?: string; source?: S } }>(grantSql(slug, !!opts.requested));
   } catch (e) {
     const msg = `${String((e as { stderr?: unknown }).stderr ?? '')} ${String((e as { stdout?: unknown }).stdout ?? '')} ${e instanceof Error ? e.message : ''}`;
-    if (/manual_grant_refused/.test(msg)) return { grant: '', refused: true };
+    const refused = grantRefusal(msg);
+    if (refused) return { grant: '', refused };
     throw new Error('grant_call_failed');
   }
   const g = rows[0]?.g;
   const grant = typeof g?.grant === 'string' && /^[0-9a-f]{64}$/.test(g.grant) ? g.grant : '';
   if (!grant) throw new Error('grant_shape');
   return { grant, source: g?.source };
+}
+
+/** Pending read requests (Sources V2): enabled manual-only sources with a request younger than 7 days, in slug order. */
+export async function pendingRequests(): Promise<PendingRequest[]> {
+  return parseRequests(await sql(REQUESTS_SQL));
 }
 
 export async function submit(grant: string, startedAt: string, status: string, items: unknown[], extra: Record<string, unknown>, parserVersion: string, then = ''): Promise<Record<string, unknown>> {

@@ -178,7 +178,35 @@ describe('adminSourceHealth', () => {
       termsRecheckAt: '2027-10-14T00:00:00Z', cadence: '168h', consecutiveFailures: 0, lastSuccessAt: '2026-11-01T12:00:00Z',
       lastRuns: [{ status: 'ok', finishedAt: '2026-11-01T12:00:00Z', found: 0, new: 0, changed: 0, errorCode: null }],
       openCards7d: 2, openCards14d: 3, heldRunsPending: 1,
+      // Sources V2 (AC-SV2-30): absent fields map to defaults, so a DB without the migration still maps
+      manualOnly: false, automationRestricted: false, nextDueAt: null, lastGrantAt: null, forceDueAt: null, forceDueServedAt: null,
+      readRequestedAt: null, readRequestServedAt: null, requestGrant: null,
     }]);
+  });
+  it('maps the Sources V2 fields from snake_case (AC-SV2-30)', async () => {
+    rpc.mockResolvedValue({
+      data: [{
+        slug: 'bar-of-america', name: 'Bar of America', enabled: true, trust: 'review', strict_auto: false, max_cards_7d: null,
+        ingest_disposition: 'permitted', terms_recheck_at: '2027-10-14T00:00:00Z', cadence: '24h', consecutive_failures: 0,
+        last_success_at: null, last_runs: [], open_cards_7d: 0, open_cards_14d: 0, held_runs_pending: 0,
+        manual_only: true, automation_restricted: true, next_due_at: '2026-11-02T17:00:00Z', last_grant_at: '2026-11-01T17:00:00Z',
+        force_due_at: '2026-11-01T18:00:00Z', force_due_served_at: '2026-11-01T18:10:00Z', read_requested_at: '2026-11-01T19:00:00Z',
+        read_request_served_at: '2026-10-31T19:00:00Z', request_grant: { issued_at: '2026-11-01T19:05:00Z', live: 1 },
+        force_due_gen: 4, read_request_gen: 9,
+      }],
+      error: null,
+    });
+    const [r] = await q.adminSourceHealth();
+    expect(r).toMatchObject({
+      manualOnly: true, automationRestricted: true, nextDueAt: '2026-11-02T17:00:00Z', lastGrantAt: '2026-11-01T17:00:00Z',
+      forceDueAt: '2026-11-01T18:00:00Z', forceDueServedAt: '2026-11-01T18:10:00Z', readRequestedAt: '2026-11-01T19:00:00Z',
+      readRequestServedAt: '2026-10-31T19:00:00Z', requestGrant: { issuedAt: '2026-11-01T19:05:00Z', live: true },
+    });
+    // the generation counters are not mapped (the UI reads request_grant instead)
+    expect(r).not.toHaveProperty('forceDueGen');
+    expect(r).not.toHaveProperty('readRequestGen');
+    rpc.mockResolvedValue({ data: [{ slug: 's', name: 'S', request_grant: { issued_at: 'x', live: false } }], error: null });
+    expect((await q.adminSourceHealth())[0].requestGrant).toEqual({ issuedAt: 'x', live: false });
   });
   it('PostgREST returns count(*) as a number or numeric string; both become numbers', async () => {
     rpc.mockResolvedValue({

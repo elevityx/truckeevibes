@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import JobsTab from './JobsTab';
 import QueueTab from './QueueTab';
 import SourcesTab from './SourcesTab';
 
@@ -11,9 +12,9 @@ interface Props {
   onSignOut(): void;
 }
 
-type Tab = 'queue' | 'sources';
+type Tab = 'queue' | 'sources' | 'jobs';
 
-/** Console: the review queue and the source health board. Both tabs stay mounted so state survives a tab switch. */
+/** Console: the review queue, the source health board and the Jobs panel. All tabs stay mounted so state survives a tab switch. */
 export default function Console({ onForbidden, onSignOut }: Props) {
   const [tab, setTab] = useState<Tab>('queue');
   const [open, setOpen] = useState<number | null>(null);
@@ -33,12 +34,18 @@ export default function Console({ onForbidden, onSignOut }: Props) {
           <button className="tab" role="tab" id="tab-sources" aria-selected={tab === 'sources'} aria-controls="pane-sources" type="button" onClick={() => setTab('sources')}>
             Sources
           </button>
+          <button className="tab" role="tab" id="tab-jobs" aria-selected={tab === 'jobs'} aria-controls="pane-jobs" type="button" onClick={() => setTab('jobs')}>
+            Jobs
+          </button>
         </div>
         <div role="tabpanel" id="pane-queue" aria-labelledby="tab-queue" hidden={tab !== 'queue'}>
           <QueueTab onForbidden={onForbidden} onCount={setOpen} />
         </div>
         <div role="tabpanel" id="pane-sources" aria-labelledby="tab-sources" hidden={tab !== 'sources'}>
-          <SourcesTab onForbidden={onForbidden} />
+          <SourcesTab onForbidden={onForbidden} active={tab === 'sources'} />
+        </div>
+        <div role="tabpanel" id="pane-jobs" aria-labelledby="tab-jobs" hidden={tab !== 'jobs'}>
+          <JobsTab onForbidden={onForbidden} active={tab === 'jobs'} />
         </div>
       </div>
     </div>

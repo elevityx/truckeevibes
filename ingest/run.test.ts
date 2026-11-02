@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { main } from './run';
 import { adapter as chamberAdapter } from './adapters/icsChambermaster';
 import { adapter as tribeAdapter } from './adapters/tribe';
-import { FetchError } from './core/politeFetch';
+import { FetchError, MAX_CRAWL_DELAY_S, START_WAIT_MS } from './core/politeFetch';
 import type { AdapterResult, GrantOut } from './types';
 import { fakeNet, fixture, makeClock, source, text, T0 } from './testing/fakes';
 
@@ -605,5 +605,40 @@ describe('A14 21+ venues and aviation through the runner (AC-M1-142)', () => {
     const eaa = h.submits().find((s) => s.body.grant === 'g-eaa')!.body;
     expect(eaa.items).toHaveLength(3);
     expect(h.net.urls().some((u) => u.includes('tahoe.com'))).toBe(false); // curated_dates never touches the network
+  });
+});
+
+describe('start wait (Sources V2)', () => {
+  // AC-SV2-20: a dispatched run can start seconds after the previous job, so a run with grants waits out the longest crawl delay we
+  // honor before its first source request. The fake clock's sleep advances time, so nothing waits in real time.
+  it('START_WAIT_MS === MAX_CRAWL_DELAY_S * 1000 === 30000', () => {
+    expect(MAX_CRAWL_DELAY_S).toBe(30);
+    expect(START_WAIT_MS).toBe(30_000);
+    expect(START_WAIT_MS).toBe(MAX_CRAWL_DELAY_S * 1000);
+  });
+  it('with 2 grants: one "ingest: start wait 30s" line right after "ingest: 2 source(s) due", and no source request before T0 + 30 s', async () => {
+    const reader = (family: string) => fake(family, async (ctx) => {
+      await ctx.fetch(`https://${family}.example.test/feed.ics`, { kind: 'feed' });
+      return okResult(1);
+    });
+    const h = harness({
+      grants: [grant('a'), grant('b')],
+      adapters: { a: reader('a'), b: reader('b') },
+      other: (u) => (u.pathname === '/robots.txt' ? text('nf', 404) : text('BEGIN:VCALENDAR', 200)),
+    });
+    expect(await h.run()).toBe(0);
+    expect(h.logs.filter((l) => l === 'ingest: start wait 30s')).toHaveLength(1);
+    const due = h.logs.indexOf('ingest: 2 source(s) due');
+    expect(due).toBeGreaterThanOrEqual(0);
+    expect(h.logs[due + 1]).toBe('ingest: start wait 30s');
+    const sourceCalls = h.net.calls.filter((c) => c.url !== INGEST_URL && c.url !== HOOK);
+    expect(sourceCalls.length).toBeGreaterThan(0); // robots + feed for both sources
+    for (const c of sourceCalls) expect(c.at).toBeGreaterThanOrEqual(T0 + 30_000);
+  });
+  it('with 0 grants: no start-wait line and the clock never moves', async () => {
+    const h = harness({ grants: [] });
+    expect(await h.run()).toBe(0);
+    expect(h.logs.some((l) => l.startsWith('ingest: start wait'))).toBe(false);
+    expect(h.clock.now()).toBe(T0);
   });
 });
