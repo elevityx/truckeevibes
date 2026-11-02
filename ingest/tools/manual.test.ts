@@ -431,4 +431,3 @@ describe('scripts/manual-read.sh requests / requested (Sources V2, AC-SV2-21, AC
     expect(r.calls).toEqual([]);
   });
 });
-
